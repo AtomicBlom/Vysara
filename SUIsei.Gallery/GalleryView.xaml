@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	The gallery UI, authored entirely in XAML and compiled by SUIsei.SourceGen into a typed control tree (no
+	reflection). Exercises layout (StackPanel/Grid + attached Grid.Row/Column), decorators (Border), text, and the
+	MU6 controls: Command-bound + event Buttons, CheckBox, a TwoWay-bound TextBox, an Image, a MenuFlyout (opened
+	from code-behind), all inside a ScrollViewer. Edit this file under `dotnet watch run` to see XAML Hot Reload.
+-->
+<Border xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SUIsei.Gallery.GalleryView"
+        Background="#181A20">
+	<ScrollViewer>
+		<StackPanel Orientation="Vertical" Margin="28">
+			<TextBlock Text="SUIsei Control Gallery" FontSize="30" Foreground="#ECEFF6" />
+			<TextBlock Text="Authored in XAML, software-rasterized to a Win32 window - no GPU."
+			           FontSize="14" Foreground="#969CAA" Margin="0,2,0,18" />
+
+			<!-- Buttons, commands, and a flyout -->
+			<TextBlock Text="Buttons, commands &amp; menu" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
+			<Border Background="#22252E" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,18">
+				<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+					<Button Content="Click me" Click="OnClick" Margin="0,0,8,0" />
+					<Button Content="Greet (Command)" Command="{x:Bind GreetCommand}" Margin="0,0,8,0" />
+					<Button Content="Reset" Click="OnReset" Margin="0,0,8,0" />
+					<Button Content="Menu..." Click="OnShowMenu" Margin="0,0,8,0" />
+					<TextBlock x:Name="ClickCounter" Text="Clicks: 0" FontSize="16" Foreground="#ECEFF6" Margin="8,0,0,0" VerticalAlignment="Center" />
+				</StackPanel>
+			</Border>
+
+			<!-- Toggles -->
+			<TextBlock Text="CheckBoxes" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
+			<Border Background="#22252E" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,18">
+				<StackPanel Orientation="Vertical">
+					<CheckBox Content="Enable shadows" IsChecked="true" Margin="0,0,0,6" />
+					<CheckBox Content="Vsync" Margin="0,0,0,6" />
+					<CheckBox Content="Experimental" />
+				</StackPanel>
+			</Border>
+
+			<!-- Text input (TwoWay bind) + Image -->
+			<TextBlock Text="Text input &amp; image" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
+			<Border Background="#22252E" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,18">
+				<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+					<StackPanel Orientation="Vertical">
+						<TextBox Text="{x:Bind Name, Mode=TwoWay}" Width="220" Margin="0,0,0,8" />
+						<TextBlock Text="{x:Bind Greeting, Mode=OneWay}" FontSize="16" Foreground="#ECEFF6" />
+					</StackPanel>
+					<Image Source="{x:Bind LogoSource}" Width="120" Height="72" Stretch="Uniform" Margin="24,0,0,0" />
+				</StackPanel>
+			</Border>
+
+			<!-- Grid layout: column/row definitions + attached Grid.Row/Column/ColumnSpan -->
+			<TextBlock Text="Grid layout" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
+			<Border Background="#22252E" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,18">
+				<Grid>
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="120" />
+						<ColumnDefinition Width="*" />
+						<ColumnDefinition Width="*" />
+					</Grid.ColumnDefinitions>
+					<Grid.RowDefinitions>
+						<RowDefinition Height="40" />
+						<RowDefinition Height="40" />
+					</Grid.RowDefinitions>
+					<Border Grid.Row="0" Grid.Column="0" Background="#3C3250" CornerRadius="4" Margin="3">
+						<TextBlock Text="Pixel(120)" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+					<Border Grid.Row="0" Grid.Column="1" Background="#324650" CornerRadius="4" Margin="3">
+						<TextBlock Text="Star" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+					<Border Grid.Row="0" Grid.Column="2" Background="#324650" CornerRadius="4" Margin="3">
+						<TextBlock Text="Star" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+					<Border Grid.Row="1" Grid.Column="0" Background="#463737" CornerRadius="4" Margin="3">
+						<TextBlock Text="Row 2" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+					<Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Background="#373C4B" CornerRadius="4" Margin="3">
+						<TextBlock Text="spans 2 cols" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+				</Grid>
+			</Border>
+
+			<!-- Type scale -->
+			<TextBlock Text="Type scale" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
+			<Border Background="#22252E" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,18">
+				<StackPanel Orientation="Vertical">
+					<TextBlock Text="12px - The quick brown fox" FontSize="12" Foreground="#ECEFF6" Margin="0,0,0,4" />
+					<TextBlock Text="16px - The quick brown fox" FontSize="16" Foreground="#ECEFF6" Margin="0,0,0,4" />
+					<TextBlock Text="22px - The quick brown fox" FontSize="22" Foreground="#ECEFF6" Margin="0,0,0,4" />
+					<TextBlock Text="30px - The quick brown fox" FontSize="30" Foreground="#ECEFF6" />
+				</StackPanel>
+			</Border>
+		</StackPanel>
+	</ScrollViewer>
+</Border>

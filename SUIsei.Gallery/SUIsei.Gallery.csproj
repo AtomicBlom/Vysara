@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- XAML -> typed control-tree generator wiring (registers *.xaml as AdditionalFiles + the analyzer ref). -->
+  <Import Project="..\build\SUIsei.props" />
+
+  <!-- A standalone Win32 host that drives SUIsei's CPU software rasterizer and blits the result to a window with
+       GDI — a GPU-free showcase of the control library. Win32 is reached through CsWin32 (compile-time P/Invoke
+       generation, PrivateAssets=all), so there is no hand-written interop and no native dependency beyond the OS. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- This is intrinsically a Windows-only Win32/GDI executable, so the cross-platform-portability analyzer adds
+         no signal. Suppressing it lets the DPI APIs (GetDpiForWindow / AdjustWindowRectExForDpi, Windows 10 1607+)
+         be called without raising the platform-version baseline, which would pull the WinRT projection assemblies
+         (WinRT.Runtime / Microsoft.Windows.SDK.NET) into the output of an app that uses none of them. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
+    <ProjectReference Include="..\SUIsei.Rasterizer\SUIsei.Rasterizer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Import Project="..\build\SUIsei.targets" />
+
+</Project>
