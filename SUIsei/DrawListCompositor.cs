@@ -111,6 +111,10 @@ public sealed class DrawListCompositor : IUICompositor
 			case GlyphRunContent gr:
 				list.AddGlyphRun(gr.Text, gr.FontSizePx, gr.Color.ToPremultiplied(alpha), _font, matrix, localClip);
 				break;
+			case ImageContent ic:
+				// White tint (image unchanged) folded by the subtree opacity — the shader does colour *= texSample.
+				list.AddImage(ic.Dest, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, alpha), ic.Source, localClip);
+				break;
 		}
 	}
 

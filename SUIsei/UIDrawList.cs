@@ -13,6 +13,7 @@ internal sealed class UIDrawList
 	private readonly List<OverlayVertex> _verts = [];
 	private readonly List<ushort> _indices = [];
 	private readonly List<DrawCommand> _commands = [];
+	private readonly List<ImageSource> _images = [];
 	private readonly Vector2 _surfaceSize;
 
 	// Open run state — extended while (kind, tex, clip) match; flushed into a command otherwise.
@@ -41,6 +42,17 @@ internal sealed class UIDrawList
 		_indices.Add(baseV); _indices.Add((ushort)(baseV + 1)); _indices.Add((ushort)(baseV + 2));
 		_indices.Add(baseV); _indices.Add((ushort)(baseV + 2)); _indices.Add((ushort)(baseV + 3));
 		_runIdxCount += 6;
+	}
+
+	/// <summary>Append a tinted image quad sampling <paramref name="source"/> across its full UV. The source is
+	/// recorded so <see cref="Build"/> can hand the engine glue the table of images to upload + bind by index.</summary>
+	public void AddImage(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor tint, ImageSource source, in Rect clip)
+	{
+		if (clip.IsEmpty)
+			return;
+		if (!_images.Contains(source))
+			_images.Add(source);
+		AddRect(local, matrix, tint, UIPrimKind.Image, Vector4.Zero, clip, source.TextureIndex);
 	}
 
 	/// <summary>
@@ -144,6 +156,7 @@ internal sealed class UIDrawList
 			Vertices = _verts.ToArray(),
 			Indices = _indices.ToArray(),
 			Commands = _commands.ToArray(),
+			Images = _images.ToArray(),
 			CoordinateSize = _surfaceSize,
 			IsHdrTarget = hdr,
 			Revision = revision,

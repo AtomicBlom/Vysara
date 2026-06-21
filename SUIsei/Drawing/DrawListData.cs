@@ -24,6 +24,10 @@ public sealed class DrawListData
 	/// <summary>The batched draw commands, in submission order.</summary>
 	public ReadOnlyMemory<DrawCommand> Commands { get; init; }
 
+	/// <summary>The images referenced by <see cref="UIPrimKind.Image"/> commands this frame (by
+	/// <see cref="ImageSource.TextureIndex"/>) — the engine glue uploads + binds each before submitting.</summary>
+	public IReadOnlyList<ImageSource> Images { get; init; } = [];
+
 	/// <summary>The pixel size of the coordinate space the geometry is authored in.</summary>
 	public Vector2 CoordinateSize { get; init; }
 
