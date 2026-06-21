@@ -66,7 +66,8 @@ public sealed class DrawListData
 		{
 			ref readonly var cmd = ref commands[i];
 			var r = cmd.ClipRect;
-			sb.Append(c, $"    [{i}] tag={cmd.Tag} tex={cmd.TextureIndex} clip=({r.X:0.###},{r.Y:0.###} {r.Width:0.###}x{r.Height:0.###})");
+			var kind = (UIPrimKind)cmd.Tag;
+			sb.Append(c, $"    [{i}] tag={cmd.Tag}({kind}) tex={cmd.TextureIndex} clip=({r.X:0.###},{r.Y:0.###} {r.Width:0.###}x{r.Height:0.###})");
 			sb.Append(c, $" idx={cmd.IndexOffset}+{cmd.IndexCount} vtx={cmd.VertexOffset}\n");
 		}
 

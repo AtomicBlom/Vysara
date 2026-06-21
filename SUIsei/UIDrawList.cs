@@ -84,6 +84,34 @@ internal sealed class UIDrawList
 		}
 	}
 
+	/// <summary>
+	/// Open a render-to-texture group layer covering <paramref name="layerRect"/> (surface pixels). The backend
+	/// redirects subsequent draws into a transient target until the matching <see cref="EndLayer"/>. A zero-geometry
+	/// marker command whose <c>ClipRect</c> is the layer bounds; its degenerate quad (4 vertices, no indices) carries
+	/// the premultiplied fade tint <c>(a,a,a,a)</c> the composite-back multiplies the layer by, plus the
+	/// <paramref name="effect"/> id+params, so a backend (and the software rasterizer) reads them off the first vertex.
+	/// </summary>
+	public void BeginLayer(in Rect layerRect, float groupAlpha, Vector4 effect)
+	{
+		// A marker is its own command — flush the open run so it can't be merged into a preceding primitive run.
+		Flush();
+		var tint = PremultipliedHdrColor.FromStraight(1f, 1f, 1f, groupAlpha);
+		var baseV = (ushort)_verts.Count;
+		_verts.Add(new OverlayVertex(new Vector2(layerRect.X, layerRect.Y), new Vector2(0, 0), tint, effect));
+		_verts.Add(new OverlayVertex(new Vector2(layerRect.Right, layerRect.Y), new Vector2(1, 0), tint, effect));
+		_verts.Add(new OverlayVertex(new Vector2(layerRect.Right, layerRect.Bottom), new Vector2(1, 1), tint, effect));
+		_verts.Add(new OverlayVertex(new Vector2(layerRect.X, layerRect.Bottom), new Vector2(0, 1), tint, effect));
+		_commands.Add(new DrawCommand(layerRect, 0, _indices.Count, 0, baseV, (uint)UIPrimKind.BeginLayer));
+	}
+
+	/// <summary>Close the most-recently-opened layer; the backend composites it back into the parent at the group's
+	/// fade alpha. A zero-geometry marker scissored by <paramref name="clip"/> (the parent's clip).</summary>
+	public void EndLayer(in Rect clip)
+	{
+		Flush();
+		_commands.Add(new DrawCommand(clip, 0, _indices.Count, 0, 0, (uint)UIPrimKind.EndLayer));
+	}
+
 	private void AddVertex(Vector2 local, Vector2 uv, in Matrix3x2 matrix, PremultipliedHdrColor color, Vector4 @params) =>
 		_verts.Add(new OverlayVertex(Vector2.Transform(local, matrix), uv, color, @params));
 

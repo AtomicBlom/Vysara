@@ -59,6 +59,19 @@ internal static class XamlGeneratorHarness
 		return driver.RunGenerators(compilation).GetRunResult();
 	}
 
+	/// <summary>
+	/// Run the generator, fold its generated sources back into the compilation, and return the C# <em>compile</em>
+	/// errors — proving the emitted code is not just the right text but actually compiles against the SUIsei runtime.
+	/// </summary>
+	public static Diagnostic[] CompileErrors(string xaml, string codeBehind, string xamlPath = "Test.xaml")
+	{
+		var (driver, compilation) = Create(xaml, codeBehind, xamlPath);
+		var result = driver.RunGenerators(compilation).GetRunResult();
+		var withGenerated = compilation.AddSyntaxTrees(
+			result.Results.SelectMany(r => r.GeneratedSources).Select(s => s.SyntaxTree));
+		return [.. withGenerated.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)];
+	}
+
 	/// <summary>Run the generator over several .xaml views in one compilation — e.g. to prove hint-name uniqueness.</summary>
 	public static GeneratorDriverRunResult RunMany((string Path, string Xaml)[] files, string? codeBehind = null)
 	{

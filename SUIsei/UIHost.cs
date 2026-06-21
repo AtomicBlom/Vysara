@@ -26,13 +26,18 @@ public sealed class UIHost
 	private Size _framebufferSize = new(1f, 1f);
 
 	public UIHost() =>
-		Input.OnPress = el => Focus.TrySetFocus(el, FocusState.Pointer);
+		// A press focuses the nearest focusable element at or above the hit (e.g. a templated control whose hit
+		// target is its non-focusable template root), matching WinUI.
+		Input.OnPress = el => Focus.FocusFromPointer(el);
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
 	public InputManager Input { get; } = new();
 
 	/// <summary>Keyboard focus state machine.</summary>
 	public FocusManager Focus { get; } = new();
+
+	/// <summary>The animation clock advancing this host's storyboards (PlanningUI.md §D5.7), stepped each <see cref="Tick"/>.</summary>
+	public AnimationClock Clock { get; } = new();
 
 	/// <summary>The roots this host owns.</summary>
 	public IReadOnlyList<UIView> Views => _views;
@@ -47,7 +52,8 @@ public sealed class UIHost
 		var root = new UIRoot(new DrawListId(_nextSurface++))
 		{
 			LayoutScale  = placement.LayoutScale,
-			InputManager = Input
+			InputManager = Input,
+			Clock        = Clock
 		};
 		var view = new UIView(root, placement, interactive);
 		_views.Add(view);
@@ -73,6 +79,11 @@ public sealed class UIHost
 	/// </summary>
 	public void Tick(double deltaSeconds, float time, Vector2 framebufferSize)
 	{
+		// Advance animations FIRST: a clock write to a layout-affecting DP invalidates measure/arrange so the new
+		// value is reflected in this frame's LayoutPass; a visual-channel write (transform/opacity/brush) only marks
+		// the subtree dirty for the composite, with no relayout (PlanningUI.md §D5.7).
+		Clock.Advance(deltaSeconds);
+
 		_framebufferSize = new Size(framebufferSize.X, framebufferSize.Y);
 		foreach (var view in _views)
 			view.Root.LayoutPass(_framebufferSize);

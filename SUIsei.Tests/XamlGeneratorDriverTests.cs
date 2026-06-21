@@ -142,10 +142,12 @@ public sealed class XamlGeneratorDriverTests
 	}
 
 	[Test]
-	public void Property_element_syntax_is_surfaced_not_silently_dropped()
+	public void Unsupported_property_element_is_surfaced_not_silently_dropped()
 	{
-		XamlGeneratorHarness.Run(Wrap("<StackPanel.Resources />"))
-			.DiagnosticIds().ShouldContain("SUISEI013");
+		// Recognized property elements (Resources/Template/VisualStateGroups/ItemTemplate/ItemsPanel) are handled;
+		// any other is surfaced as a warning rather than silently dropped.
+		XamlGeneratorHarness.Run(Wrap("<StackPanel.Margin />"))
+			.DiagnosticIds().ShouldContain("SUISEI020");
 	}
 
 	[Test]

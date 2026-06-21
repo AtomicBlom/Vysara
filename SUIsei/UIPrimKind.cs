@@ -21,4 +21,20 @@ public enum UIPrimKind : byte
 
 	/// <summary>A tinted image sampled from a UI image atlas or an in-world source target.</summary>
 	Image,
+
+	/// <summary>
+	/// Opens a render-to-texture group layer: the backend redirects subsequent draws into a transient offscreen
+	/// target until the matching <see cref="EndLayer"/>. A zero-geometry marker (no indices) — its
+	/// <see cref="Drawing.DrawCommand.ClipRect"/> is the layer's surface-pixel bounds, and its single degenerate quad
+	/// at <see cref="Drawing.DrawCommand.VertexOffset"/> carries the premultiplied fade tint in
+	/// <see cref="Drawing.OverlayVertex.Color"/> and the effect id+params in <see cref="Drawing.OverlayVertex.Custom"/>.
+	/// Never reaches the fragment shader.
+	/// </summary>
+	BeginLayer,
+
+	/// <summary>
+	/// Closes the most-recently-opened layer: the backend resolves the offscreen target and composites it back into
+	/// the parent at the group's fade alpha (a tinted blit). A zero-geometry marker; never reaches the fragment shader.
+	/// </summary>
+	EndLayer,
 }

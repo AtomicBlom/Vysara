@@ -22,6 +22,13 @@ public abstract class Visual
 	/// <summary>Optional clip rectangle in this visual's local space.</summary>
 	public Rect? Clip { get; set; }
 
+	/// <summary>
+	/// Optional post effect (e.g. a blur) applied to this visual's subtree as a group. A non-null effect forces the
+	/// subtree to composite as one render-to-texture layer, the same path a sub-1 <see cref="Opacity"/> on a
+	/// container takes.
+	/// </summary>
+	public LayerEffect? Effect { get; set; }
+
 	/// <summary>Damage flag — a visual-only change marks the subtree for recomposition (MU2 incremental path).</summary>
 	public bool IsDirty { get; internal set; } = true;
 
@@ -46,6 +53,7 @@ public abstract class Visual
 		var c = CultureInfo.InvariantCulture;
 		sb.Append(c, $"{GetType().Name} xform=[{Transform.M31:0.###},{Transform.M32:0.###}] op={Opacity:0.###}");
 		if (Clip is { } cl) sb.Append(c, $" clip={cl}");
+		if (Effect is { } fx) sb.Append(c, $" fx={fx.Id}");
 	}
 
 	private void Dump(StringBuilder sb, int depth)
