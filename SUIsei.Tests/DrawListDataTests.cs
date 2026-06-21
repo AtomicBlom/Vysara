@@ -39,7 +39,7 @@ public sealed class DrawListDataTests
 		dump.ShouldContain("Indices (6): 0 1 2 0 2 3");
 		dump.ShouldContain("Commands (1):");
 		// tag=0 is the Fill primitive kind the compositor encodes; tex=0 is the white texel.
-		dump.ShouldContain("[0] tag=0 tex=0 clip=(0,0 10x20) idx=0+6 vtx=0");
+		dump.ShouldContain("[0] tag=0(Fill) tex=0 clip=(0,0 10x20) idx=0+6 vtx=0");
 		// The first vertex carries its premultiplied colour + position (red, opaque, top-left).
 		dump.ShouldContain("[0] pos=(0,0) uv=(0,0) col=(1,0,0,1)");
 	}

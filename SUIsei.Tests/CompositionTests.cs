@@ -26,7 +26,7 @@ public sealed class CompositionTests
 		draw.Commands.Length.ShouldBe(1);
 		var dump = draw.Dump();
 		dump.ShouldContain("Commands (1)");
-		dump.ShouldContain("tag=0 tex=0"); // tag 0 = the Fill primitive kind, white texel
+		dump.ShouldContain("tag=0(Fill) tex=0"); // tag 0 = the Fill primitive kind, white texel
 		dump.ShouldContain("pos=(100,50)"); // bottom-right corner of the 100x50 fill
 	}
 

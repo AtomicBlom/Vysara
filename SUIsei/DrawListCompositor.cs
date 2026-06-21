@@ -58,37 +58,60 @@ public sealed class DrawListCompositor : IUICompositor
 	{
 		v.IsDirty = false; // composited this frame — clean until the next visual-only change marks it again
 		var matrix = v.Transform * parent;
-		var alpha = opacity * v.Opacity;
 		var localClip = clip;
 		if (v.Clip is { } c)
 			localClip = clip.Intersect(TransformRect(c, matrix));
 
-		if (v is SpriteVisual sprite)
+		// A container that fades a subtree which can overlap (sub-1 opacity with children), or carries a group effect,
+		// must composite as one render-to-texture layer — otherwise overlapping children double-blend against each
+		// other through the folded per-vertex alpha. Wrap the subtree in a BeginLayer/EndLayer pair and emit it at
+		// full alpha; the backend renders it to a transient target and fades it once on composite-back. A childless
+		// faded sprite has no overlap, so it stays on the cheap per-vertex fold.
+		if (NeedsLayer(v) && !localClip.IsEmpty)
 		{
-			switch (sprite.Content)
-			{
-				case RectContent rc:
-					{
-						var rect = new Rect(0, 0, rc.Size.X, rc.Size.Y);
-						if (rc.Fill is { } fill)
-						{
-							var kind = rc.CornerRadius > 0 ? UIPrimKind.RoundedRect : UIPrimKind.Fill;
-							// params = (cornerRadius, borderThickness, sizeX, sizeY) — the layout ui.slang's analytic rounded-box
-							// SDF reads (uv is 0..1 across the rect; the shader scales by params.zw to local pixels). Fill ignores it.
-							list.AddRect(rect, matrix, fill.ToPremultiplied(alpha), kind, new Vector4(rc.CornerRadius, 0f, rc.Size.X, rc.Size.Y), localClip);
-						}
-						if (rc.BorderBrush is { } bb && rc.BorderThickness > 0)
-							list.AddRect(rect, matrix, bb.ToPremultiplied(alpha), UIPrimKind.Border, new Vector4(rc.CornerRadius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
-						break;
-					}
-				case GlyphRunContent gr:
-					list.AddGlyphRun(gr.Text, gr.FontSizePx, gr.Color.ToPremultiplied(alpha), _font, matrix, localClip);
-					break;
-			}
+			list.BeginLayer(localClip, v.Opacity, v.Effect?.ToParams() ?? Vector4.Zero);
+			EmitContent(list, v, matrix, 1f, localClip);
+			foreach (var child in v.Children)
+				Walk(list, child, matrix, 1f, localClip);
+			list.EndLayer(clip);
+			return;
 		}
 
+		var alpha = opacity * v.Opacity;
+		EmitContent(list, v, matrix, alpha, localClip);
 		foreach (var child in v.Children)
 			Walk(list, child, matrix, alpha, localClip);
+	}
+
+	// A subtree needs its own composite layer when it fades a group of children (overlap would double-blend) or
+	// applies a group effect. A leaf sprite folds its opacity into vertex alpha with no double-blend.
+	private static bool NeedsLayer(Visual v) => v.Effect is not null || (v.Opacity < 1f && v.Children.Count > 0);
+
+	private void EmitContent(UIDrawList list, Visual v, in Matrix3x2 matrix, float alpha, in Rect localClip)
+	{
+		if (v is not SpriteVisual sprite)
+			return;
+
+		switch (sprite.Content)
+		{
+			case RectContent rc:
+				{
+					var rect = new Rect(0, 0, rc.Size.X, rc.Size.Y);
+					if (rc.Fill is { } fill)
+					{
+						var kind = rc.CornerRadius > 0 ? UIPrimKind.RoundedRect : UIPrimKind.Fill;
+						// params = (cornerRadius, borderThickness, sizeX, sizeY) — the layout ui.slang's analytic rounded-box
+						// SDF reads (uv is 0..1 across the rect; the shader scales by params.zw to local pixels). Fill ignores it.
+						list.AddRect(rect, matrix, fill.ToPremultiplied(alpha), kind, new Vector4(rc.CornerRadius, 0f, rc.Size.X, rc.Size.Y), localClip);
+					}
+					if (rc.BorderBrush is { } bb && rc.BorderThickness > 0)
+						list.AddRect(rect, matrix, bb.ToPremultiplied(alpha), UIPrimKind.Border, new Vector4(rc.CornerRadius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
+					break;
+				}
+			case GlyphRunContent gr:
+				list.AddGlyphRun(gr.Text, gr.FontSizePx, gr.Color.ToPremultiplied(alpha), _font, matrix, localClip);
+				break;
+		}
 	}
 
 	// Axis-aligned bound of a local rect under an affine transform (exact for the translate/scale transforms used
