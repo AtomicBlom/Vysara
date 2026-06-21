@@ -57,8 +57,9 @@ public sealed class Border : FrameworkElement
 
 	private protected override VisualContent? BuildContent()
 	{
-		if (Background is null && (BorderBrush is null || BorderThickness.Horizontal + BorderThickness.Vertical <= 0f))
+		var fill = AnimatedFill ?? Background;
+		if (fill is null && (BorderBrush is null || BorderThickness.Horizontal + BorderThickness.Vertical <= 0f))
 			return null;
-		return new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), Background, CornerRadius, BorderBrush, BorderThickness.Left);
+		return new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), fill, CornerRadius, BorderBrush, BorderThickness.Left);
 	}
 }

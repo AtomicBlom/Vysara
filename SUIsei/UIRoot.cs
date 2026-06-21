@@ -42,6 +42,10 @@ public sealed class UIRoot
 	/// <see cref="UIElement.CapturePointer"/>.</summary>
 	internal InputManager? InputManager { get; set; }
 
+	/// <summary>The host's <see cref="AnimationClock"/>, set by <see cref="UIHost"/> so controls can begin/stop
+	/// storyboards (e.g. <see cref="VisualStateManager"/>). Null for a root used standalone in tests.</summary>
+	internal AnimationClock? Clock { get; set; }
+
 	/// <summary>The composition tree this root renders (PlanningUI.md §D2.5).</summary>
 	public RootVisual Visual { get; } = new();
 

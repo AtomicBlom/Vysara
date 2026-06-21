@@ -218,6 +218,51 @@ public abstract class UIElement : DependencyObject
 		Visual.MarkDirty();
 	}
 
+	// --- Independent (no-relayout) animation channels (PlanningUI.md §D5.7) ---
+	// The animation clock writes these directly and marks the visual dirty; because they are composed back into the
+	// visual in SyncVisual, a later relayout cannot clobber them. RenderTransform is not a dependency property, so a
+	// translate animation rides this override rather than the DP rung (Opacity, a DP, goes through SetAnimatedValue).
+
+	private Vector2 _animatedTranslate;
+	private bool _hasAnimatedTranslate;
+	private HdrColor? _animatedFill;
+
+	/// <summary>The animation-overridden brush, if any; a content-bearing control's <see cref="BuildContent"/> prefers
+	/// it over its background so a colour animation drives the brush on the no-relayout visual path.</summary>
+	private protected HdrColor? AnimatedFill => _animatedFill;
+
+	/// <summary>The element's effective composition transform: render transform, plus any animated translate, placed
+	/// at the layout position. Used by both <see cref="SyncVisual"/> and the translate animation so they agree.</summary>
+	private Matrix3x2 ComposeTransform()
+	{
+		var t = RenderTransform;
+		if (_hasAnimatedTranslate)
+			t *= Matrix3x2.CreateTranslation(_animatedTranslate);
+		return t * Matrix3x2.CreateTranslation(LayoutRect.X, LayoutRect.Y);
+	}
+
+	private void ApplyAnimatedTransform()
+	{
+		Visual.Transform = ComposeTransform();
+		Visual.MarkDirty();
+	}
+
+	internal void SetAnimatedTranslateX(float x) { _animatedTranslate.X = x; _hasAnimatedTranslate = true; ApplyAnimatedTransform(); }
+	internal void SetAnimatedTranslateY(float y) { _animatedTranslate.Y = y; _hasAnimatedTranslate = true; ApplyAnimatedTransform(); }
+
+	internal void ClearAnimatedTranslate()
+	{
+		_hasAnimatedTranslate = false;
+		_animatedTranslate = default;
+		ApplyAnimatedTransform();
+	}
+
+	/// <summary>Push an animated brush onto this element's drawn content (no relayout).</summary>
+	internal void SetAnimatedFill(HdrColor color) { _animatedFill = color; InvalidateContent(); }
+
+	/// <summary>Clear the animated brush, reverting to the element's own background.</summary>
+	internal void ClearAnimatedFill() { _animatedFill = null; InvalidateContent(); }
+
 	/// <summary>Re-evaluate just this element's drawn content (a brush/background change) against the current
 	/// <see cref="LayoutRect"/> — no relayout. Marks the visual dirty for the next composite.</summary>
 	protected void InvalidateContent()
@@ -240,7 +285,7 @@ public abstract class UIElement : DependencyObject
 
 	internal void SyncVisual()
 	{
-		Visual.Transform = RenderTransform * Matrix3x2.CreateTranslation(LayoutRect.X, LayoutRect.Y);
+		Visual.Transform = ComposeTransform();
 		Visual.Opacity = Opacity;
 		Visual.Content = BuildContent();
 		Visual.Clear();

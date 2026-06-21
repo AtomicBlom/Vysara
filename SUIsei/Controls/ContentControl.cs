@@ -49,5 +49,5 @@ public class ContentControl : Control
 	}
 
 	private protected override VisualContent? BuildContent() =>
-		Background is { } bg ? new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), bg) : null;
+		(AnimatedFill ?? Background) is { } bg ? new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), bg) : null;
 }
