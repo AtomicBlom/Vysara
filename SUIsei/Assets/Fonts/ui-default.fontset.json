@@ -1,0 +1,9 @@
+{
+  "name": "ui-default",
+  "fonts": [
+    { "path": "CascadiaCode.ttf", "ranges": ["Basic Latin"] }
+  ],
+  "pxRange": 4,
+  "glyphSize": 32,
+  "atlasPageSize": 256
+}

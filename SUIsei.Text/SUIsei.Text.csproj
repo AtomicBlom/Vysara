@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The native MTSDF font-atlas generator. A runtime-usable class library: a hand-rolled OpenType reader + a
+       msdfgen-faithful multi-threaded software MTSDF rasterizer + an atlas packer + a PNG/JSON emitter matching
+       the FontAtlas format. No external dependencies beyond SUIsei itself (whose FontAtlas it produces) — the PNG
+       encoder is hand-rolled over the built-in ZLibStream. Held to the same NativeAOT-clean bar as the runtime. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SUIsei.Tests" />
+  </ItemGroup>
+
+</Project>
