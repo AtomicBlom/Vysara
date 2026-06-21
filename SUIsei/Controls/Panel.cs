@@ -4,6 +4,7 @@ namespace SUIsei.Controls;
 
 /// <summary>The base of multi-child layout containers (PlanningUI.md §D2.3): owns the <see cref="Children"/>
 /// collection and an optional solid <see cref="Background"/>. Subclasses implement the measure/arrange policy.</summary>
+[ContentProperty(Name = nameof(Children))]
 public abstract class Panel : FrameworkElement
 {
 	protected Panel() => Children = new UIElementCollection(this);

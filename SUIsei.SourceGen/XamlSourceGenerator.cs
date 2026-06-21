@@ -398,8 +398,8 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			gen.Report(UnsupportedMarkup, attr, value.Trim());
 		}
 
-		// Child elements.
-		var kind = ContainerKind(type);
+		// Child elements flow into the type's content property ([ContentProperty], else the name convention).
+		var content = ContainerKind(type);
 		foreach (var childEl in el.Elements())
 		{
 			gen.Ct.ThrowIfCancellationRequested();
@@ -411,13 +411,10 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			var childVar = EmitElement(gen, scope, childEl);
 			if (childVar is null)
 				continue;
-			switch (kind)
-			{
-				case "Children": scope.Emit($"{var}.Children.Add({childVar});"); break;
-				case "Child":    scope.Emit($"{var}.Child = {childVar};"); break;
-				case "Content":  scope.Emit($"{var}.Content = {childVar};"); break;
-				default:         gen.Report(NoContentModel, childEl, typeName, childEl.Name.LocalName); break;
-			}
+			if (content is { } target)
+				scope.Emit(target.IsCollection ? $"{var}.{target.Name}.Add({childVar});" : $"{var}.{target.Name} = {childVar};");
+			else
+				gen.Report(NoContentModel, childEl, typeName, childEl.Name.LocalName);
 		}
 
 		foreach (var textNode in el.Nodes().OfType<XText>())
@@ -1359,17 +1356,58 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		return null;
 	}
 
-	private static string? ContainerKind(INamedTypeSymbol type)
+	// The property child elements flow into, and whether it is a collection (append) or a single slot (assign).
+	private readonly record struct ContentTarget(string Name, bool IsCollection);
+
+	private static ContentTarget? ContainerKind(INamedTypeSymbol type)
 	{
-		foreach (var name in new[] { "Children", "Child", "Content" })
+		// 1. Honour [ContentProperty(Name = "…")] declared on the type or its nearest decorated base.
+		for (INamedTypeSymbol? t = type; t is not null; t = t.BaseType)
 		{
+			var attr = t.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "ContentPropertyAttribute");
+			if (attr is null)
+				continue;
+			var name = attr.NamedArguments.FirstOrDefault(kv => kv.Key == "Name").Value.Value as string
+				?? (attr.ConstructorArguments.Length == 1 ? attr.ConstructorArguments[0].Value as string : null);
+			return !string.IsNullOrEmpty(name) && FindAnyProperty(type, name!) is { } prop
+				? new ContentTarget(name!, IsAddable(prop.Type))
+				: null; // declared but unresolvable — no content model
+		}
+
+		// 2. Fall back to the historical name convention for undecorated controls.
+		foreach (var name in new[] { "Children", "Child", "Content" })
 			for (INamedTypeSymbol? t = type; t is not null; t = t.BaseType)
-			{
 				if (t.GetMembers(name).OfType<IPropertySymbol>().Any())
-					return name;
-			}
+					return new ContentTarget(name, name == "Children");
+		return null;
+	}
+
+	// Any property by name (settable or get-only collection), walking the base chain.
+	private static IPropertySymbol? FindAnyProperty(INamedTypeSymbol type, string name)
+	{
+		for (INamedTypeSymbol? t = type; t is not null; t = t.BaseType)
+		{
+			var p = t.GetMembers(name).OfType<IPropertySymbol>().FirstOrDefault();
+			if (p is not null)
+				return p;
 		}
 		return null;
+	}
+
+	// A content property is a collection (we append children to it) when its type exposes a one-argument Add — on the
+	// type, a base, or an implemented interface (IList<T> etc.). Otherwise it is a single slot we assign.
+	private static bool IsAddable(ITypeSymbol type)
+	{
+		for (var t = type as INamedTypeSymbol; t is not null; t = t.BaseType)
+			if (HasAdd(t))
+				return true;
+		foreach (var i in type.AllInterfaces)
+			if (HasAdd(i))
+				return true;
+		return false;
+
+		static bool HasAdd(INamedTypeSymbol t) =>
+			t.GetMembers("Add").OfType<IMethodSymbol>().Any(m => m is { MethodKind: MethodKind.Ordinary, Parameters.Length: 1 });
 	}
 
 	// An attached property (`Grid.Row="0"`): resolve the owner type's static `Set<Prop>(element, value)` and emit the

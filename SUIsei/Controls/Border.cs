@@ -8,6 +8,7 @@ namespace SUIsei.Controls;
 /// measure deflates by border + padding around the child; arrange insets the child by the same; the visual draws a
 /// (rounded) fill + border. Phase B treats <see cref="BorderThickness"/> as uniform for the drawn stroke.
 /// </summary>
+[ContentProperty(Name = nameof(Child))]
 public sealed class Border : FrameworkElement
 {
 	public UIElement? Child

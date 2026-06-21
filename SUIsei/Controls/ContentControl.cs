@@ -9,6 +9,7 @@ namespace SUIsei.Controls;
 /// <c>{TemplateBinding Content}</c> routes <see cref="Content"/> into the template's <see cref="ContentPresenter"/>;
 /// <see cref="ContentChanged"/> lets that binding stay live.
 /// </summary>
+[ContentProperty(Name = nameof(Content))]
 public class ContentControl : Control
 {
 	private UIElement? _hosted;

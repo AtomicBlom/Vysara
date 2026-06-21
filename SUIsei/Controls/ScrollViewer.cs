@@ -9,6 +9,7 @@ namespace SUIsei.Controls;
 /// programmatically; the offset is always clamped to <see cref="ScrollableHeight"/>/<see cref="ScrollableWidth"/>.
 /// Pairs with <see cref="VirtualizingStackPanel"/>, which reports its full extent for exactly this viewport.
 /// </summary>
+[ContentProperty(Name = nameof(Content))]
 public sealed class ScrollViewer : FrameworkElement
 {
 	public ScrollViewer()
