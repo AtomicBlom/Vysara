@@ -91,7 +91,26 @@ public sealed class TemplateTests
 		VisualStateManager.GoToState(button, "PointerOver", useTransitions: true);
 		host.Tick(0.2, 0f, new Vector2(100, 100)); // run the 120ms transition to completion
 
-		var content = button.Visual.Content.ShouldBeOfType<RectContent>();
+		// The button is now templated, so the animated fill lives on the template root (the Border), not the button.
+		var border = (Border)button.GetTemplateRoot()!;
+		var content = border.Visual.Content.ShouldBeOfType<RectContent>();
 		content.Fill.ShouldBe(HdrColor.FromRgb(80, 80, 95)); // the PointerOver background
+	}
+
+	[Test]
+	public void Pressing_a_templated_buttons_inner_part_focuses_the_button()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var button = new Button { Content = "Go", Width = 60, Height = 24 };
+		view.Root.Content = button;
+		host.Tick(0.016, 0f, new Vector2(200, 200)); // lay out → realize the template
+
+		// The hit target inside a templated button is its non-focusable template root; focusing from there must walk
+		// up to the focusable Button (the regression the focus-ancestor-walk fixes).
+		var templateRoot = button.GetTemplateRoot()!;
+		templateRoot.IsTabStop.ShouldBeFalse();
+		host.Focus.FocusFromPointer(templateRoot);
+		host.Focus.FocusedElement.ShouldBe(button);
 	}
 }

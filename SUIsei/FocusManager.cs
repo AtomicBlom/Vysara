@@ -72,6 +72,20 @@ public sealed class FocusManager
 	}
 
 	/// <summary>
+	/// Focus the nearest focusable element at or above <paramref name="hit"/> in the tree (PlanningUI.md §D5.5) —
+	/// the pointer-press path. A click that lands on a non-focusable part (e.g. a control's template root or its
+	/// content) focuses the control itself, matching WinUI. Returns false when no focusable ancestor exists (focus is
+	/// left unchanged).
+	/// </summary>
+	public bool FocusFromPointer(UIElement? hit)
+	{
+		for (var el = hit; el is not null; el = el.Parent)
+			if (el.IsTabStop && el.IsEnabled && el.Visibility == Visibility.Visible)
+				return TrySetFocus(el, FocusState.Pointer);
+		return false;
+	}
+
+	/// <summary>
 	/// Move focus to the next or previous tab stop within the active focus scope.
 	/// Returns false when no focusable elements exist in <paramref name="views"/>.
 	/// </summary>

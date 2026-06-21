@@ -26,7 +26,9 @@ public sealed class UIHost
 	private Size _framebufferSize = new(1f, 1f);
 
 	public UIHost() =>
-		Input.OnPress = el => Focus.TrySetFocus(el, FocusState.Pointer);
+		// A press focuses the nearest focusable element at or above the hit (e.g. a templated control whose hit
+		// target is its non-focusable template root), matching WinUI.
+		Input.OnPress = el => Focus.FocusFromPointer(el);
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
 	public InputManager Input { get; } = new();
