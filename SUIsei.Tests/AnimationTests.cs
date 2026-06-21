@@ -219,6 +219,22 @@ public sealed class AnimationTests
 	}
 
 	[Test]
+	public void Declarative_target_property_resolves_to_a_channel()
+	{
+		// The path a generated storyboard uses: Target + TargetProperty (strings) instead of an explicit closure.
+		var (border, _) = LaidOutBorder();
+		var clock = new AnimationClock();
+		clock.Begin(StoryboardOf(new ColorAnimation
+		{
+			From = new HdrColor(0, 0, 0, 1), To = new HdrColor(1, 1, 1, 1), Duration = TimeSpan.FromSeconds(1),
+			Target = border, TargetProperty = "Background",
+		}));
+
+		clock.Advance(0.5);
+		border.Visual.Content.ShouldBeOfType<RectContent>().Fill.ShouldBe(new HdrColor(0.5f, 0.5f, 0.5f, 1f));
+	}
+
+	[Test]
 	public void Host_tick_advances_the_clock_before_layout()
 	{
 		var host = new UIHost();

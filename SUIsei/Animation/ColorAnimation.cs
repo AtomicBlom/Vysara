@@ -27,4 +27,10 @@ public sealed class ColorAnimation : AnimationTimeline<HdrColor>
 			from.B + (to.B - from.B) * t,
 			from.A + (to.A - from.A) * t);
 	}
+
+	protected override (Action<HdrColor> Apply, Action Release) ResolveChannel(UIElement target, string property) => property switch
+	{
+		"Background" or "Foreground" or "Fill" => (target.SetAnimatedFill, target.ClearAnimatedFill),
+		_ => (static _ => { }, static () => { }),
+	};
 }

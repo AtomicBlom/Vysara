@@ -81,6 +81,9 @@ public static class VisualStateManager
 	{
 		foreach (var child in storyboard.Children)
 			if (child is AnimationTimeline anim)
+			{
+				anim.EnsureResolved();
 				anim.ApplyAt(1.0);
+			}
 	}
 }

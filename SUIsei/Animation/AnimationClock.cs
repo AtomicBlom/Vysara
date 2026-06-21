@@ -29,6 +29,10 @@ public sealed class AnimationClock
 	public void Begin(Storyboard storyboard)
 	{
 		Stop(storyboard);
+		// Resolve any declarative Target/TargetProperty (from generated XAML) into the typed apply now.
+		foreach (var child in storyboard.Children)
+			if (child is AnimationTimeline anim)
+				anim.EnsureResolved();
 		_active.Add(new Entry { Storyboard = storyboard, Done = new bool[storyboard.Children.Count] });
 	}
 

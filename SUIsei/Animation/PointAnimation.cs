@@ -19,4 +19,8 @@ public sealed class PointAnimation : AnimationTimeline<Point>
 		var t = (float)(EasingFunction?.Ease(progress) ?? progress);
 		return new Point(from.X + (to.X - from.X) * t, from.Y + (to.Y - from.Y) * t);
 	}
+
+	// A point has no built-in animatable channel in MU4; a target must supply an explicit apply closure.
+	protected override (Action<Point> Apply, Action Release) ResolveChannel(UIElement target, string property) =>
+		(static _ => { }, static () => { });
 }

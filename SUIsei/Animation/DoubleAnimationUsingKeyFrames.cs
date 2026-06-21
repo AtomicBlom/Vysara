@@ -42,4 +42,12 @@ public sealed class DoubleAnimationUsingKeyFrames : AnimationTimeline<double>
 
 		return KeyFrames[n - 1].Value;
 	}
+
+	protected override (Action<double> Apply, Action Release) ResolveChannel(UIElement target, string property) => property switch
+	{
+		"Opacity" => (v => target.SetAnimatedValue(UIElement.OpacityProperty, (float)v), () => target.ClearAnimatedValue(UIElement.OpacityProperty)),
+		"RenderTransform.Translate.X" => (v => target.SetAnimatedTranslateX((float)v), target.ClearAnimatedTranslate),
+		"RenderTransform.Translate.Y" => (v => target.SetAnimatedTranslateY((float)v), target.ClearAnimatedTranslate),
+		_ => (static _ => { }, static () => { }),
+	};
 }
