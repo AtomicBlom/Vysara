@@ -21,4 +21,12 @@ public abstract class Control : FrameworkElement
 		// Controls are tab-focusable by default; UIElement's registered default is false (non-interactive elements).
 		IsTabStop = true;
 	}
+
+	/// <summary>The host's animation clock (via the attached root), used by <see cref="VisualStateManager"/> to run
+	/// state transitions. Null when the control is not attached to a live host.</summary>
+	internal AnimationClock? Clock => AttachedRoot?.Clock;
+
+	/// <summary>The realized root of this control's template, if any (the element carrying its
+	/// <see cref="VisualStateManager"/> groups). Null until a template is applied.</summary>
+	internal FrameworkElement? GetTemplateRoot() => null;
 }
