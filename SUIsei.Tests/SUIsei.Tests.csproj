@@ -28,6 +28,10 @@
   <ItemGroup>
     <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
     <ProjectReference Include="..\SUIsei.SourceGen\SUIsei.SourceGen.csproj" ReferenceOutputAssembly="true" />
+    <!-- The CPU reference rasterizer is the headless pixel oracle: it renders DrawListData to RGBA8 with the same
+         per-kind math (and the RT-stack layer composite) the GPU runs, so group opacity is asserted at the pixel
+         level with no GPU. -->
+    <ProjectReference Include="..\SUIsei.Rasterizer\SUIsei.Rasterizer.csproj" />
   </ItemGroup>
 
   <Import Project="..\build\SUIsei.targets" />

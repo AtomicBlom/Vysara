@@ -11,10 +11,13 @@ namespace SUIsei.Rasterizer;
 /// space (the GPU rendered to a linear target and re-encoded sRGB on store), so <see cref="ResolveToRgba8"/> does
 /// that sRGB encode itself.
 ///
-/// Covers all five kinds: <see cref="UIPrimKind.Fill"/>/<see cref="UIPrimKind.RoundedRect"/>/<see cref="UIPrimKind.Border"/>
+/// Covers all five drawable kinds: <see cref="UIPrimKind.Fill"/>/<see cref="UIPrimKind.RoundedRect"/>/<see cref="UIPrimKind.Border"/>
 /// (analytic) plus <see cref="UIPrimKind.Glyph"/> (MTSDF) and <see cref="UIPrimKind.Image"/> (tinted blit), which
 /// sample a <see cref="Texture"/> bound to their <c>TextureIndex</c> via <see cref="BindTexture"/>. A glyph/image
-/// command with no bound texture is skipped (counted in <see cref="SkippedCommands"/>).
+/// command with no bound texture is skipped (counted in <see cref="SkippedCommands"/>). It also honours the
+/// <see cref="UIPrimKind.BeginLayer"/>/<see cref="UIPrimKind.EndLayer"/> group-opacity markers by rendering the
+/// bracketed subtree into an offscreen framebuffer and compositing it back at the group's fade alpha — the CPU twin
+/// of the backend RT stack, so it gives true (non-double-blended) group opacity headlessly.
 /// </summary>
 public sealed class SoftwareRasterizer
 {
@@ -23,6 +26,12 @@ public sealed class SoftwareRasterizer
 
 	// Framebuffer in LINEAR, PREMULTIPLIED RGBA — the space the GPU blended in. Resolved to sRGB bytes on demand.
 	private readonly Vector4[] _fb;
+
+	// Open render-to-texture group layers (BeginLayer/EndLayer). Draws target the top layer's framebuffer; on
+	// EndLayer the layer is composited back into its parent at the group's fade alpha — the CPU mirror of the
+	// backend RT stack. The layer framebuffer is full surface size (children render at their natural surface
+	// positions), so the composite is a straight per-pixel premultiplied alpha-over of the whole buffer.
+	private readonly Stack<(Vector4[] Fb, float Alpha)> _layers = new();
 
 	// Textures bound per draw command's TextureIndex (the atlas page for glyphs, an image source for images).
 	private readonly Dictionary<int, Texture> _textures = [];
@@ -43,6 +52,12 @@ public sealed class SoftwareRasterizer
 	/// <summary>Glyph/Image commands skipped in the last <see cref="Render"/> call because no texture was bound.</summary>
 	public int SkippedCommands { get; private set; }
 
+	/// <summary>Group-opacity layers composited back in the last <see cref="Render"/> call (EndLayer markers).</summary>
+	public int LayersComposited { get; private set; }
+
+	// The framebuffer draws currently target: the open layer on top of the stack, else the base framebuffer.
+	private Vector4[] ActiveTarget => _layers.Count > 0 ? _layers.Peek().Fb : _fb;
+
 	/// <summary>Bind a texture to a command <c>TextureIndex</c> (e.g. index 1 → the font atlas page for glyph runs).</summary>
 	public void BindTexture(int index, Texture texture) => _textures[index] = texture;
 
@@ -56,6 +71,8 @@ public sealed class SoftwareRasterizer
 	{
 		TrianglesDrawn = 0;
 		SkippedCommands = 0;
+		LayersComposited = 0;
+		_layers.Clear();
 
 		var verts = draw.Vertices.Span;
 		var indices = draw.Indices.Span;
@@ -67,6 +84,32 @@ public sealed class SoftwareRasterizer
 			ref readonly var cmd = ref commands[ci];
 			var kind = (UIPrimKind)cmd.Tag;
 
+			// Group-opacity layers (zero-geometry markers). BeginLayer redirects subsequent draws into a fresh
+			// transparent framebuffer; EndLayer composites it back at the group's fade alpha (read off the BeginLayer
+			// marker's degenerate quad). The fade is applied ONLY here — primitive shading already lifted HDR
+			// paper-white per pixel, which commutes with the linear premultiplied alpha-over, so the composite must
+			// not lift again.
+			if (kind == UIPrimKind.BeginLayer)
+			{
+				var alpha = (float)verts[cmd.VertexOffset].Color.A;
+				_layers.Push((new Vector4[_width * _height], alpha));
+				continue;
+			}
+			if (kind == UIPrimKind.EndLayer)
+			{
+				if (_layers.Count == 0)
+					continue;
+				var (layerFb, layerAlpha) = _layers.Pop();
+				var dst = ActiveTarget;
+				for (var i = 0; i < dst.Length; i++)
+				{
+					var src = layerFb[i] * layerAlpha; // fade the premultiplied layer by the group alpha
+					dst[i] = src + dst[i] * (1f - src.W);
+				}
+				LayersComposited++;
+				continue;
+			}
+
 			// Texture-sampling kinds need their page bound; skip (and count) if it is missing.
 			Texture? tex = null;
 			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !_textures.TryGetValue(cmd.TextureIndex, out tex))
@@ -74,6 +117,8 @@ public sealed class SoftwareRasterizer
 				SkippedCommands++;
 				continue;
 			}
+
+			var target = ActiveTarget;
 
 			// Scissor → inclusive integer pixel bounds, clamped to the framebuffer.
 			var clip = cmd.ClipRect;
@@ -90,7 +135,7 @@ public sealed class SoftwareRasterizer
 				var v0 = verts[cmd.VertexOffset + indices[i]];
 				var v1 = verts[cmd.VertexOffset + indices[i + 1]];
 				var v2 = verts[cmd.VertexOffset + indices[i + 2]];
-				RasterizeTriangle(v0, v1, v2, kind, tex, sx0, sy0, sx1, sy1, hdr, paperWhite);
+				RasterizeTriangle(target, v0, v1, v2, kind, tex, sx0, sy0, sx1, sy1, hdr, paperWhite);
 				TrianglesDrawn++;
 			}
 		}
@@ -118,6 +163,7 @@ public sealed class SoftwareRasterizer
 	}
 
 	private void RasterizeTriangle(
+		Vector4[] target,
 		in OverlayVertex va, in OverlayVertex vb, in OverlayVertex vc,
 		UIPrimKind kind, Texture? tex, int sx0, int sy0, int sx1, int sy1, bool hdr, float paperWhite)
 	{
@@ -172,7 +218,7 @@ public sealed class SoftwareRasterizer
 
 				// Premultiplied alpha-over (src=ONE, dst=ONE_MINUS_SRC_ALPHA), in linear space.
 				var idx = y * _width + x;
-				_fb[idx] = src + _fb[idx] * (1f - src.W);
+				target[idx] = src + target[idx] * (1f - src.W);
 			}
 		}
 	}
