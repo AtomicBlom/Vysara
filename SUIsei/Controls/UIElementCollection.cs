@@ -20,6 +20,24 @@ public sealed class UIElementCollection
 		_owner.InvalidateMeasure();
 	}
 
+	/// <summary>Insert <paramref name="child"/> at <paramref name="index"/> (used by items controls applying an
+	/// incremental collection change).</summary>
+	public void Insert(int index, UIElement child)
+	{
+		_items.Insert(index, child);
+		_owner.AdoptChild(child);
+		_owner.InvalidateMeasure();
+	}
+
+	/// <summary>Remove the child at <paramref name="index"/>, un-parenting it.</summary>
+	public void RemoveAt(int index)
+	{
+		var child = _items[index];
+		_items.RemoveAt(index);
+		_owner.DropChild(child);
+		_owner.InvalidateMeasure();
+	}
+
 	public void Clear()
 	{
 		foreach (var c in _items)
