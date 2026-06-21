@@ -1,0 +1,64 @@
+using System.Windows.Input;
+
+using SUIsei.Controls;
+
+namespace SUIsei.Tests;
+
+/// <summary>
+/// <see cref="ButtonBase.Command"/> / <see cref="ButtonBase.CommandParameter"/> (PlanningUI.md MU6): a click
+/// executes the command with the parameter, and while a command is set the button's <c>IsEnabled</c> tracks
+/// <see cref="ICommand.CanExecute"/>.
+/// </summary>
+public sealed class CommandTests
+{
+	private sealed class RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute = null) : ICommand
+	{
+		public event EventHandler? CanExecuteChanged;
+
+		public bool CanExecute(object? parameter) => canExecute?.Invoke(parameter) ?? true;
+
+		public void Execute(object? parameter) => execute(parameter);
+
+		public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+	}
+
+	[Test]
+	public void Click_executes_the_command_with_the_parameter()
+	{
+		object? received = null;
+		var count = 0;
+		var button = new Button { CommandParameter = "p" };
+		button.Command = new RelayCommand(p => { received = p; count++; });
+
+		button.PerformClick();
+
+		count.ShouldBe(1);
+		received.ShouldBe("p");
+	}
+
+	[Test]
+	public void CanExecute_drives_IsEnabled()
+	{
+		var can = false;
+		var command = new RelayCommand(_ => { }, _ => can);
+		var button = new Button { Command = command };
+
+		button.IsEnabled.ShouldBeFalse();   // CanExecute was false when the command was assigned
+
+		can = true;
+		command.RaiseCanExecuteChanged();
+
+		button.IsEnabled.ShouldBeTrue();
+	}
+
+	[Test]
+	public void Execute_is_gated_by_CanExecute()
+	{
+		var count = 0;
+		var button = new Button { Command = new RelayCommand(_ => count++, _ => false) };
+
+		button.PerformClick();
+
+		count.ShouldBe(0);
+	}
+}
