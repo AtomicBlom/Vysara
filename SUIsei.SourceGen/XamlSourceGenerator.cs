@@ -336,10 +336,10 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 
 			if (!IsMarkup(value, out var inner))
 			{
-				// Plain literal / enum value.
+				// Plain literal / enum / colour / thickness value.
 				var prop2 = FindProperty(type, name);
 				if (prop2 is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
-				switch (TryLiteral(prop2.Type, value, out var code))
+				switch (TryAttributeValue(prop2.Type, value, out var code))
 				{
 					case LiteralStatus.Ok:          scope.Emit($"{var}.{prop2.Name} = {code};"); break;
 					case LiteralStatus.BadValue:    gen.Report(InvalidLiteral, attr, value.Trim(), name, prop2.Type.ToDisplayString()); break;
@@ -757,14 +757,44 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		return styleVar;
 	}
 
-	// A Setter value: the literal/enum subset, plus colour literals for HdrColor-typed properties (Background etc.).
-	private static bool TrySetterValue(ITypeSymbol type, string raw, out string code)
+	// A Setter value: the same attribute-value subset as a plain property (literal/enum + colour + thickness).
+	private static bool TrySetterValue(ITypeSymbol type, string raw, out string code) =>
+		TryAttributeValue(type, raw, out code) == LiteralStatus.Ok;
+
+	// A plain (non-markup) attribute value: an HdrColor (#RRGGBB / #AARRGGBB), a Thickness (uniform / "h,v" /
+	// "l,t,r,b"), or the literal/enum/numeric subset. Nullable value types are unwrapped first.
+	private static LiteralStatus TryAttributeValue(ITypeSymbol type, string raw, out string code)
 	{
+		code = "";
 		var unwrapped = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n ? n.TypeArguments[0] : type;
 		if (unwrapped.Name == "HdrColor")
-			return TryParseColor(raw, out code);
+			return TryParseColor(raw, out code) ? LiteralStatus.Ok : LiteralStatus.BadValue;
+		if (unwrapped.Name == "Thickness")
+			return TryThickness(raw, out code) ? LiteralStatus.Ok : LiteralStatus.BadValue;
+		return TryLiteral(unwrapped, raw, out code);
+	}
+
+	// Parse a WinUI thickness: "u" (uniform), "h,v", or "l,t,r,b".
+	private static bool TryThickness(string raw, out string code)
+	{
 		code = "";
-		return TryLiteral(unwrapped, raw, out code) == LiteralStatus.Ok;
+		var parts = raw.Split(',');
+		var nums = new string[parts.Length];
+		for (var i = 0; i < parts.Length; i++)
+		{
+			var part = parts[i].Trim();
+			if (!float.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+				return false;
+			nums[i] = part + "f";
+		}
+		code = parts.Length switch
+		{
+			1 => $"new global::SUIsei.Thickness({nums[0]})",
+			2 => $"new global::SUIsei.Thickness({nums[0]}, {nums[1]})",
+			4 => $"new global::SUIsei.Thickness({nums[0]}, {nums[1]}, {nums[2]}, {nums[3]})",
+			_ => "",
+		};
+		return code.Length > 0;
 	}
 
 	// Coalescing for a binding read: FallbackValue / TargetNullValue, then string/null-value-type defaults.
