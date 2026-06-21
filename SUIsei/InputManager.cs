@@ -26,6 +26,17 @@ public sealed class InputManager
 	internal void Process(in PointerInput e, IReadOnlyList<UIView> views)
 	{
 		var hit = HitTest(e.Position, views);
+
+		// A wheel event is its own routed event (no over-chain / move semantics): route it to the captee or the
+		// element under the pointer and stop.
+		if (e.Wheel != Vector2.Zero)
+		{
+			var wheelTarget = GetCapture(e.PointerId) ?? hit;
+			if (wheelTarget is not null)
+				RaiseWheel(wheelTarget, e);
+			return;
+		}
+
 		UpdateOverChain(e, hit);
 
 		// Explicit capture wins over implicit; both win over hit for move/release routing.
@@ -124,6 +135,18 @@ public sealed class InputManager
 		}
 
 		target.RaiseEvent(evt, _args);
+	}
+
+	// Raise the wheel event (tunnel Preview then bubble), carrying the scroll delta.
+	private void RaiseWheel(UIElement target, in PointerInput e)
+	{
+		_args.Pointer = new PointerPoint(e.Position, e.Buttons, e.Pressure);
+		_args.Device = e.Device;
+		_args.Wheel = e.Wheel;
+		target.RaiseEvent(UIElement.PreviewPointerWheelChangedEvent, _args);
+		if (_args.Handled)
+			return;
+		target.RaiseEvent(UIElement.PointerWheelChangedEvent, _args);
 	}
 
 	// Raise a Direct event (enter/exit) with no Preview counterpart.

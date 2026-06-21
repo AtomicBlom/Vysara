@@ -74,6 +74,8 @@ public abstract class UIElement : DependencyObject
 	public static readonly RoutedEvent PointerEnteredEvent         = RoutedEvent.Register(nameof(PointerEntered),         RoutingStrategy.Direct);
 	public static readonly RoutedEvent PointerExitedEvent          = RoutedEvent.Register(nameof(PointerExited),          RoutingStrategy.Direct);
 	public static readonly RoutedEvent PointerCaptureLostEvent     = RoutedEvent.Register(nameof(PointerCaptureLost),     RoutingStrategy.Direct);
+	public static readonly RoutedEvent PreviewPointerWheelChangedEvent = RoutedEvent.Register(nameof(PreviewPointerWheelChanged), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PointerWheelChangedEvent        = RoutedEvent.Register(nameof(PointerWheelChanged),        RoutingStrategy.Bubble);
 
 	public event RoutedEventHandler PreviewPointerPressed  { add => AddHandler(PreviewPointerPressedEvent,  value); remove => RemoveHandler(PreviewPointerPressedEvent,  value); }
 	public event RoutedEventHandler PreviewPointerReleased { add => AddHandler(PreviewPointerReleasedEvent, value); remove => RemoveHandler(PreviewPointerReleasedEvent, value); }
@@ -84,6 +86,8 @@ public abstract class UIElement : DependencyObject
 	public event RoutedEventHandler PointerEntered         { add => AddHandler(PointerEnteredEvent,         value); remove => RemoveHandler(PointerEnteredEvent,         value); }
 	public event RoutedEventHandler PointerExited          { add => AddHandler(PointerExitedEvent,          value); remove => RemoveHandler(PointerExitedEvent,          value); }
 	public event RoutedEventHandler PointerCaptureLost     { add => AddHandler(PointerCaptureLostEvent,     value); remove => RemoveHandler(PointerCaptureLostEvent,     value); }
+	public event RoutedEventHandler PreviewPointerWheelChanged { add => AddHandler(PreviewPointerWheelChangedEvent, value); remove => RemoveHandler(PreviewPointerWheelChangedEvent, value); }
+	public event RoutedEventHandler PointerWheelChanged        { add => AddHandler(PointerWheelChangedEvent,        value); remove => RemoveHandler(PointerWheelChangedEvent,        value); }
 
 	// --- Keyboard routed events ---
 
@@ -113,6 +117,10 @@ public abstract class UIElement : DependencyObject
 
 	/// <summary>A local render transform, composed under layout placement (animatable later).</summary>
 	public Matrix3x2 RenderTransform { get; set; } = Matrix3x2.Identity;
+
+	/// <summary>When true, the composition node clips its subtree to the element's layout bounds (applied in
+	/// <see cref="SyncVisual"/>). Takes effect on the next arrange.</summary>
+	public bool ClipToBounds { get; set; }
 
 	/// <summary>The result of the last <see cref="Measure"/> (intrinsic + margin), in DIPs.</summary>
 	public Size DesiredSize { get; protected set; }
@@ -287,6 +295,7 @@ public abstract class UIElement : DependencyObject
 	{
 		Visual.Transform = ComposeTransform();
 		Visual.Opacity = Opacity;
+		Visual.Clip = ClipToBounds ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
 		Visual.Content = BuildContent();
 		Visual.Clear();
 		foreach (var child in VisualChildren)
