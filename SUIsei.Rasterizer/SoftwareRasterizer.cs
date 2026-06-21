@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Threading;
+using System.Threading.Tasks;
 using SUIsei.Drawing;
 
 namespace SUIsei.Rasterizer;
@@ -139,6 +141,121 @@ public sealed class SoftwareRasterizer
 				TrianglesDrawn++;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Multithreaded twin of <see cref="Render"/> for the no-group-opacity case. The framebuffer is split into
+	/// horizontal bands and each band replays the whole command list (clamped to its own rows) on its own thread.
+	/// Bands write disjoint rows and every pixel is shaded by exactly the command the serial path would use, in the
+	/// same order, so the output is byte-identical to <see cref="Render"/> — only faster. Falls back to
+	/// <see cref="Render"/> when the list carries group-opacity layers, whose offscreen compositing spans the whole
+	/// surface and is not band-local.
+	/// </summary>
+	public void RenderParallel(DrawListData draw, float paperWhite = 1f)
+	{
+		SkippedCommands = 0;
+		LayersComposited = 0;
+
+		if (DrawHasLayers(draw))
+		{
+			Render(draw, paperWhite);
+			return;
+		}
+
+		var hdr = draw.IsHdrTarget;
+		var verts = draw.Vertices;
+		var indices = draw.Indices;
+		var commands = draw.Commands;
+
+		const int bandHeight = 16;
+		var bands = (_height + bandHeight - 1) / bandHeight;
+
+		var triangles = 0;
+		Parallel.For(0, bands, () => 0, (b, _, local) =>
+		{
+			var y0 = b * bandHeight;
+			var y1 = Math.Min(_height - 1, y0 + bandHeight - 1);
+			return local + RasterizeBand(_fb, verts.Span, indices.Span, commands.Span, y0, y1, hdr, paperWhite);
+		}, local => Interlocked.Add(ref triangles, local));
+		TrianglesDrawn = triangles;
+	}
+
+	// Rasterize every command's triangles clipped to rows [bandY0, bandY1] — the body of Render's command loop with
+	// the scissor's vertical extent intersected against the band. Returns the triangles touched (for the perf counter).
+	private int RasterizeBand(Vector4[] target, ReadOnlySpan<OverlayVertex> verts, ReadOnlySpan<ushort> indices,
+		ReadOnlySpan<DrawCommand> commands, int bandY0, int bandY1, bool hdr, float paperWhite)
+	{
+		var triangles = 0;
+		for (var ci = 0; ci < commands.Length; ci++)
+		{
+			ref readonly var cmd = ref commands[ci];
+			var kind = (UIPrimKind)cmd.Tag;
+
+			Texture? tex = null;
+			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !_textures.TryGetValue(cmd.TextureIndex, out tex))
+				continue;
+
+			var clip = cmd.ClipRect;
+			var sx0 = Math.Max(0, (int)MathF.Floor(clip.X));
+			var sy0 = Math.Max(bandY0, (int)MathF.Floor(clip.Y));
+			var sx1 = Math.Min(_width - 1, (int)MathF.Ceiling(clip.Right) - 1);
+			var sy1 = Math.Min(bandY1, (int)MathF.Ceiling(clip.Bottom) - 1);
+			if (sx0 > sx1 || sy0 > sy1)
+				continue;
+
+			var end = cmd.IndexOffset + cmd.IndexCount;
+			for (var i = cmd.IndexOffset; i + 3 <= end; i += 3)
+			{
+				var v0 = verts[cmd.VertexOffset + indices[i]];
+				var v1 = verts[cmd.VertexOffset + indices[i + 1]];
+				var v2 = verts[cmd.VertexOffset + indices[i + 2]];
+				RasterizeTriangle(target, v0, v1, v2, kind, tex, sx0, sy0, sx1, sy1, hdr, paperWhite);
+				triangles++;
+			}
+		}
+		return triangles;
+	}
+
+	private static bool DrawHasLayers(DrawListData draw)
+	{
+		var commands = draw.Commands.Span;
+		for (var i = 0; i < commands.Length; i++)
+		{
+			var kind = (UIPrimKind)commands[i].Tag;
+			if (kind is UIPrimKind.BeginLayer or UIPrimKind.EndLayer)
+				return true;
+		}
+		return false;
+	}
+
+	/// <summary>
+	/// Resolve the framebuffer straight into a caller-provided BGRA8 buffer — the byte order a GDI 32bpp DIB wants —
+	/// in parallel across rows. Same per-pixel un-premultiply + sRGB encode as <see cref="ResolveToRgba8"/>, fused
+	/// with the channel swap and written into <paramref name="dest"/>, so a window host needs no extra copy or
+	/// per-frame allocation. <paramref name="dest"/> must hold at least width*height*4 bytes.
+	/// </summary>
+	public void ResolveToBgra8(byte[] dest)
+	{
+		if (dest.Length < _width * _height * 4)
+			throw new ArgumentException("destination buffer too small for the framebuffer", nameof(dest));
+
+		var fb = _fb;
+		var width = _width;
+		Parallel.For(0, _height, y =>
+		{
+			var row = y * width;
+			for (var x = 0; x < width; x++)
+			{
+				var c = fb[row + x];
+				var a = Saturate(c.W);
+				var inv = a > 1e-6f ? 1f / a : 0f; // un-premultiply
+				var o = (row + x) * 4;
+				dest[o + 0] = ToSrgbByte(c.Z * inv); // B
+				dest[o + 1] = ToSrgbByte(c.Y * inv); // G
+				dest[o + 2] = ToSrgbByte(c.X * inv); // R
+				dest[o + 3] = (byte)MathF.Round(a * 255f);
+			}
+		});
 	}
 
 	/// <summary>

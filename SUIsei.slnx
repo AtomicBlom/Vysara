@@ -6,4 +6,7 @@
   </Folder>
   <Project Path="SUIsei.SourceGen\SUIsei.SourceGen.csproj" />
   <Project Path="SUIsei.Tests\SUIsei.Tests.csproj" />
+  <Project Path="SUIsei.Gallery\SUIsei.Gallery.csproj" />
+  <Project Path="SUIsei.Text\SUIsei.Text.csproj" />
+  <Project Path="SUIsei.Text.Tool\SUIsei.Text.Tool.csproj" />
 </Solution>
