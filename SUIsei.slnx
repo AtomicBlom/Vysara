@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="SUIsei\SUIsei.csproj" />
+  <Folder Name="/Build/">
+    <File Path="build/SUIsei.props" />
+    <File Path="build/SUIsei.targets" />
+  </Folder>
+  <Project Path="SUIsei.SourceGen\SUIsei.SourceGen.csproj" />
+  <Project Path="SUIsei.Tests\SUIsei.Tests.csproj" />
+</Solution>

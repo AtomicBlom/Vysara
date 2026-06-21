@@ -1,0 +1,45 @@
+<Project>
+
+  <!--
+    SUIsei XAML build machinery (PlanningUI.md MU0 Phase C) — targets.
+
+    Imported AFTER the project body (so $(SUIseiXamlSourceDir) is already set). Does two things:
+      1. Registers every *.xaml under the project as <AdditionalFiles> so the SUIsei.SourceGen incremental
+         generator's AdditionalTextsProvider can see them, and as <UpToDateCheckInput> so the IDE
+         fast-up-to-date check never serves a stale generated tree after a .xaml edit (the same rationale as
+         the shader UpToDateCheckInput in SUIsei.Shaders.targets).
+      2. References SUIsei.SourceGen as a build-time ANALYZER (OutputItemType=Analyzer,
+         ReferenceOutputAssembly=false) — it emits the partial x:Class with typed x:Name fields and
+         InitializeComponent(); it is never a runtime dependency.
+
+    The .xaml glob lives in a top-level ItemGroup (evaluated before any target runs), so it is populated even
+    though this file is imported at the bottom of the consuming project.
+  -->
+
+  <PropertyGroup>
+    <_SUIseiUISourceGen>$(SUIseiUIRepoRoot)SUIsei.SourceGen\SUIsei.SourceGen.csproj</_SUIseiUISourceGen>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(SUIseiXamlEnable)' == 'true'">
+    <!-- Recurse the source dir, excluding the build output trees. The .xaml sources exist at evaluation, so a
+         static glob is correct here (unlike the shaders' generated .spv, which must be registered in a target). -->
+    <SUIseiXaml Include="$(SUIseiXamlSourceDir)\**\*.xaml"
+              Exclude="$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
+    <AdditionalFiles Include="@(SUIseiXaml)" />
+    <UpToDateCheckInput Include="@(SUIseiXaml)" />
+  </ItemGroup>
+
+  <!-- The generator is inert until the analyzer project exists (mirrors the _SUIseiWarnInertDirectX12 pattern in
+       Sdk.targets): reference it only when the file is present, so the flag can be on without breaking a build
+       that lacks the generator. -->
+  <ItemGroup Condition="'$(SUIseiXamlEnable)' == 'true' And Exists('$(_SUIseiUISourceGen)')">
+    <ProjectReference Include="$(_SUIseiUISourceGen)" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Target Name="_SUIseiWarnMissingXamlGen"
+          BeforeTargets="ResolveProjectReferences"
+          Condition="'$(SUIseiXamlEnable)' == 'true' And !Exists('$(_SUIseiUISourceGen)')">
+    <Warning Text="SUIseiXamlEnable=true but SUIsei.SourceGen does not exist at '$(_SUIseiUISourceGen)'; .xaml views will not be code-generated." />
+  </Target>
+
+</Project>

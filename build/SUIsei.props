@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    SUIsei XAML build machinery (PlanningUI.md MU0 Phase C) — property defaults.
+
+    Imported by any project that authors SUIsei XAML views: SUIsei itself (real views, later milestones)
+    and SUIsei.Tests (the generator proof). It carries NO runtime/backend reference — the SUIsei.SourceGen
+    generator is a build-time analyzer only — so it sits beside SUIsei.Shaders.props in build/SUIsei.Sdk and can be
+    imported without pulling in the backend selection.
+
+    A consuming project just writes the two imports (props near the top, targets near the bottom):
+        <Import Project="..\build\SUIsei.Sdk\SUIsei.props" />
+        ... body ...
+        <Import Project="..\build\SUIsei.Sdk\SUIsei.targets" />
+    The targets half then registers every *.xaml under the project as AdditionalFiles and references the
+    XAML -> typed control-tree generator (SUIsei.SourceGen) as an analyzer.
+  -->
+
+  <PropertyGroup>
+    <!-- On by default; a project can set SUIseiXamlEnable=false to opt a build out of XAML codegen. -->
+    <SUIseiXamlEnable Condition="'$(SUIseiXamlEnable)' == ''">true</SUIseiXamlEnable>
+
+    <!-- Repo root, resolved from this file's location (build/SUIsei.Sdk/ -> two levels up). Used to locate the
+         SUIsei.SourceGen analyzer project. Overridable via $(SUIseiUIRepoRoot). -->
+    <SUIseiUIRepoRoot Condition="'$(SUIseiUIRepoRoot)' == ''">$(MSBuildThisFileDirectory)..\</SUIseiUIRepoRoot>
+
+    <!-- Folder scanned for *.xaml views (recursively). Defaults to the consuming project's directory. -->
+    <SUIseiXamlSourceDir Condition="'$(SUIseiXamlSourceDir)' == ''">$(MSBuildProjectDirectory)</SUIseiXamlSourceDir>
+  </PropertyGroup>
+
+</Project>

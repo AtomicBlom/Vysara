@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\build\SUIsei.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <PackageReference Include="Shouldly" />
+    <!-- Drive SUIsei.SourceGen directly (CSharpGeneratorDriver) to unit-test the diagnostics and incremental
+         caching that the build-time analyzer path can't exercise (invalid XAML would break this project's own build). -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="TUnit.Core" />
+    <Using Include="Shouldly" />
+  </ItemGroup>
+
+  <!-- SUIsei is standalone — only the runtime project is needed (no Loom.Core / Loom.Assets). -->
+  <!-- ReferenceOutputAssembly=true on SourceGen so XamlSourceGenerator is referenceable by CSharpGeneratorDriver tests. -->
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
+    <ProjectReference Include="..\SUIsei.SourceGen\SUIsei.SourceGen.csproj" ReferenceOutputAssembly="true" />
+  </ItemGroup>
+
+  <Import Project="..\build\SUIsei.targets" />
+
+</Project>

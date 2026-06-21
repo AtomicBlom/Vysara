@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- XAML -> typed control-tree generator wiring (registers *.xaml as AdditionalFiles + the analyzer ref). -->
+  <Import Project="..\build\SUIsei.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- NativeAOT gate: turns on the trim + AOT Roslyn analyzers so any reflection or AOT-unsafe pattern
+         surfaces as a build warning. The UI runtime is NAOT-clean by design (compiled x:Bind, typed DP
+         delegates, no Activator/MethodInfo). -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- SUIsei is standalone — no Loom.Core or Loom.Assets reference. The only external dependency is
+       StbImageSharp for decoding the embedded MTSDF font atlas PNG. Engine glue lives in Loom.UI.SUIsei. -->
+  <ItemGroup>
+    <PackageReference Include="StbImageSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SUIsei.Tests" />
+  </ItemGroup>
+
+  <!-- The engine's default baked font: the MTSDF atlas page + its JSON layout, embedded so FontAtlas.LoadEmbeddedDefault
+       resolves them with no loose files. Explicit LogicalName because the filenames carry dots. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Fonts\ui-default.font.json" LogicalName="ui-default.font.json" />
+    <EmbeddedResource Include="Assets\Fonts\ui-default.0.png" LogicalName="ui-default.0.png" />
+    <None Include="Assets\Fonts\CascadiaCode.ttf" />
+    <None Include="Assets\Fonts\CascadiaCode-LICENSE.txt" />
+  </ItemGroup>
+
+  <Import Project="..\build\SUIsei.targets" />
+
+</Project>
