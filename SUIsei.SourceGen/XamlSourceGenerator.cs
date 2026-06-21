@@ -232,6 +232,18 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			sb.AppendLine($"\t\t__bindings = new {cls}_Bindings(this);");
 			sb.AppendLine("\t\t__bindings.Initialize();");
 		}
+		// Register for XAML Hot Reload with no-capture delegates (the registry holds only a weak reference). Inert
+		// unless hot reload is active; idempotent across rebuilds.
+		sb.AppendLine($"\t\tglobal::SUIsei.HotReload.Track(this, static __c => ((global::{fullClass})__c).RebuildComponent(), static __c => ((global::{fullClass})__c).Root);");
+		sb.AppendLine("\t}");
+		sb.AppendLine();
+		// Re-runs construction in place for XAML Hot Reload: detach the old binding subscriptions, then rebuild the
+		// tree (a fresh Root + bindings). The host swaps in the new Root.
+		sb.AppendLine("\tpublic void RebuildComponent()");
+		sb.AppendLine("\t{");
+		if (hasBindings)
+			sb.AppendLine("\t\t__bindings?.StopTracking();");
+		sb.AppendLine("\t\tInitializeComponent();");
 		sb.AppendLine("\t}");
 		if (gen.Methods.Length > 0)
 		{

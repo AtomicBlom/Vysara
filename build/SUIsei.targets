@@ -27,6 +27,9 @@
               Exclude="$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
     <AdditionalFiles Include="@(SUIseiXaml)" />
     <UpToDateCheckInput Include="@(SUIseiXaml)" />
+    <!-- dotnet watch does not monitor AdditionalFiles by default; opt the .xaml in so a `dotnet watch` loop
+         re-runs the generator on edit, feeding XAML Hot Reload. -->
+    <Watch Include="@(SUIseiXaml)" />
   </ItemGroup>
 
   <!-- The generator is inert until the analyzer project exists (mirrors the _SUIseiWarnInertDirectX12 pattern in

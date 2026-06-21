@@ -25,10 +25,13 @@ public sealed class UIHost
 	private int  _nextSurface;
 	private Size _framebufferSize = new(1f, 1f);
 
-	public UIHost() =>
+	public UIHost()
+	{
 		// A press focuses the nearest focusable element at or above the hit (e.g. a templated control whose hit
 		// target is its non-focusable template root), matching WinUI.
 		Input.OnPress = el => Focus.FocusFromPointer(el);
+		HotReload.TrackHost(this);
+	}
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
 	public InputManager Input { get; } = new();
@@ -79,6 +82,10 @@ public sealed class UIHost
 	/// </summary>
 	public void Tick(double deltaSeconds, float time, Vector2 framebufferSize)
 	{
+		// Apply any queued XAML Hot Reload rebuilds before layout, so an edited view lays out this frame. Inert
+		// unless hot reload is active (HotReload.Enabled).
+		HotReload.ProcessPending();
+
 		// Advance animations FIRST: a clock write to a layout-affecting DP invalidates measure/arrange so the new
 		// value is reflected in this frame's LayoutPass; a visual-channel write (transform/opacity/brush) only marks
 		// the subtree dirty for the composite, with no relayout (PlanningUI.md §D5.7).
