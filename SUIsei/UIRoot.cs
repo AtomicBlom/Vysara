@@ -14,6 +14,9 @@ namespace SUIsei;
 public sealed class UIRoot
 {
 	private readonly IUICompositor _compositor;
+	// Overlay elements composited above Content (popups/flyouts), bottom-to-top. A full-surface entry (a light-dismiss
+	// layer) fills the surface; a positioned entry takes its desired size at its offset.
+	private readonly List<(UIElement Element, Vector2 Position, bool FullSurface)> _overlays = [];
 
 	public UIRoot(DrawListId surface, IUICompositor? compositor = null)
 	{
@@ -56,6 +59,27 @@ public sealed class UIRoot
 	/// (PlanningUI.md §D2.8). Layout runs in DIPs; the render walk scales positions by this.</summary>
 	public float LayoutScale { get; set; } = 1f;
 
+	/// <summary>Add an overlay element composited above <see cref="Content"/> (a popup/flyout, or its full-surface
+	/// light-dismiss layer), positioned in DIPs. Marks the tree dirty so the next composite shows it.</summary>
+	internal void AddOverlay(UIElement element, Vector2 position, bool fullSurface = false)
+	{
+		element.SetAttachedRoot(this);
+		_overlays.Add((element, position, fullSurface));
+		Visual.MarkDirty();
+	}
+
+	/// <summary>Remove a previously-added overlay element. Marks the tree dirty so it disappears on the next composite.</summary>
+	internal void RemoveOverlay(UIElement element)
+	{
+		if (_overlays.RemoveAll(o => ReferenceEquals(o.Element, element)) == 0)
+			return;
+		element.SetAttachedRoot(null);
+		Visual.MarkDirty();
+	}
+
+	/// <summary>The overlay elements above content (bottom-to-top) — read by hit-testing (top-most first).</summary>
+	internal IReadOnlyList<(UIElement Element, Vector2 Position, bool FullSurface)> Overlays => _overlays;
+
 	/// <summary>Measure + arrange the element tree against the surface (in pixels), then sync the composition tree.
 	/// Layout happens in DIPs (<c>pixels / LayoutScale</c>); the root visual carries the DIP→pixel scale.</summary>
 	public void LayoutPass(Size availablePixels)
@@ -75,24 +99,46 @@ public sealed class UIRoot
 			Visual.MarkDirty();
 		}
 
-		if (Content is null)
-		{
-			if (Visual.Children.Count != 0)
-				Visual.Clear();
-			return;
-		}
-
 		var availDip = new Size(availablePixels.Width / LayoutScale, availablePixels.Height / LayoutScale);
-		Content.Measure(availDip);
-		Content.Arrange(new Rect(0f, 0f, availDip.Width, availDip.Height));
 
-		// Link the content's visual as the root's single child — only when it actually changed (re-linking every
-		// frame would dirty the root and defeat the no-op).
-		if (Visual.Children.Count != 1 || !ReferenceEquals(Visual.Children[0], Content.Visual))
+		Content?.Measure(availDip);
+		Content?.Arrange(new Rect(0f, 0f, availDip.Width, availDip.Height));
+
+		foreach (var (element, position, fullSurface) in _overlays)
 		{
-			Visual.Clear();
-			Visual.Add(Content.Visual);
+			element.Measure(availDip);
+			element.Arrange(fullSurface
+				? new Rect(0f, 0f, availDip.Width, availDip.Height)
+				: new Rect(position.X, position.Y, element.DesiredSize.Width, element.DesiredSize.Height));
 		}
+
+		SyncRootChildren();
+	}
+
+	// Re-link the root visual's children to [Content, ...overlays] — only when the set actually changed, so a static
+	// frame leaves the tree clean (preserving the compositor's no-op).
+	private void SyncRootChildren()
+	{
+		var desired = (Content is not null ? 1 : 0) + _overlays.Count;
+		var changed = Visual.Children.Count != desired;
+		if (!changed)
+		{
+			var i = 0;
+			if (Content is not null && !ReferenceEquals(Visual.Children[i++], Content.Visual))
+				changed = true;
+			for (var o = 0; !changed && o < _overlays.Count; o++)
+				if (!ReferenceEquals(Visual.Children[i++], _overlays[o].Element.Visual))
+					changed = true;
+		}
+		if (!changed)
+			return;
+
+		Visual.Clear();
+		if (Content is not null)
+			Visual.Add(Content.Visual);
+		foreach (var (element, _, _) in _overlays)
+			Visual.Add(element.Visual);
+		Visual.MarkDirty();
 	}
 
 	/// <summary>Composite the current visual tree to a neutral <see cref="DrawListData"/> (default-path convenience —

@@ -177,13 +177,20 @@ public sealed class InputManager
 		{
 			if (!view.Interactive || view.Placement.Kind != UIPlacementKind.Overlay)
 				continue;
-			var content = view.Root.Content;
-			if (content is null)
-				continue;
 			var scale = view.Root.LayoutScale > 0f ? view.Root.LayoutScale : 1f;
 			var dip = pos / scale;
-			var local = dip - new Vector2(content.LayoutRect.X, content.LayoutRect.Y);
-			var hit = content.HitTest(local);
+
+			// Overlays (popups/flyouts) sit above content — test them top-most first, then the content below.
+			UIElement? hit = null;
+			var overlays = view.Root.Overlays;
+			for (var i = overlays.Count - 1; i >= 0 && hit is null; i--)
+			{
+				var element = overlays[i].Element;
+				hit = element.HitTest(dip - new Vector2(element.LayoutRect.X, element.LayoutRect.Y));
+			}
+			if (hit is null && view.Root.Content is { } content)
+				hit = content.HitTest(dip - new Vector2(content.LayoutRect.X, content.LayoutRect.Y));
+
 			if (hit is not null && view.Placement.ZLayer >= bestZ)
 			{
 				best = hit;
