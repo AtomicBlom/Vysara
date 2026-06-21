@@ -61,6 +61,18 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		"Ignored {0} — it is outside the supported XAML subset (elements, literal/enum attributes, {{x:Bind}}, {{StaticResource}}, and event handlers)", "SUIsei", DiagnosticSeverity.Warning, true);
 	private static readonly DiagnosticDescriptor TwoWayNoEvent = new("SUISEI014", "TwoWay binding — no changed event",
 		"TwoWay binding on '{0}.{1}': no '{1}Changed' event found; binding will be OneWay", "SUIsei", DiagnosticSeverity.Warning, true);
+	private static readonly DiagnosticDescriptor BadStoryboardTarget = new("SUISEI015", "Unresolved storyboard target",
+		"Storyboard.TargetName '{0}' does not name an x:Name'd element in this view", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor BadAnimationProperty = new("SUISEI016", "Unanimatable property",
+		"Storyboard.TargetProperty '{0}' is not an animatable channel (Opacity, Background, Foreground, Fill, RenderTransform.Translate.X/Y)", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor BadLiteralValue = new("SUISEI017", "Invalid markup value",
+		"'{0}' is not a valid {1}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor BadSetterProperty = new("SUISEI018", "Unstylable property",
+		"Setter Property '{0}' does not resolve to a dependency property '{0}Property' on '{1}'", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor TemplateBindingOutsideTemplate = new("SUISEI019", "TemplateBinding outside a template",
+		"{{TemplateBinding}} is only valid inside a ControlTemplate", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor BadPropertyElement = new("SUISEI020", "Unsupported property element",
+		"Property element '{0}' is outside the supported XAML subset", "SUIsei", DiagnosticSeverity.Warning, true);
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -328,7 +340,7 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			gen.Ct.ThrowIfCancellationRequested();
 			if (childEl.Name.LocalName.Contains('.'))
 			{
-				gen.Report(IgnoredContent, childEl, $"property element '{childEl.Name.LocalName}'");
+				HandlePropertyElement(gen, var, type, childEl);
 				continue;
 			}
 			var childVar = EmitElement(gen, childEl);
@@ -354,6 +366,135 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 
 		return var;
 	}
+
+	// --- Property elements (<Owner.Prop> children): styles, templates, storyboards, visual states ---
+
+	private static void HandlePropertyElement(Gen gen, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
+	{
+		var localName = propEl.Name.LocalName; // "Owner.Prop"
+		var dot = localName.IndexOf('.');
+		var owner = localName.Substring(0, dot);
+		var prop = localName.Substring(dot + 1);
+
+		if (owner == "VisualStateManager" && prop == "VisualStateGroups")
+		{
+			EmitVisualStateGroups(gen, ownerVar, propEl);
+			return;
+		}
+
+		gen.Report(BadPropertyElement, propEl, localName);
+	}
+
+	private static void EmitVisualStateGroups(Gen gen, string ownerVar, XElement propEl)
+	{
+		var groupsVar = NewName(gen, "__vsg");
+		gen.Body.AppendLine($"\t\tvar {groupsVar} = new global::System.Collections.Generic.List<global::SUIsei.VisualStateGroup>();");
+		foreach (var groupEl in propEl.Elements())
+		{
+			if (groupEl.Name.LocalName != "VisualStateGroup") { gen.Report(BadPropertyElement, groupEl, groupEl.Name.LocalName); continue; }
+			var groupVar = NewName(gen, "__vsgrp");
+			var groupName = groupEl.Attribute("Name")?.Value ?? "";
+			gen.Body.AppendLine($"\t\tvar {groupVar} = new global::SUIsei.VisualStateGroup {{ Name = {Quote(groupName)} }};");
+			foreach (var stateEl in groupEl.Elements())
+			{
+				if (stateEl.Name.LocalName != "VisualState") { gen.Report(BadPropertyElement, stateEl, stateEl.Name.LocalName); continue; }
+				var stateName = stateEl.Attribute("Name")?.Value ?? "";
+				var sbEl = stateEl.Elements().FirstOrDefault(e => e.Name.LocalName == "Storyboard");
+				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, sbEl);
+				gen.Body.AppendLine($"\t\t{groupVar}.States.Add(new global::SUIsei.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
+			}
+			gen.Body.AppendLine($"\t\t{groupsVar}.Add({groupVar});");
+		}
+		gen.Body.AppendLine($"\t\tglobal::SUIsei.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
+	}
+
+	// Build a Storyboard local and return its variable name.
+	private static string EmitStoryboard(Gen gen, XElement sbEl)
+	{
+		var sbVar = NewName(gen, "__sb");
+		gen.Body.AppendLine($"\t\tvar {sbVar} = new global::SUIsei.Storyboard();");
+		foreach (var animEl in sbEl.Elements())
+			EmitAnimation(gen, sbVar, animEl);
+		return sbVar;
+	}
+
+	private static void EmitAnimation(Gen gen, string sbVar, XElement animEl)
+	{
+		var kind = animEl.Name.LocalName;
+		var typeName = kind switch
+		{
+			"ColorAnimation" => "global::SUIsei.ColorAnimation",
+			"DoubleAnimation" => "global::SUIsei.DoubleAnimation",
+			_ => null,
+		};
+		if (typeName is null) { gen.Report(BadPropertyElement, animEl, kind); return; }
+
+		var animVar = NewName(gen, "__anim");
+		gen.Body.AppendLine($"\t\tvar {animVar} = new {typeName}();");
+
+		string? targetName = null, targetProp = null;
+		foreach (var attr in animEl.Attributes())
+		{
+			if (attr.IsNamespaceDeclaration)
+				continue;
+			switch (attr.Name.LocalName)
+			{
+				case "Storyboard.TargetName": targetName = attr.Value.Trim(); break;
+				case "Storyboard.TargetProperty": targetProp = attr.Value.Trim(); break;
+				case "From": EmitAnimationValue(gen, animVar, "From", kind, attr); break;
+				case "To": EmitAnimationValue(gen, animVar, "To", kind, attr); break;
+				case "By" when kind == "DoubleAnimation": EmitAnimationValue(gen, animVar, "By", kind, attr); break;
+				case "Duration":
+					if (TryParseDuration(attr.Value, out var d)) gen.Body.AppendLine($"\t\t{animVar}.Duration = global::System.TimeSpan.FromSeconds({Fmt(d)});");
+					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "Duration");
+					break;
+				case "BeginTime":
+					if (TryParseDuration(attr.Value, out var bt)) gen.Body.AppendLine($"\t\t{animVar}.BeginTime = global::System.TimeSpan.FromSeconds({Fmt(bt)});");
+					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "BeginTime");
+					break;
+				case "AutoReverse":
+					gen.Body.AppendLine($"\t\t{animVar}.AutoReverse = {(string.Equals(attr.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")};");
+					break;
+				case "FillBehavior":
+					gen.Body.AppendLine($"\t\t{animVar}.FillBehavior = global::SUIsei.FillBehavior.{(attr.Value.Trim() == "Stop" ? "Stop" : "HoldEnd")};");
+					break;
+				case "RepeatBehavior":
+					gen.Body.AppendLine($"\t\t{animVar}.RepeatBehavior = {RepeatBehaviorExpr(attr.Value)};");
+					break;
+			}
+		}
+
+		if (targetName is not null)
+		{
+			if (!gen.UsedNames.Contains(targetName)) gen.Report(BadStoryboardTarget, animEl, targetName);
+			else gen.Body.AppendLine($"\t\t{animVar}.Target = {targetName};");
+		}
+		if (targetProp is not null)
+		{
+			if (!IsAnimatableChannel(targetProp)) gen.Report(BadAnimationProperty, animEl, targetProp);
+			gen.Body.AppendLine($"\t\t{animVar}.TargetProperty = {Quote(targetProp)};");
+		}
+		gen.Body.AppendLine($"\t\t{sbVar}.Children.Add({animVar});");
+	}
+
+	private static void EmitAnimationValue(Gen gen, string animVar, string prop, string kind, XAttribute attr)
+	{
+		if (kind == "ColorAnimation")
+		{
+			if (TryParseColor(attr.Value, out var code)) gen.Body.AppendLine($"\t\t{animVar}.{prop} = {code};");
+			else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "colour");
+		}
+		else // DoubleAnimation
+		{
+			if (double.TryParse(attr.Value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+				gen.Body.AppendLine($"\t\t{animVar}.{prop} = {attr.Value.Trim()}d;");
+			else
+				gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "number");
+		}
+	}
+
+	private static bool IsAnimatableChannel(string property) => property is
+		"Opacity" or "Background" or "Foreground" or "Fill" or "RenderTransform.Translate.X" or "RenderTransform.Translate.Y";
 
 	// --- The generated Bindings helper ---
 
@@ -671,6 +812,83 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		}
 		path = segs;
 		return true;
+	}
+
+	private static string Quote(string s) => SyntaxFactory.Literal(s).ToString();
+
+	private static string Fmt(double value) => value.ToString("R", CultureInfo.InvariantCulture);
+
+	// "Forever" or "Nx" (a finite iteration count) → a RepeatBehavior expression.
+	private static string RepeatBehaviorExpr(string raw)
+	{
+		var s = raw.Trim();
+		if (string.Equals(s, "Forever", StringComparison.OrdinalIgnoreCase))
+			return "global::SUIsei.RepeatBehavior.Forever";
+		var n = s.EndsWith("x", StringComparison.OrdinalIgnoreCase) ? s.Substring(0, s.Length - 1) : s;
+		return double.TryParse(n, NumberStyles.Float, CultureInfo.InvariantCulture, out var count)
+			? $"global::SUIsei.RepeatBehavior.Times({Fmt(count)})"
+			: "global::SUIsei.RepeatBehavior.Once";
+	}
+
+	// "#RRGGBB" / "#AARRGGBB" → HdrColor.FromRgb(...). Returns false for anything else.
+	private static bool TryParseColor(string raw, out string code)
+	{
+		code = "";
+		var s = raw.Trim();
+		if (s.StartsWith("#", StringComparison.Ordinal))
+			s = s.Substring(1);
+		if (s.Length == 6 && IsHex(s))
+		{
+			code = $"global::SUIsei.HdrColor.FromRgb({Hex(s, 0)}, {Hex(s, 2)}, {Hex(s, 4)})";
+			return true;
+		}
+		if (s.Length == 8 && IsHex(s))
+		{
+			code = $"global::SUIsei.HdrColor.FromRgb({Hex(s, 2)}, {Hex(s, 4)}, {Hex(s, 6)}, {Hex(s, 0)})";
+			return true;
+		}
+		return false;
+	}
+
+	private static bool IsHex(string s)
+	{
+		foreach (var c in s)
+			if (!Uri.IsHexDigit(c))
+				return false;
+		return true;
+	}
+
+	private static int Hex(string s, int i) => Convert.ToInt32(s.Substring(i, 2), 16);
+
+	// "h:m:s(.fff)" / "m:s" / "s" → total seconds.
+	private static bool TryParseDuration(string raw, out double seconds)
+	{
+		seconds = 0;
+		var parts = raw.Trim().Split(':');
+		try
+		{
+			switch (parts.Length)
+			{
+				case 3:
+					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 3600
+						+ int.Parse(parts[1], CultureInfo.InvariantCulture) * 60
+						+ double.Parse(parts[2], CultureInfo.InvariantCulture);
+					return true;
+				case 2:
+					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 60
+						+ double.Parse(parts[1], CultureInfo.InvariantCulture);
+					return true;
+				case 1:
+					seconds = double.Parse(parts[0], CultureInfo.InvariantCulture);
+					return true;
+				default:
+					return false;
+			}
+		}
+		catch (FormatException)
+		{
+			return false;
+		}
 	}
 
 	private static bool IsIdentifier(string s)
