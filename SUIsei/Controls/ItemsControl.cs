@@ -9,11 +9,19 @@ namespace SUIsei.Controls;
 /// template, by wrapping the item. When the source implements <see cref="INotifyCollectionChanged"/> the realized
 /// containers are updated incrementally (add/remove/replace/move/reset) rather than rebuilt.
 /// </summary>
-public class ItemsControl : Control
+public class ItemsControl : Control, IItemContainerSource
 {
 	private Panel? _panel;
+	private bool _virtualizing;
 	private readonly List<object?> _items = [];
+	private readonly Stack<UIElement> _recyclePool = new();
 	private INotifyCollectionChanged? _incc;
+
+	/// <summary>Containers realized so far (instrumentation for the virtualization tests).</summary>
+	public int RealizeCount { get; private set; }
+
+	/// <summary>Containers recycled so far (instrumentation for the virtualization tests).</summary>
+	public int RecycleCount { get; private set; }
 
 	public IEnumerable? ItemsSource
 	{
@@ -54,6 +62,11 @@ public class ItemsControl : Control
 		{
 			_panel = ItemsPanel.Build();
 			AdoptChild(_panel);
+			if (_panel is IVirtualizingItemsHost host)
+			{
+				_virtualizing = true;
+				host.SetSource(this);
+			}
 		}
 		return _panel;
 	}
@@ -61,16 +74,21 @@ public class ItemsControl : Control
 	private void Reload()
 	{
 		var panel = EnsurePanel();
-		panel.Children.Clear();
 		_items.Clear();
 		if (ItemsSource is not null)
-		{
 			foreach (var item in ItemsSource)
-			{
 				_items.Add(item);
+
+		// A virtualizing panel pulls only the visible containers itself; a plain panel hosts them all.
+		if (_virtualizing)
+			((IVirtualizingItemsHost)panel).Reset();
+		else
+		{
+			panel.Children.Clear();
+			foreach (var item in _items)
 				panel.Children.Add(RealizeContainer(item));
-			}
 		}
+
 		InvalidateMeasure();
 		OnReload();
 	}
@@ -82,6 +100,9 @@ public class ItemsControl : Control
 	private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
 	{
 		var panel = EnsurePanel();
+
+		// _items stays authoritative in both modes; only a plain panel mirrors the change into its children
+		// (a virtualizing panel re-pulls the visible window from the updated item list after a Reset, below).
 		switch (e.Action)
 		{
 			case NotifyCollectionChangedAction.Add when e.NewItems is not null:
@@ -89,7 +110,8 @@ public class ItemsControl : Control
 				{
 					var index = e.NewStartingIndex + i;
 					_items.Insert(index, e.NewItems[i]);
-					panel.Children.Insert(index, RealizeContainer(e.NewItems[i]));
+					if (!_virtualizing)
+						panel.Children.Insert(index, RealizeContainer(e.NewItems[i]));
 				}
 				break;
 
@@ -98,29 +120,72 @@ public class ItemsControl : Control
 				{
 					var index = e.OldStartingIndex + i;
 					_items.RemoveAt(index);
-					panel.Children.RemoveAt(index);
+					if (!_virtualizing)
+						panel.Children.RemoveAt(index);
 				}
 				break;
 
 			case NotifyCollectionChangedAction.Replace when e.NewItems is not null:
 				_items[e.NewStartingIndex] = e.NewItems[0];
-				panel.Children.RemoveAt(e.NewStartingIndex);
-				panel.Children.Insert(e.NewStartingIndex, RealizeContainer(e.NewItems[0]));
+				if (!_virtualizing)
+				{
+					panel.Children.RemoveAt(e.NewStartingIndex);
+					panel.Children.Insert(e.NewStartingIndex, RealizeContainer(e.NewItems[0]));
+				}
 				break;
 
 			case NotifyCollectionChangedAction.Move:
 				var movedItem = _items[e.OldStartingIndex];
-				var movedContainer = panel.Children[e.OldStartingIndex];
 				_items.RemoveAt(e.OldStartingIndex);
-				panel.Children.RemoveAt(e.OldStartingIndex);
 				_items.Insert(e.NewStartingIndex, movedItem);
-				panel.Children.Insert(e.NewStartingIndex, movedContainer);
+				if (!_virtualizing)
+				{
+					var movedContainer = panel.Children[e.OldStartingIndex];
+					panel.Children.RemoveAt(e.OldStartingIndex);
+					panel.Children.Insert(e.NewStartingIndex, movedContainer);
+				}
 				break;
 
 			default: // Reset
 				Reload();
-				break;
+				return;
 		}
+
+		if (_virtualizing)
+			((IVirtualizingItemsHost)panel).Reset();
+	}
+
+	// --- IItemContainerSource (the pull contract a virtualizing panel uses) ---
+
+	int IItemContainerSource.ItemCount => _items.Count;
+
+	UIElement IItemContainerSource.RealizeContainerAt(int index)
+	{
+		RealizeCount++;
+		var item = _items[index];
+		// Reuse a pooled container when it can be rebound (the default-wrap case); a templated container's bindings
+		// are baked to its original item, so it is rebuilt instead.
+		if (ItemTemplate is null && _recyclePool.Count > 0)
+		{
+			var reused = _recyclePool.Pop();
+			RebindContainer(reused, item);
+			return reused;
+		}
+		return RealizeContainer(item);
+	}
+
+	void IItemContainerSource.RecycleContainer(UIElement container)
+	{
+		RecycleCount++;
+		if (ItemTemplate is null)
+			_recyclePool.Push(container);
+	}
+
+	/// <summary>Rebind a recycled container to a new item (the default updates a wrapped <see cref="TextBlock"/>).</summary>
+	protected virtual void RebindContainer(UIElement container, object? item)
+	{
+		if (container is TextBlock text)
+			text.Text = item?.ToString() ?? string.Empty;
 	}
 
 	internal override IReadOnlyList<UIElement> VisualChildren => _panel is null ? [] : [_panel];
