@@ -6,7 +6,7 @@ namespace SUIsei.Drawing;
 /// <summary>
 /// A premultiplied RGBA16F colour — the wire format for the overlay vertex stream. Four Half components (8 bytes),
 /// blittable and sequentially laid out so the engine can upload it directly as GPU vertex data. Named
-/// PremultipliedHdrColor (not a raw Half4) so the premultiplied-alpha contract is explicit in the type system;
+/// PremultipliedHdrColor (not a bare four-Half vector) so the premultiplied-alpha contract is explicit in the type system;
 /// produced by <see cref="HdrColor.ToPremultiplied"/>.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]

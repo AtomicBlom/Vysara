@@ -5,8 +5,8 @@ namespace SUIsei;
 /// <summary>
 /// An authoring colour — float RGBA where <c>0..1</c> is SDR / paper-white range and a component <c>&gt;1</c> is
 /// above paper white (opt-in HDR). Named <c>HdrColor</c> (not <c>Color</c>) for explicitness and to dodge the
-/// <see cref="System.Drawing.Color"/> clash (PlanningUI.md §Color/HDR). Folded to a premultiplied
-/// <see cref="Half4"/> by the compositor; the paper-white reference scale is applied in the shader (MU1).
+/// <see cref="System.Drawing.Color"/> clash (PlanningUI.md §Color/HDR). Folded to a
+/// <see cref="PremultipliedHdrColor"/> by the compositor; the paper-white reference scale is applied in the shader.
 /// </summary>
 public readonly record struct HdrColor(float R, float G, float B, float A)
 {
