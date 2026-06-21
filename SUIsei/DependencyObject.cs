@@ -49,6 +49,10 @@ public abstract class DependencyObject
 
 	private Dictionary<int, ValueSlot>? _slots;
 
+	// {TemplateBinding} targets keyed by the source DP: a OneWay push from this object's property to a child setter,
+	// fired on every resolved-value change (and once at registration). Only allocated when a template wires one.
+	private Dictionary<int, Action<object?>>? _templateTargets;
+
 	/// <summary>Read the property's resolved value (top of the precedence ladder, else its typed default), coerced.
 	/// No boxing on the default path; a stored value is unboxed once on return.</summary>
 	public TValue GetValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject
@@ -102,6 +106,21 @@ public abstract class DependencyObject
 		dp.RaiseChanged(this, oldEffective, newEffective);
 		if (dp.Invalidates != InvalidationFlags.None)
 			OnPropertyInvalidated(dp, dp.Invalidates);
+		if (_templateTargets is not null && _templateTargets.TryGetValue(dp.GlobalIndex, out var push))
+			push(newEffective);
+	}
+
+	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> from <paramref name="source"/> on this object to a child setter
+	/// (PlanningUI.md §D1.6). The child is updated immediately with the current value and on every later change.</summary>
+	internal void RegisterTemplateBinding(DependencyProperty source, Action<object?> push)
+	{
+		_templateTargets ??= [];
+		_templateTargets[source.GlobalIndex] = _templateTargets.TryGetValue(source.GlobalIndex, out var existing)
+			? existing + push
+			: push;
+		_slots ??= [];
+		_slots.TryGetValue(source.GlobalIndex, out var slot);
+		push(Effective(source, slot));
 	}
 
 	// The coerced effective value of a slot: resolve the precedence ladder (else the typed default), then coerce.

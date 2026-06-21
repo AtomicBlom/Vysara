@@ -3,10 +3,11 @@ using System.Numerics;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Presents a single <see cref="Content"/> (PlanningUI.md §D2.1) — a <see cref="UIElement"/> hosted directly, a
-/// string wrapped in a <see cref="TextBlock"/> (shared <see cref="ContentHelper"/> policy). Unlike
-/// <see cref="ContentControl"/> it is the lightweight presenter a control template points at; an optional solid
-/// <see cref="Background"/> lets it stand in for a panel. (Content/data templates land in MU4.)
+/// Presents a single <see cref="Content"/> (PlanningUI.md §D2.1) — the lightweight presenter a control template
+/// points at. When a <see cref="ContentTemplate"/> is set, the content is realized through that
+/// <see cref="DataTemplate"/>; otherwise a <see cref="UIElement"/> is hosted as-is and any other value is wrapped in
+/// a <see cref="TextBlock"/> (the shared <see cref="ContentHelper"/> policy). An optional solid
+/// <see cref="Background"/> lets it stand in for a panel.
 /// </summary>
 public class ContentPresenter : FrameworkElement
 {
@@ -18,18 +19,36 @@ public class ContentPresenter : FrameworkElement
 		set
 		{
 			field = value;
-			if (_hosted is not null)
-				DropChild(_hosted);
-			_hosted = ContentHelper.Wrap(value);
-			if (_hosted is not null)
-				AdoptChild(_hosted);
-			InvalidateMeasure();
+			Rehost();
+		}
+	}
+
+	/// <summary>When set, <see cref="Content"/> is realized through this template instead of the default wrapping.</summary>
+	public DataTemplate? ContentTemplate
+	{
+		get;
+		set
+		{
+			if (ReferenceEquals(field, value))
+				return;
+			field = value;
+			Rehost();
 		}
 	}
 
 	public HdrColor? Background { get; set { if (field != value) { field = value; InvalidateContent(); } } }
 
 	internal override IReadOnlyList<UIElement> VisualChildren => _hosted is null ? [] : [_hosted];
+
+	private void Rehost()
+	{
+		if (_hosted is not null)
+			DropChild(_hosted);
+		_hosted = ContentTemplate is { } dt ? dt.Factory(Content) : ContentHelper.Wrap(Content);
+		if (_hosted is not null)
+			AdoptChild(_hosted);
+		InvalidateMeasure();
+	}
 
 	protected override Size MeasureOverride(Size available)
 	{
