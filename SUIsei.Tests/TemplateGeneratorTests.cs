@@ -66,6 +66,43 @@ public sealed class TemplateGeneratorTests
 	}
 
 	[Test]
+	public void Visual_states_inside_a_control_template_target_a_template_local_element()
+	{
+		// A templated control's CommonStates group, with a storyboard targeting a template-local element (Bg). The
+		// target must resolve against the template's own name scope — not the page's fields.
+		const string xaml = """
+			<ContentControl xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			                x:Class="Demo.V">
+			  <ContentControl.Template>
+			    <ControlTemplate TargetType="ContentControl">
+			      <Border x:Name="Bg" CornerRadius="4">
+			        <VisualStateManager.VisualStateGroups>
+			          <VisualStateGroup Name="CommonStates">
+			            <VisualState Name="Normal" />
+			            <VisualState Name="PointerOver">
+			              <Storyboard>
+			                <ColorAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="Background"
+			                                To="#5060A0" Duration="0:0:0.12" />
+			              </Storyboard>
+			            </VisualState>
+			          </VisualStateGroup>
+			        </VisualStateManager.VisualStateGroups>
+			      </Border>
+			    </ControlTemplate>
+			  </ContentControl.Template>
+			</ContentControl>
+			""";
+		var result = XamlGeneratorHarness.Run(xaml, Vm);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain(".Target = Bg;");
+		code.ShouldContain("global::SUIsei.VisualStateManager.SetVisualStateGroups(Bg,");
+		XamlGeneratorHarness.CompileErrors(xaml, Vm).ShouldBeEmpty();
+	}
+
+	[Test]
 	public void Template_binding_outside_a_control_template_diagnoses()
 	{
 		// {TemplateBinding} on a plain page element (no enclosing ControlTemplate) is invalid.
