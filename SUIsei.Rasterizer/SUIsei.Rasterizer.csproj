@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- SPIKE: a CPU reference rasterizer for SUIsei's neutral draw list. It consumes only DrawListData (+ the
+       FontAtlas image, later) and re-implements ui.slang's per-kind fragment math, so it doubles as (a) a
+       deterministic golden-image oracle and (b) a real GPU-free backend. Held to the same NativeAOT-clean bar as
+       the runtime, with no external dependencies. OutputType=Exe only for this spike's demo driver (Program.cs) —
+       in production this is a class library. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
+  </ItemGroup>
+
+</Project>

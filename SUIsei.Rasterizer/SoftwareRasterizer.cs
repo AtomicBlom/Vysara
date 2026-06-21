@@ -1,0 +1,268 @@
+using System.Numerics;
+using SUIsei.Drawing;
+
+namespace SUIsei.Rasterizer;
+
+/// <summary>
+/// A CPU reference rasterizer for the neutral <see cref="DrawListData"/> — the software twin of the engine's
+/// <c>ui.slang</c> fragment shader (Loom.Shaders/Shaders/ui.slang). It walks the draw commands, rasterizes each
+/// triangle of every quad, and shades per pixel with the same analytic math the GPU ran: rounded-box SDFs for
+/// rect/border, and (later) MTSDF coverage for glyphs. Compositing is premultiplied alpha-over in <b>linear</b>
+/// space (the GPU rendered to a linear target and re-encoded sRGB on store), so <see cref="ResolveToRgba8"/> does
+/// that sRGB encode itself.
+///
+/// Covers all five kinds: <see cref="UIPrimKind.Fill"/>/<see cref="UIPrimKind.RoundedRect"/>/<see cref="UIPrimKind.Border"/>
+/// (analytic) plus <see cref="UIPrimKind.Glyph"/> (MTSDF) and <see cref="UIPrimKind.Image"/> (tinted blit), which
+/// sample a <see cref="Texture"/> bound to their <c>TextureIndex</c> via <see cref="BindTexture"/>. A glyph/image
+/// command with no bound texture is skipped (counted in <see cref="SkippedCommands"/>).
+/// </summary>
+public sealed class SoftwareRasterizer
+{
+	private readonly int _width;
+	private readonly int _height;
+
+	// Framebuffer in LINEAR, PREMULTIPLIED RGBA — the space the GPU blended in. Resolved to sRGB bytes on demand.
+	private readonly Vector4[] _fb;
+
+	// Textures bound per draw command's TextureIndex (the atlas page for glyphs, an image source for images).
+	private readonly Dictionary<int, Texture> _textures = [];
+
+	public SoftwareRasterizer(int width, int height)
+	{
+		_width = width;
+		_height = height;
+		_fb = new Vector4[width * height];
+	}
+
+	public int Width => _width;
+	public int Height => _height;
+
+	/// <summary>Triangles rasterized by the last <see cref="Render"/> call (perf-shape instrumentation).</summary>
+	public int TrianglesDrawn { get; private set; }
+
+	/// <summary>Glyph/Image commands skipped in the last <see cref="Render"/> call because no texture was bound.</summary>
+	public int SkippedCommands { get; private set; }
+
+	/// <summary>Bind a texture to a command <c>TextureIndex</c> (e.g. index 1 → the font atlas page for glyph runs).</summary>
+	public void BindTexture(int index, Texture texture) => _textures[index] = texture;
+
+	/// <summary>Fill the whole framebuffer with one linear-premultiplied colour (the cleared backbuffer).</summary>
+	public void Clear(Vector4 linearPremultiplied) => Array.Fill(_fb, linearPremultiplied);
+
+	/// <summary>Rasterize one frame's draw list onto the framebuffer (over whatever <see cref="Clear"/> left).</summary>
+	/// <param name="paperWhite">HDR paper-white linear scale (ui.slang's <c>pc.paperWhite</c>); applied only when the
+	/// list targets an HDR surface. 1.0 leaves SDR untouched.</param>
+	public void Render(DrawListData draw, float paperWhite = 1f)
+	{
+		TrianglesDrawn = 0;
+		SkippedCommands = 0;
+
+		var verts = draw.Vertices.Span;
+		var indices = draw.Indices.Span;
+		var commands = draw.Commands.Span;
+		var hdr = draw.IsHdrTarget;
+
+		for (var ci = 0; ci < commands.Length; ci++)
+		{
+			ref readonly var cmd = ref commands[ci];
+			var kind = (UIPrimKind)cmd.Tag;
+
+			// Texture-sampling kinds need their page bound; skip (and count) if it is missing.
+			Texture? tex = null;
+			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !_textures.TryGetValue(cmd.TextureIndex, out tex))
+			{
+				SkippedCommands++;
+				continue;
+			}
+
+			// Scissor → inclusive integer pixel bounds, clamped to the framebuffer.
+			var clip = cmd.ClipRect;
+			var sx0 = Math.Max(0, (int)MathF.Floor(clip.X));
+			var sy0 = Math.Max(0, (int)MathF.Floor(clip.Y));
+			var sx1 = Math.Min(_width - 1, (int)MathF.Ceiling(clip.Right) - 1);
+			var sy1 = Math.Min(_height - 1, (int)MathF.Ceiling(clip.Bottom) - 1);
+			if (sx0 > sx1 || sy0 > sy1)
+				continue;
+
+			var end = cmd.IndexOffset + cmd.IndexCount;
+			for (var i = cmd.IndexOffset; i + 3 <= end; i += 3)
+			{
+				var v0 = verts[cmd.VertexOffset + indices[i]];
+				var v1 = verts[cmd.VertexOffset + indices[i + 1]];
+				var v2 = verts[cmd.VertexOffset + indices[i + 2]];
+				RasterizeTriangle(v0, v1, v2, kind, tex, sx0, sy0, sx1, sy1, hdr, paperWhite);
+				TrianglesDrawn++;
+			}
+		}
+	}
+
+	/// <summary>
+	/// Resolve the linear-premultiplied framebuffer to straight (un-premultiplied) sRGB RGBA8 — the bytes a golden
+	/// PNG/BMP holds. Mirrors the GPU store: blend stayed linear-premultiplied, the sRGB target re-encoded on write.
+	/// </summary>
+	public byte[] ResolveToRgba8()
+	{
+		var px = new byte[_width * _height * 4];
+		for (var i = 0; i < _fb.Length; i++)
+		{
+			var c = _fb[i];
+			var a = Saturate(c.W);
+			var inv = a > 1e-6f ? 1f / a : 0f; // un-premultiply
+			var o = i * 4;
+			px[o + 0] = ToSrgbByte(c.X * inv);
+			px[o + 1] = ToSrgbByte(c.Y * inv);
+			px[o + 2] = ToSrgbByte(c.Z * inv);
+			px[o + 3] = (byte)MathF.Round(a * 255f);
+		}
+		return px;
+	}
+
+	private void RasterizeTriangle(
+		in OverlayVertex va, in OverlayVertex vb, in OverlayVertex vc,
+		UIPrimKind kind, Texture? tex, int sx0, int sy0, int sx1, int sy1, bool hdr, float paperWhite)
+	{
+		Vector2 p0 = va.Position, p1 = vb.Position, p2 = vc.Position;
+
+		var area = Edge(p0, p1, p2);
+		if (MathF.Abs(area) < 1e-7f)
+			return; // degenerate
+		var inv = 1f / area;
+
+		// Triangle bbox, clamped to the scissor box.
+		var minX = Math.Max(sx0, (int)MathF.Floor(Min3(p0.X, p1.X, p2.X)));
+		var maxX = Math.Min(sx1, (int)MathF.Ceiling(Max3(p0.X, p1.X, p2.X)) - 1);
+		var minY = Math.Max(sy0, (int)MathF.Floor(Min3(p0.Y, p1.Y, p2.Y)));
+		var maxY = Math.Min(sy1, (int)MathF.Ceiling(Max3(p0.Y, p1.Y, p2.Y)) - 1);
+		if (minX > maxX || minY > maxY)
+			return;
+
+		// Screen-space gradients of the barycentric weights are constant across an affinely-interpolated triangle,
+		// so the uv step per +1 screen pixel (duv/dx, duv/dy) is too. We use it to evaluate the SDF one pixel over
+		// for a deterministic, analytic stand-in for the GPU's quad-based fwidth() — see Shade().
+		var dw0dx = -(p2.Y - p1.Y) * inv; var dw0dy = (p2.X - p1.X) * inv;
+		var dw1dx = -(p0.Y - p2.Y) * inv; var dw1dy = (p0.X - p2.X) * inv;
+		var dw2dx = -(p1.Y - p0.Y) * inv; var dw2dy = (p1.X - p0.X) * inv;
+		var duvdx = dw0dx * va.Uv + dw1dx * vb.Uv + dw2dx * vc.Uv;
+		var duvdy = dw0dy * va.Uv + dw1dy * vb.Uv + dw2dy * vc.Uv;
+
+		Vector4 c0 = va.Color.ToVector4(), c1 = vb.Color.ToVector4(), c2 = vc.Color.ToVector4();
+
+		for (var y = minY; y <= maxY; y++)
+		{
+			for (var x = minX; x <= maxX; x++)
+			{
+				var pt = new Vector2(x + 0.5f, y + 0.5f); // pixel centre
+				var w0 = Edge(p1, p2, pt) * inv;
+				var w1 = Edge(p2, p0, pt) * inv;
+				var w2 = Edge(p0, p1, pt) * inv;
+				if (w0 < 0f || w1 < 0f || w2 < 0f)
+					continue; // outside (winding handled by the sign of inv)
+
+				var uv = w0 * va.Uv + w1 * vb.Uv + w2 * vc.Uv;
+				var col = w0 * c0 + w1 * c1 + w2 * c2;     // premultiplied, linear
+				var prm = w0 * va.Custom + w1 * vb.Custom + w2 * vc.Custom;
+
+				var src = Shade(kind, uv, col, prm, duvdx, duvdy, tex);
+				if (hdr)
+				{
+					src.X *= paperWhite;
+					src.Y *= paperWhite;
+					src.Z *= paperWhite;
+				}
+
+				// Premultiplied alpha-over (src=ONE, dst=ONE_MINUS_SRC_ALPHA), in linear space.
+				var idx = y * _width + x;
+				_fb[idx] = src + _fb[idx] * (1f - src.W);
+			}
+		}
+	}
+
+	// ── ui.slang fragmentMain, per kind ───────────────────────────────────────────────────────────────────────
+	// colour arrives premultiplied; each kind multiplies it by a coverage in [0,1] (which keeps it premultiplied).
+
+	private static Vector4 Shade(UIPrimKind kind, Vector2 uv, Vector4 col, Vector4 prm, Vector2 duvdx, Vector2 duvdy, Texture? tex)
+	{
+		switch (kind)
+		{
+			case UIPrimKind.Glyph:
+			{
+				// MTSDF text: median of the RGB distances, recentred at 0.5, then screenPxRange-scaled coverage.
+				// params.x (Custom.X) carries the per-run screenPxRange. The .a channel is a true SDF, unused here.
+				var s = tex!.Sample(uv);
+				var sd = Median3(s.X, s.Y, s.Z) - 0.5f;
+				return col * Saturate(sd * prm.X + 0.5f);
+			}
+			case UIPrimKind.Image:
+				// Tinted blit: sample the source and multiply by the (premultiplied) vertex colour.
+				return col * tex!.Sample(uv);
+			case UIPrimKind.RoundedRect:
+			{
+				// params = (cornerRadius, _, sizeX, sizeY); uv is 0..1 across the rect, scaled to local pixels.
+				var size = new Vector2(prm.Z, prm.W);
+				var p = uv * size - size * 0.5f;
+				var dpdx = duvdx * size;
+				var dpdy = duvdy * size;
+				return col * Coverage(p, dpdx, dpdy, size * 0.5f, prm.X);
+			}
+			case UIPrimKind.Border:
+			{
+				// Outer rounded box minus the inner one inset by the (uniform) thickness → the ring.
+				var size = new Vector2(prm.Z, prm.W);
+				var p = uv * size - size * 0.5f;
+				var dpdx = duvdx * size;
+				var dpdy = duvdy * size;
+				var half = size * 0.5f;
+				var radius = prm.X;
+				var thick = prm.Y;
+				var outer = Coverage(p, dpdx, dpdy, half, radius);
+				var inner = Coverage(p, dpdx, dpdy, half - new Vector2(thick), MathF.Max(radius - thick, 0f));
+				return col * Saturate(outer - inner);
+			}
+			default: // Fill — solid premultiplied quad, no SDF, no texture.
+				return col;
+		}
+	}
+
+	// Coverage of a rounded box at p with ~1px analytic AA. Evaluates the SDF at p and one screen pixel over in x/y
+	// to form fwidth() = |ddx d| + |ddy d| (the GPU's screen-space derivative), then smoothsteps across it.
+	private static float Coverage(Vector2 p, Vector2 dpdx, Vector2 dpdy, Vector2 half, float radius)
+	{
+		var d = SdRoundedBox(p, half, radius);
+		var ddx = SdRoundedBox(p + dpdx, half, radius) - d;
+		var ddy = SdRoundedBox(p + dpdy, half, radius) - d;
+		var w = MathF.Max(MathF.Abs(ddx) + MathF.Abs(ddy), 1e-4f);
+		return 1f - Smoothstep(-w, w, d);
+	}
+
+	// Signed distance to a rounded box (iquilezles.org/articles/distfunctions2d). Negative inside.
+	private static float SdRoundedBox(Vector2 p, Vector2 b, float r)
+	{
+		var q = Vector2.Abs(p) - b + new Vector2(r);
+		var outside = new Vector2(MathF.Max(q.X, 0f), MathF.Max(q.Y, 0f)).Length();
+		return MathF.Min(MathF.Max(q.X, q.Y), 0f) + outside - r;
+	}
+
+	private static float Edge(Vector2 a, Vector2 b, Vector2 p) =>
+		(b.X - a.X) * (p.Y - a.Y) - (b.Y - a.Y) * (p.X - a.X);
+
+	private static float Median3(float a, float b, float c) =>
+		MathF.Max(MathF.Min(a, b), MathF.Min(MathF.Max(a, b), c));
+
+	private static float Smoothstep(float edge0, float edge1, float x)
+	{
+		var t = Saturate((x - edge0) / (edge1 - edge0));
+		return t * t * (3f - 2f * t);
+	}
+
+	private static float Saturate(float x) => x < 0f ? 0f : x > 1f ? 1f : x;
+
+	private static byte ToSrgbByte(float linear)
+	{
+		var c = Saturate(linear);
+		var s = c <= 0.0031308f ? c * 12.92f : 1.055f * MathF.Pow(c, 1f / 2.4f) - 0.055f;
+		return (byte)MathF.Round(Saturate(s) * 255f);
+	}
+
+	private static float Min3(float a, float b, float c) => MathF.Min(a, MathF.Min(b, c));
+	private static float Max3(float a, float b, float c) => MathF.Max(a, MathF.Max(b, c));
+}
