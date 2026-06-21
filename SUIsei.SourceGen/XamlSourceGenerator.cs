@@ -135,6 +135,8 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		public CancellationToken Ct    { get; } = ct;
 		public List<string> Fields     { get; } = [];
 		public StringBuilder Body      { get; } = new();
+		// Extra members appended to the partial class after InitializeComponent — the static template factories.
+		public StringBuilder Methods   { get; } = new();
 		public List<string> EventWires { get; } = [];
 		public List<Bind> Bindings     { get; } = [];
 		public List<DiagnosticInfo> Diagnostics { get; } = [];
@@ -144,6 +146,27 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 
 		public void Report(DiagnosticDescriptor descriptor, XObject node, params string[] args) =>
 			Diagnostics.Add(MakeDiagnostic(descriptor, Path, Text, node, args));
+	}
+
+	// The emission target + binding context for EmitElement. The page scope builds InitializeComponent (named
+	// elements become fields; {x:Bind}s defer into the _Bindings helper; events wire to `this`). A template scope
+	// builds a static factory method body instead (named elements become locals; {x:Bind}/{TemplateBinding} resolve
+	// inline against the template's data root — a data item for a DataTemplate, the templated control for a
+	// ControlTemplate), so the two binding scopes never share fields.
+	private sealed class Scope
+	{
+		public StringBuilder Body { get; init; } = new();
+		// The x:Name registry for this scope: enforces uniqueness and resolves storyboard targets. The page scope
+		// shares the generator's global set; each template gets its own (a name may repeat across templates).
+		public HashSet<string> Names { get; init; } = [];
+		public bool IsTemplate { get; init; }
+		public bool IsControlTemplate { get; init; }
+		// The {x:Bind}/{TemplateBinding} data-root expression (e.g. "__data" / "__tc") and its type, for a template.
+		public string DataRootExpr { get; init; } = "";
+		public INamedTypeSymbol? DataRootType { get; init; }
+
+		// Append a statement at InitializeComponent / factory-body indentation (both are two tabs deep).
+		public void Emit(string statement) => Body.AppendLine("\t\t" + statement);
 	}
 
 	private static GenResult Generate(XamlInput input, Compilation compilation, CancellationToken ct)
@@ -169,8 +192,9 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		var fullClass = classAttr.Value;
 		var pageType = compilation.GetTypeByMetadataName(fullClass);
 		var gen = new Gen(compilation, input.Path, text, pageType, ct);
+		var pageScope = new Scope { Body = gen.Body, Names = gen.UsedNames };
 
-		var rootVar = EmitElement(gen, root, isRoot: true);
+		var rootVar = EmitElement(gen, pageScope, root, isRoot: true);
 		if (rootVar is null)
 			return new GenResult(default, gen.Diagnostics.ToArray());
 		var rootTypeName = gen.RootType?.ToDisplayString() ?? "global::SUIsei.UIElement";
@@ -209,6 +233,11 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			sb.AppendLine("\t\t__bindings.Initialize();");
 		}
 		sb.AppendLine("\t}");
+		if (gen.Methods.Length > 0)
+		{
+			sb.AppendLine();
+			sb.Append(gen.Methods);
+		}
 		sb.AppendLine("}");
 
 		var main = new GeneratedSource(MakeHintName(fullClass, ""), sb.ToString());
@@ -218,7 +247,7 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		return new GenResult(sources, gen.Diagnostics.ToArray());
 	}
 
-	private static string? EmitElement(Gen gen, XElement el, bool isRoot = false)
+	private static string? EmitElement(Gen gen, Scope scope, XElement el, bool isRoot = false)
 	{
 		gen.Ct.ThrowIfCancellationRequested();
 
@@ -231,26 +260,32 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 
 		var typeName = type.ToDisplayString();
 		var nameAttr = el.Attribute(X + "Name");
+		var hasName  = TryValidateName(gen, scope, nameAttr);
 
-		var hasName  = TryValidateName(gen, nameAttr);
-		var needsField = hasName || NeedsField(type, el);
 		string var;
-		if (hasName)
+		if (scope.IsTemplate)
+		{
+			// Inside a template factory every element is a local; a named one keeps its name so a storyboard /
+			// VSM in the same template can target it.
+			var = hasName ? nameAttr!.Value : NewName(gen, "__t");
+			scope.Emit($"var {var} = new {typeName}();");
+		}
+		else if (hasName)
 		{
 			var = nameAttr!.Value;
 			gen.Fields.Add($"internal {typeName} {var} = null!;");
-			gen.Body.AppendLine($"\t\t{var} = new {typeName}();");
+			scope.Emit($"{var} = new {typeName}();");
 		}
-		else if (needsField)
+		else if (NeedsField(type, el))
 		{
 			var = NewName(gen, "__b");
 			gen.Fields.Add($"internal {typeName} {var} = null!;");
-			gen.Body.AppendLine($"\t\t{var} = new {typeName}();");
+			scope.Emit($"{var} = new {typeName}();");
 		}
 		else
 		{
 			var = NewName(gen, "__e");
-			gen.Body.AppendLine($"\t\tvar {var} = new {typeName}();");
+			scope.Emit($"var {var} = new {typeName}();");
 		}
 
 		foreach (var attr in el.Attributes())
@@ -275,6 +310,8 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			var evt = FindEvent(type, name);
 			if (evt is not null)
 			{
+				// A template factory is static and has no `this` to bind a handler to; event wiring belongs on the page.
+				if (scope.IsTemplate) { gen.Report(IgnoredContent, attr, $"event handler '{name}' inside a template"); continue; }
 				var handler = ExtractEventHandler(gen, attr, value);
 				if (handler is null)
 					continue;
@@ -291,7 +328,7 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 				if (prop2 is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
 				switch (TryLiteral(prop2.Type, value, out var code))
 				{
-					case LiteralStatus.Ok:          gen.Body.AppendLine($"\t\t{var}.{prop2.Name} = {code};"); break;
+					case LiteralStatus.Ok:          scope.Emit($"{var}.{prop2.Name} = {code};"); break;
 					case LiteralStatus.BadValue:    gen.Report(InvalidLiteral, attr, value.Trim(), name, prop2.Type.ToDisplayString()); break;
 					default:                        gen.Report(UnsupportedProperty, attr, name, prop2.Type.ToDisplayString()); break;
 				}
@@ -303,6 +340,11 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			{
 				var prop = FindProperty(type, name);
 				if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
+				if (scope.IsTemplate)
+				{
+					EmitTemplateBind(gen, scope, attr, var, prop, path, fallback, targetNull);
+					continue;
+				}
 				if (!TryResolvePath(gen.PageType, path, out var resultTypes, out var leafType))
 				{
 					gen.Report(BindPathUnresolved, attr, string.Join(".", path), gen.PageType?.ToDisplayString() ?? "the page");
@@ -321,12 +363,22 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 				continue;
 			}
 
+			// {TemplateBinding source} — a OneWay wire from the templated control's property into this child.
+			if (TryParseTemplateBinding(inner, out var sourceProp))
+			{
+				var prop = FindProperty(type, name);
+				if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
+				if (!scope.IsControlTemplate) { gen.Report(TemplateBindingOutsideTemplate, attr); continue; }
+				EmitTemplateBinding(gen, scope, attr, var, prop, sourceProp);
+				continue;
+			}
+
 			// {StaticResource key}
 			if (TryParseStaticResource(inner, out var resKey))
 			{
 				var prop = FindProperty(type, name);
 				if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
-				gen.Body.AppendLine($"\t\t{var}.{prop.Name} = FindResource(\"{resKey}\") as {prop.Type.ToDisplayString()};");
+				scope.Emit($"{var}.{prop.Name} = {var}.FindResource(\"{resKey}\") as {AsCastType(prop.Type)};");
 				continue;
 			}
 
@@ -340,17 +392,17 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			gen.Ct.ThrowIfCancellationRequested();
 			if (childEl.Name.LocalName.Contains('.'))
 			{
-				HandlePropertyElement(gen, var, type, childEl);
+				HandlePropertyElement(gen, scope, var, type, childEl);
 				continue;
 			}
-			var childVar = EmitElement(gen, childEl);
+			var childVar = EmitElement(gen, scope, childEl);
 			if (childVar is null)
 				continue;
 			switch (kind)
 			{
-				case "Children": gen.Body.AppendLine($"\t\t{var}.Children.Add({childVar});"); break;
-				case "Child":    gen.Body.AppendLine($"\t\t{var}.Child = {childVar};"); break;
-				case "Content":  gen.Body.AppendLine($"\t\t{var}.Content = {childVar};"); break;
+				case "Children": scope.Emit($"{var}.Children.Add({childVar});"); break;
+				case "Child":    scope.Emit($"{var}.Child = {childVar};"); break;
+				case "Content":  scope.Emit($"{var}.Content = {childVar};"); break;
 				default:         gen.Report(NoContentModel, childEl, typeName, childEl.Name.LocalName); break;
 			}
 		}
@@ -369,56 +421,72 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 
 	// --- Property elements (<Owner.Prop> children): styles, templates, storyboards, visual states ---
 
-	private static void HandlePropertyElement(Gen gen, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
+	private static void HandlePropertyElement(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
 	{
 		var localName = propEl.Name.LocalName; // "Owner.Prop"
 		var dot = localName.IndexOf('.');
 		var owner = localName.Substring(0, dot);
 		var prop = localName.Substring(dot + 1);
 
-		if (owner == "VisualStateManager" && prop == "VisualStateGroups")
+		switch (prop)
 		{
-			EmitVisualStateGroups(gen, ownerVar, propEl);
-			return;
+			case "VisualStateGroups" when owner == "VisualStateManager":
+				EmitVisualStateGroups(gen, scope, ownerVar, propEl);
+				return;
+			case "Resources":
+				EmitResources(gen, scope, ownerVar, propEl);
+				return;
+			case "Template" when FindProperty(ownerType, "Template") is not null:
+				EmitControlTemplateProperty(gen, scope, ownerVar, ownerType, propEl);
+				return;
+			case "ItemTemplate" when FindProperty(ownerType, "ItemTemplate") is not null:
+				EmitDataTemplateProperty(gen, scope, ownerVar, "ItemTemplate", propEl);
+				return;
+			case "ContentTemplate" when FindProperty(ownerType, "ContentTemplate") is not null:
+				EmitDataTemplateProperty(gen, scope, ownerVar, "ContentTemplate", propEl);
+				return;
+			case "ItemsPanel" when FindProperty(ownerType, "ItemsPanel") is not null:
+				EmitItemsPanelProperty(gen, scope, ownerVar, propEl);
+				return;
 		}
 
 		gen.Report(BadPropertyElement, propEl, localName);
 	}
 
-	private static void EmitVisualStateGroups(Gen gen, string ownerVar, XElement propEl)
+	private static void EmitVisualStateGroups(Gen gen, Scope scope, string ownerVar, XElement propEl)
 	{
 		var groupsVar = NewName(gen, "__vsg");
-		gen.Body.AppendLine($"\t\tvar {groupsVar} = new global::System.Collections.Generic.List<global::SUIsei.VisualStateGroup>();");
+		scope.Emit($"var {groupsVar} = new global::System.Collections.Generic.List<global::SUIsei.VisualStateGroup>();");
 		foreach (var groupEl in propEl.Elements())
 		{
 			if (groupEl.Name.LocalName != "VisualStateGroup") { gen.Report(BadPropertyElement, groupEl, groupEl.Name.LocalName); continue; }
 			var groupVar = NewName(gen, "__vsgrp");
 			var groupName = groupEl.Attribute("Name")?.Value ?? "";
-			gen.Body.AppendLine($"\t\tvar {groupVar} = new global::SUIsei.VisualStateGroup {{ Name = {Quote(groupName)} }};");
+			scope.Emit($"var {groupVar} = new global::SUIsei.VisualStateGroup {{ Name = {Quote(groupName)} }};");
 			foreach (var stateEl in groupEl.Elements())
 			{
 				if (stateEl.Name.LocalName != "VisualState") { gen.Report(BadPropertyElement, stateEl, stateEl.Name.LocalName); continue; }
 				var stateName = stateEl.Attribute("Name")?.Value ?? "";
 				var sbEl = stateEl.Elements().FirstOrDefault(e => e.Name.LocalName == "Storyboard");
-				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, sbEl);
-				gen.Body.AppendLine($"\t\t{groupVar}.States.Add(new global::SUIsei.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
+				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, scope, sbEl);
+				scope.Emit($"{groupVar}.States.Add(new global::SUIsei.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
 			}
-			gen.Body.AppendLine($"\t\t{groupsVar}.Add({groupVar});");
+			scope.Emit($"{groupsVar}.Add({groupVar});");
 		}
-		gen.Body.AppendLine($"\t\tglobal::SUIsei.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
+		scope.Emit($"global::SUIsei.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
 	}
 
 	// Build a Storyboard local and return its variable name.
-	private static string EmitStoryboard(Gen gen, XElement sbEl)
+	private static string EmitStoryboard(Gen gen, Scope scope, XElement sbEl)
 	{
 		var sbVar = NewName(gen, "__sb");
-		gen.Body.AppendLine($"\t\tvar {sbVar} = new global::SUIsei.Storyboard();");
+		scope.Emit($"var {sbVar} = new global::SUIsei.Storyboard();");
 		foreach (var animEl in sbEl.Elements())
-			EmitAnimation(gen, sbVar, animEl);
+			EmitAnimation(gen, scope, sbVar, animEl);
 		return sbVar;
 	}
 
-	private static void EmitAnimation(Gen gen, string sbVar, XElement animEl)
+	private static void EmitAnimation(Gen gen, Scope scope, string sbVar, XElement animEl)
 	{
 		var kind = animEl.Name.LocalName;
 		var typeName = kind switch
@@ -430,7 +498,7 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		if (typeName is null) { gen.Report(BadPropertyElement, animEl, kind); return; }
 
 		var animVar = NewName(gen, "__anim");
-		gen.Body.AppendLine($"\t\tvar {animVar} = new {typeName}();");
+		scope.Emit($"var {animVar} = new {typeName}();");
 
 		string? targetName = null, targetProp = null;
 		foreach (var attr in animEl.Attributes())
@@ -441,53 +509,53 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			{
 				case "Storyboard.TargetName": targetName = attr.Value.Trim(); break;
 				case "Storyboard.TargetProperty": targetProp = attr.Value.Trim(); break;
-				case "From": EmitAnimationValue(gen, animVar, "From", kind, attr); break;
-				case "To": EmitAnimationValue(gen, animVar, "To", kind, attr); break;
-				case "By" when kind == "DoubleAnimation": EmitAnimationValue(gen, animVar, "By", kind, attr); break;
+				case "From": EmitAnimationValue(gen, scope, animVar, "From", kind, attr); break;
+				case "To": EmitAnimationValue(gen, scope, animVar, "To", kind, attr); break;
+				case "By" when kind == "DoubleAnimation": EmitAnimationValue(gen, scope, animVar, "By", kind, attr); break;
 				case "Duration":
-					if (TryParseDuration(attr.Value, out var d)) gen.Body.AppendLine($"\t\t{animVar}.Duration = global::System.TimeSpan.FromSeconds({Fmt(d)});");
+					if (TryParseDuration(attr.Value, out var d)) scope.Emit($"{animVar}.Duration = global::System.TimeSpan.FromSeconds({Fmt(d)});");
 					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "Duration");
 					break;
 				case "BeginTime":
-					if (TryParseDuration(attr.Value, out var bt)) gen.Body.AppendLine($"\t\t{animVar}.BeginTime = global::System.TimeSpan.FromSeconds({Fmt(bt)});");
+					if (TryParseDuration(attr.Value, out var bt)) scope.Emit($"{animVar}.BeginTime = global::System.TimeSpan.FromSeconds({Fmt(bt)});");
 					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "BeginTime");
 					break;
 				case "AutoReverse":
-					gen.Body.AppendLine($"\t\t{animVar}.AutoReverse = {(string.Equals(attr.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")};");
+					scope.Emit($"{animVar}.AutoReverse = {(string.Equals(attr.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")};");
 					break;
 				case "FillBehavior":
-					gen.Body.AppendLine($"\t\t{animVar}.FillBehavior = global::SUIsei.FillBehavior.{(attr.Value.Trim() == "Stop" ? "Stop" : "HoldEnd")};");
+					scope.Emit($"{animVar}.FillBehavior = global::SUIsei.FillBehavior.{(attr.Value.Trim() == "Stop" ? "Stop" : "HoldEnd")};");
 					break;
 				case "RepeatBehavior":
-					gen.Body.AppendLine($"\t\t{animVar}.RepeatBehavior = {RepeatBehaviorExpr(attr.Value)};");
+					scope.Emit($"{animVar}.RepeatBehavior = {RepeatBehaviorExpr(attr.Value)};");
 					break;
 			}
 		}
 
 		if (targetName is not null)
 		{
-			if (!gen.UsedNames.Contains(targetName)) gen.Report(BadStoryboardTarget, animEl, targetName);
-			else gen.Body.AppendLine($"\t\t{animVar}.Target = {targetName};");
+			if (!scope.Names.Contains(targetName)) gen.Report(BadStoryboardTarget, animEl, targetName);
+			else scope.Emit($"{animVar}.Target = {targetName};");
 		}
 		if (targetProp is not null)
 		{
 			if (!IsAnimatableChannel(targetProp)) gen.Report(BadAnimationProperty, animEl, targetProp);
-			gen.Body.AppendLine($"\t\t{animVar}.TargetProperty = {Quote(targetProp)};");
+			scope.Emit($"{animVar}.TargetProperty = {Quote(targetProp)};");
 		}
-		gen.Body.AppendLine($"\t\t{sbVar}.Children.Add({animVar});");
+		scope.Emit($"{sbVar}.Children.Add({animVar});");
 	}
 
-	private static void EmitAnimationValue(Gen gen, string animVar, string prop, string kind, XAttribute attr)
+	private static void EmitAnimationValue(Gen gen, Scope scope, string animVar, string prop, string kind, XAttribute attr)
 	{
 		if (kind == "ColorAnimation")
 		{
-			if (TryParseColor(attr.Value, out var code)) gen.Body.AppendLine($"\t\t{animVar}.{prop} = {code};");
+			if (TryParseColor(attr.Value, out var code)) scope.Emit($"{animVar}.{prop} = {code};");
 			else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "colour");
 		}
 		else // DoubleAnimation
 		{
 			if (double.TryParse(attr.Value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-				gen.Body.AppendLine($"\t\t{animVar}.{prop} = {attr.Value.Trim()}d;");
+				scope.Emit($"{animVar}.{prop} = {attr.Value.Trim()}d;");
 			else
 				gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "number");
 		}
@@ -495,6 +563,255 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 
 	private static bool IsAnimatableChannel(string property) => property is
 		"Opacity" or "Background" or "Foreground" or "Fill" or "RenderTransform.Translate.X" or "RenderTransform.Translate.Y";
+
+	// --- Templates: ControlTemplate / DataTemplate / ItemsPanelTemplate factories ---
+
+	private static void EmitControlTemplateProperty(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
+	{
+		var templateEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ControlTemplate");
+		if (templateEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
+
+		// TargetType (optional) types the data root so non-Content {TemplateBinding}s and storyboard targets resolve;
+		// default to the owning control's type.
+		var targetType = ResolveTypeName(gen, templateEl.Attribute("TargetType")?.Value) ?? ownerType;
+		var method = EmitTemplateFactory(gen, templateEl, isControlTemplate: true,
+			paramDecl: "global::SUIsei.Controls.Control __tc", castLocal: null, dataRootExpr: "__tc", dataRootType: targetType);
+		if (method is null)
+			return;
+		scope.Emit($"{ownerVar}.Template = new global::SUIsei.Controls.ControlTemplate {{ Factory = {method} }};");
+	}
+
+	private static void EmitDataTemplateProperty(Gen gen, Scope scope, string ownerVar, string targetProp, XElement propEl)
+	{
+		var templateEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "DataTemplate");
+		if (templateEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
+
+		// x:DataType types the item so the template's {x:Bind}s resolve; without it, an {x:Bind} inside diagnoses.
+		var dataType = ResolveTypeName(gen, templateEl.Attribute(X + "DataType")?.Value);
+		var castLocal = dataType is null ? null : $"var __data = ({Fq(dataType)})__item!;";
+		var method = EmitTemplateFactory(gen, templateEl, isControlTemplate: false,
+			paramDecl: "object? __item", castLocal: castLocal, dataRootExpr: "__data", dataRootType: dataType);
+		if (method is null)
+			return;
+		scope.Emit($"{ownerVar}.{targetProp} = new global::SUIsei.Controls.DataTemplate {{ Factory = {method} }};");
+	}
+
+	private static void EmitItemsPanelProperty(Gen gen, Scope scope, string ownerVar, XElement propEl)
+	{
+		var tmplEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ItemsPanelTemplate");
+		var panelEl = tmplEl?.Elements().FirstOrDefault(e => !e.Name.LocalName.Contains('.'));
+		if (panelEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
+		var panelType = ResolveType(gen.Compilation, panelEl.Name.LocalName);
+		if (panelType is null) { gen.Report(UnknownElement, panelEl, panelEl.Name.LocalName); return; }
+		scope.Emit($"{ownerVar}.ItemsPanel = new global::SUIsei.Controls.ItemsPanelTemplate {{ Factory = static () => new {Fq(panelType)}() }};");
+	}
+
+	// Emit a static factory method that news the template subtree and returns its root, then return its name.
+	private static string? EmitTemplateFactory(Gen gen, XElement templateEl, bool isControlTemplate, string paramDecl, string? castLocal, string dataRootExpr, INamedTypeSymbol? dataRootType)
+	{
+		var rootChild = templateEl.Elements().FirstOrDefault(e => !e.Name.LocalName.Contains('.'));
+		if (rootChild is null) { gen.Report(BadPropertyElement, templateEl, templateEl.Name.LocalName); return null; }
+
+		var method = NewName(gen, "__Template");
+		var body = new StringBuilder();
+		if (castLocal is not null)
+			body.AppendLine("\t\t" + castLocal);
+		var scope = new Scope
+		{
+			Body = body,
+			Names = [],
+			IsTemplate = true,
+			IsControlTemplate = isControlTemplate,
+			DataRootExpr = dataRootExpr,
+			DataRootType = dataRootType,
+		};
+		var rootVar = EmitElement(gen, scope, rootChild);
+		if (rootVar is null)
+			return null;
+
+		gen.Methods.AppendLine($"\tprivate static global::SUIsei.FrameworkElement {method}({paramDecl})");
+		gen.Methods.AppendLine("\t{");
+		gen.Methods.Append(body);
+		gen.Methods.AppendLine($"\t\treturn {rootVar};");
+		gen.Methods.AppendLine("\t}");
+		return method;
+	}
+
+	// A template-scoped {x:Bind} — a OneTime read against the template's data root (the item is fixed for the
+	// realized container's lifetime, so no INPC tracking is wired).
+	private static void EmitTemplateBind(Gen gen, Scope scope, XAttribute attr, string targetVar, IPropertySymbol prop, string[] path, string? fallback, string? targetNull)
+	{
+		if (scope.DataRootType is null)
+		{
+			gen.Report(BindPathUnresolved, attr, string.Join(".", path), "the template data type (set x:DataType)");
+			return;
+		}
+		if (!TryResolvePath(scope.DataRootType, path, out var resultTypes, out var leafType))
+		{
+			gen.Report(BindPathUnresolved, attr, string.Join(".", path), scope.DataRootType.ToDisplayString());
+			return;
+		}
+		if (!gen.Compilation.ClassifyConversion(leafType, prop.Type).IsImplicit)
+		{
+			gen.Report(BindTypeMismatch, attr, leafType.ToDisplayString(), prop.Name, prop.Type.ToDisplayString());
+			return;
+		}
+
+		var sb = new StringBuilder(scope.DataRootExpr);
+		for (var i = 0; i < path.Length; i++)
+			sb.Append(i == 0 ? "." : (resultTypes[i - 1].IsReferenceType ? "?." : ".")).Append(path[i]);
+		scope.Emit($"{targetVar}.{prop.Name} = {CoalesceRead(sb.ToString(), leafType, fallback, targetNull)};");
+	}
+
+	// A {TemplateBinding source} wire: the templated control's property flows OneWay into a child setter.
+	private static void EmitTemplateBinding(Gen gen, Scope scope, XAttribute attr, string targetVar, IPropertySymbol prop, string sourceProp)
+	{
+		// Content is a CLR property carrying a ContentChanged event (not a dependency property); wire via that event.
+		if (sourceProp == "Content")
+		{
+			var host = $"((global::SUIsei.Controls.ContentControl){scope.DataRootExpr})";
+			scope.Emit($"{targetVar}.{prop.Name} = {host}.Content;");
+			scope.Emit($"{host}.ContentChanged += (_, _) => {targetVar}.{prop.Name} = {host}.Content;");
+			return;
+		}
+		// Otherwise the source must be a dependency property on the templated control.
+		if (scope.DataRootType is null || FindDependencyProperty(scope.DataRootType, sourceProp) is not { } dp)
+		{
+			gen.Report(BadAnimationProperty, attr, sourceProp);
+			return;
+		}
+		scope.Emit($"{scope.DataRootExpr}.RegisterTemplateBinding({Fq(dp.ContainingType!)}.{dp.Name}, __v => {targetVar}.{prop.Name} = ({Fq(prop.Type)})__v!);");
+	}
+
+	// --- Resources + Style markup ---
+
+	private static void EmitResources(Gen gen, Scope scope, string ownerVar, XElement propEl)
+	{
+		// <X.Resources> holds keyed resources, optionally wrapped in an explicit <ResourceDictionary>.
+		var items = propEl.Elements().ToList();
+		if (items.Count == 1 && items[0].Name.LocalName == "ResourceDictionary")
+			items = items[0].Elements().ToList();
+
+		scope.Emit($"{ownerVar}.Resources ??= new global::SUIsei.ResourceDictionary();");
+		foreach (var resEl in items)
+		{
+			var key = resEl.Attribute(X + "Key")?.Value;
+			if (key is null) { gen.Report(BadPropertyElement, resEl, $"{resEl.Name.LocalName} (resource needs an x:Key)"); continue; }
+			if (resEl.Name.LocalName != "Style") { gen.Report(BadPropertyElement, resEl, resEl.Name.LocalName); continue; }
+			if (EmitStyle(gen, scope, ownerVar, resEl) is { } styleVar)
+				scope.Emit($"{ownerVar}.Resources.Add({Quote(key)}, {styleVar});");
+		}
+	}
+
+	private static string? EmitStyle(Gen gen, Scope scope, string ownerVar, XElement styleEl)
+	{
+		var targetType = ResolveTypeName(gen, styleEl.Attribute("TargetType")?.Value);
+		if (targetType is null) { gen.Report(BadPropertyElement, styleEl, "Style (needs a resolvable TargetType)"); return null; }
+
+		var styleVar = NewName(gen, "__style");
+		// BasedOn="{StaticResource Key}" chains a base style, resolved from the element-tree resources at runtime.
+		var basedOnInit = "";
+		var basedOn = styleEl.Attribute("BasedOn")?.Value;
+		if (basedOn is not null && IsMarkup(basedOn, out var inner) && TryParseStaticResource(inner, out var baseKey))
+			basedOnInit = $" BasedOn = {ownerVar}.FindResource({Quote(baseKey)}) as global::SUIsei.Style,";
+		scope.Emit($"var {styleVar} = new global::SUIsei.Style {{{basedOnInit} }};");
+
+		foreach (var setterEl in styleEl.Elements())
+		{
+			if (setterEl.Name.LocalName != "Setter") { gen.Report(BadPropertyElement, setterEl, setterEl.Name.LocalName); continue; }
+			var propName = setterEl.Attribute("Property")?.Value;
+			var rawValue = setterEl.Attribute("Value")?.Value;
+			if (propName is null || rawValue is null) { gen.Report(BadPropertyElement, setterEl, "Setter (needs Property and Value)"); continue; }
+
+			// Resolve Property to the dependency-property static field <TargetType>.<Property>Property and convert the
+			// value against that property's CLR type.
+			var dp = FindDependencyProperty(targetType, propName);
+			var clrProp = FindProperty(targetType, propName);
+			if (dp is null || clrProp is null) { gen.Report(BadSetterProperty, setterEl, propName, targetType.ToDisplayString()); continue; }
+			if (!TrySetterValue(clrProp.Type, rawValue, out var code))
+			{
+				gen.Report(InvalidLiteral, setterEl, rawValue.Trim(), propName, clrProp.Type.ToDisplayString());
+				continue;
+			}
+			scope.Emit($"{styleVar}.Setters.Add(new global::SUIsei.Setter {{ Property = {Fq(dp.ContainingType!)}.{dp.Name}, Value = {code} }});");
+		}
+		return styleVar;
+	}
+
+	// A Setter value: the literal/enum subset, plus colour literals for HdrColor-typed properties (Background etc.).
+	private static bool TrySetterValue(ITypeSymbol type, string raw, out string code)
+	{
+		var unwrapped = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n ? n.TypeArguments[0] : type;
+		if (unwrapped.Name == "HdrColor")
+			return TryParseColor(raw, out code);
+		code = "";
+		return TryLiteral(unwrapped, raw, out code) == LiteralStatus.Ok;
+	}
+
+	// Coalescing for a binding read: FallbackValue / TargetNullValue, then string/null-value-type defaults.
+	private static string CoalesceRead(string read, ITypeSymbol leafType, string? fallback, string? targetNull)
+	{
+		if (targetNull is not null && fallback is not null) return $"({read}) ?? ({targetNull}) ?? ({fallback})";
+		if (targetNull is not null) return $"({read}) ?? ({targetNull})";
+		if (fallback is not null) return $"({read}) ?? ({fallback})";
+		if (leafType.SpecialType == SpecialType.System_String) return $"({read}) ?? string.Empty";
+		if (read.Contains("?.") && leafType.IsValueType) return $"({read}) ?? default";
+		return read;
+	}
+
+	// Parse "{TemplateBinding Prop}" — inner = "TemplateBinding Prop".
+	private static bool TryParseTemplateBinding(string inner, out string sourceProp)
+	{
+		sourceProp = "";
+		var t = inner.Trim();
+		if (!t.StartsWith("TemplateBinding", StringComparison.Ordinal))
+			return false;
+		var rest = t.Substring("TemplateBinding".Length).Trim();
+		if (rest.Length == 0 || !IsIdentifier(rest))
+			return false;
+		sourceProp = rest;
+		return true;
+	}
+
+	// Resolve an x:DataType / TargetType string to a type symbol: a fully-qualified metadata name, else (after
+	// stripping any xmlns prefix) a SUIsei control/type by simple name.
+	private static INamedTypeSymbol? ResolveTypeName(Gen gen, string? raw)
+	{
+		if (string.IsNullOrWhiteSpace(raw))
+			return null;
+		var name = raw!.Trim();
+		var colon = name.IndexOf(':');
+		if (colon >= 0)
+			name = name.Substring(colon + 1);
+		return gen.Compilation.GetTypeByMetadataName(name) ?? ResolveType(gen.Compilation, name);
+	}
+
+	// A fully-qualified (global::-rooted) reference to a symbol — a type for `new`/casts or a member for a field
+	// access — so generated code never depends on the consuming file's usings or risks namespace shadowing.
+	private static string Fq(ISymbol symbol) => symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+	// A target type for an `as` cast: `as` needs a nullable target, so a reference type drops its `?` annotation
+	// (a value type keeps `T?`, which is itself the legal nullable form).
+	private static string AsCastType(ITypeSymbol type)
+	{
+		var display = Fq(type);
+		return type.IsReferenceType && display.EndsWith("?", StringComparison.Ordinal)
+			? display.Substring(0, display.Length - 1)
+			: display;
+	}
+
+	// Find a dependency-property static field by the "<Name>Property" convention (walking the base chain).
+	private static IFieldSymbol? FindDependencyProperty(INamedTypeSymbol type, string name)
+	{
+		var fieldName = name + "Property";
+		for (INamedTypeSymbol? t = type; t is not null; t = t.BaseType)
+		{
+			var f = t.GetMembers(fieldName).OfType<IFieldSymbol>().FirstOrDefault(f => f.IsStatic);
+			if (f is not null)
+				return f;
+		}
+		return null;
+	}
 
 	// --- The generated Bindings helper ---
 
@@ -1043,12 +1360,14 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static bool TryValidateName(Gen gen, XAttribute? nameAttr)
+	private static bool TryValidateName(Gen gen, Scope scope, XAttribute? nameAttr)
 	{
 		if (nameAttr is null)
 			return false;
 		var name = nameAttr.Value;
-		if (IsValidFieldIdentifier(name) && gen.UsedNames.Add(name))
+		// The name becomes a field (page) or a local (template); both must be a unique, non-reserved C# identifier
+		// within their scope. The page scope's set is the generator's global set (also seeded with the reserved Root).
+		if (IsValidFieldIdentifier(name) && scope.Names.Add(name))
 			return true;
 		gen.Report(InvalidName, nameAttr, name);
 		return false;

@@ -111,8 +111,9 @@ public abstract class DependencyObject
 	}
 
 	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> from <paramref name="source"/> on this object to a child setter
-	/// (PlanningUI.md §D1.6). The child is updated immediately with the current value and on every later change.</summary>
-	internal void RegisterTemplateBinding(DependencyProperty source, Action<object?> push)
+	/// (PlanningUI.md §D1.6). The child is updated immediately with the current value and on every later change.
+	/// Public so a generated (or hand-written) template factory can wire its template bindings without reflection.</summary>
+	public void RegisterTemplateBinding(DependencyProperty source, Action<object?> push)
 	{
 		_templateTargets ??= [];
 		_templateTargets[source.GlobalIndex] = _templateTargets.TryGetValue(source.GlobalIndex, out var existing)
