@@ -121,7 +121,7 @@ public sealed class TextBox : Control
 	private float OffsetOf(int index)
 	{
 		index = Math.Clamp(index, 0, Text.Length);
-		return index == 0 ? 0f : FontAtlas.Default.MeasureWidth(Text[..index]) * FontSize;
+		return index == 0 ? 0f : FontAtlas.Default.MeasureWidth(Text.AsSpan(0, index)) * FontSize;
 	}
 
 	private void OnTextChanged()

@@ -311,7 +311,8 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			}
 			if (attr.Name.LocalName.Contains('.'))
 			{
-				gen.Report(IgnoredContent, attr, $"attached property '{attr.Name.LocalName}'");
+				if (!TryEmitAttachedProperty(gen, scope, var, attr))
+					gen.Report(IgnoredContent, attr, $"attached property '{attr.Name.LocalName}'");
 				continue;
 			}
 
@@ -459,6 +460,12 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 				return;
 			case "ItemsPanel" when FindProperty(ownerType, "ItemsPanel") is not null:
 				EmitItemsPanelProperty(gen, scope, ownerVar, propEl);
+				return;
+			case "ColumnDefinitions" when owner == "Grid":
+				EmitGridDefinitions(gen, scope, ownerVar, propEl, "ColumnDefinitions");
+				return;
+			case "RowDefinitions" when owner == "Grid":
+				EmitGridDefinitions(gen, scope, ownerVar, propEl, "RowDefinitions");
 				return;
 		}
 
@@ -1333,6 +1340,80 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			}
 		}
 		return null;
+	}
+
+	// An attached property (`Grid.Row="0"`): resolve the owner type's static `Set<Prop>(element, value)` and emit the
+	// call with the literal/enum value parsed against the setter's value type. Returns false (so the caller warns) if
+	// the owner/setter does not resolve or the value is not a supported literal.
+	private static bool TryEmitAttachedProperty(Gen gen, Scope scope, string targetVar, XAttribute attr)
+	{
+		var localName = attr.Name.LocalName;
+		var dot = localName.IndexOf('.');
+		var owner = ResolveType(gen.Compilation, localName.Substring(0, dot));
+		if (owner is null)
+			return false;
+		var setter = owner.GetMembers("Set" + localName.Substring(dot + 1))
+			.OfType<IMethodSymbol>()
+			.FirstOrDefault(m => m is { IsStatic: true, Parameters.Length: 2 });
+		if (setter is null || TryLiteral(setter.Parameters[1].Type, attr.Value, out var code) != LiteralStatus.Ok)
+			return false;
+		scope.Emit($"{Fq(owner)}.{setter.Name}({targetVar}, {code});");
+		return true;
+	}
+
+	// <Grid.ColumnDefinitions>/<Grid.RowDefinitions> → grid.<collection>.Add(GridLength …) per ColumnDefinition/
+	// RowDefinition child, reading its Width/Height as a GridLength (pixels / "*" weight / "Auto").
+	private static void EmitGridDefinitions(Gen gen, Scope scope, string ownerVar, XElement propEl, string collection)
+	{
+		foreach (var def in propEl.Elements())
+		{
+			var raw = def.Attribute("Width")?.Value ?? def.Attribute("Height")?.Value;
+			if (!TryGridLength(raw, out var code))
+			{
+				gen.Report(BadLiteralValue, def, raw ?? "", "grid length");
+				continue;
+			}
+			scope.Emit($"{ownerVar}.{collection}.Add({code});");
+		}
+	}
+
+	// Parse a WinUI grid-length string: "Auto", "*" / "N*" (star weight), or a pixel number. Empty defaults to "*".
+	private static bool TryGridLength(string? raw, out string code)
+	{
+		var value = (raw ?? "*").Trim();
+		if (value.Length == 0 || value == "*")
+		{
+			code = "global::SUIsei.GridLength.Star";
+			return true;
+		}
+		if (string.Equals(value, "Auto", StringComparison.OrdinalIgnoreCase))
+		{
+			code = "global::SUIsei.GridLength.Auto";
+			return true;
+		}
+		if (value.EndsWith("*", StringComparison.Ordinal))
+		{
+			var weight = value.Substring(0, value.Length - 1);
+			if (weight.Length == 0)
+			{
+				code = "global::SUIsei.GridLength.Star";
+				return true;
+			}
+			if (float.TryParse(weight, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+			{
+				code = $"global::SUIsei.GridLength.Stars({weight}f)";
+				return true;
+			}
+			code = "";
+			return false;
+		}
+		if (float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+		{
+			code = $"global::SUIsei.GridLength.Pixels({value}f)";
+			return true;
+		}
+		code = "";
+		return false;
 	}
 
 	private enum LiteralStatus { Ok, BadValue, UnsupportedType }
