@@ -34,6 +34,7 @@ internal sealed unsafe class Win32Window
 	private bool _running = true;
 	private long _lastKey = long.MinValue; // last presented frame's damage key (skip re-raster when unchanged)
 	private bool _forcePresent = true;     // set when the OS invalidates the window (paint/resize/first frame)
+	private Vector2 _lastMousePos;         // last WM_MOUSEMOVE in client pixels — where a wheel event hit-tests
 
 	public Win32Window() => _renderer = new GalleryRenderer(Quit);
 
@@ -161,7 +162,8 @@ internal sealed unsafe class Win32Window
 				return default;
 
 			case PInvoke.WM_MOUSEMOVE:
-				_renderer.QueuePointer(PointerInput.Move(MousePos(lParam), ButtonsOf(wParam)));
+				_lastMousePos = MousePos(lParam);
+				_renderer.QueuePointer(PointerInput.Move(_lastMousePos, ButtonsOf(wParam)));
 				return default;
 
 			case PInvoke.WM_LBUTTONDOWN:
@@ -176,6 +178,16 @@ internal sealed unsafe class Win32Window
 			case PInvoke.WM_RBUTTONUP:
 				_renderer.QueuePointer(PointerInput.Release(MousePos(lParam), PointerUpdateKind.RightButtonReleased));
 				return default;
+
+			case PInvoke.WM_MOUSEWHEEL:
+			{
+				// WHEEL_DELTA notches in the signed high word of wParam (forward/up is positive). lParam carries screen
+				// coordinates here, not client; rather than convert, hit-test at the last cursor position (the wheel
+				// targets whatever the pointer is over). One notch is one wheel unit — the ScrollViewer scales it.
+				var notches = (short)((ulong)wParam.Value >> 16) / 120f;
+				_renderer.QueuePointer(PointerInput.Scroll(_lastMousePos, new Vector2(0f, notches)));
+				return default;
+			}
 
 			case PInvoke.WM_KEYDOWN:
 				_renderer.QueueKey(new KeyInput((VirtualKey)(uint)wParam.Value, Down: true, Repeat: false, Modifiers(), 0));

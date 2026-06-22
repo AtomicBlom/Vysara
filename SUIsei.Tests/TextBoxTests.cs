@@ -98,4 +98,39 @@ public sealed class TextBoxTests
 
 		count.ShouldBeGreaterThan(0);
 	}
+
+	[Test]
+	public void Caret_blinks_off_when_idle_and_resets_solid_on_input()
+	{
+		var (host, box) = Focused();
+
+		// Freshly focused: the caret is solid before any idle time accrues.
+		box.CaretOpacity.ShouldBe(1f, 0.01f);
+
+		// Idle past the visible half-period: the caret blinks off.
+		host.Tick(0.6, 0f, Surface);
+		box.CaretOpacity.ShouldBeLessThan(0.5f);
+
+		// Typing while it's hidden snaps it solid again (the blink restarts from "on").
+		Type(host, "a");
+		box.CaretOpacity.ShouldBe(1f, 0.01f);
+
+		// And it resumes blinking once typing goes idle again.
+		host.Tick(0.6, 0f, Surface);
+		box.CaretOpacity.ShouldBeLessThan(0.5f);
+	}
+
+	[Test]
+	public void Caret_does_not_blink_while_unfocused()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var box = new TextBox { Width = 200f };
+		view.Root.Content = box;
+
+		host.Tick(0.016, 0f, Surface);
+		host.Tick(0.6, 0f, Surface); // idle, never focused
+
+		box.CaretOpacity.ShouldBe(1f, 0.01f); // no blink storyboard running
+	}
 }

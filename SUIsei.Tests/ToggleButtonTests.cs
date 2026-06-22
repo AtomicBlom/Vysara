@@ -63,4 +63,44 @@ public sealed class ToggleButtonTests
 		root.LayoutPass(new Size(200f, 40f));
 		root.Render().Commands.Length.ShouldBeGreaterThan(0);
 	}
+
+	[Test]
+	public void CheckBox_box_reacts_to_the_pointer_states()
+	{
+		var checkBox = new CheckBox { Content = "Enable" };
+
+		// The check-box template wires a CommonStates group on the box (hover/press feedback).
+		VisualStateManager.GoToState(checkBox, "PointerOver", useTransitions: false).ShouldBeTrue();
+		VisualStateManager.GoToState(checkBox, "Pressed", useTransitions: false).ShouldBeTrue();
+		VisualStateManager.GoToState(checkBox, "Normal", useTransitions: false).ShouldBeTrue();
+	}
+
+	[Test]
+	public void ToggleButton_default_template_reflects_checked_via_the_accent_overlay()
+	{
+		var toggle = new ToggleButton { Content = "Power" };
+
+		// Realize the template; OnApplyTemplate snaps the initial (unchecked) state, hiding the accent overlay.
+		var root = toggle.GetTemplateRoot();
+		root.ShouldNotBeNull();
+		var accent = root.VisualChildren[1]; // [baseBorder, accent, presenter]
+		accent.Opacity.ShouldBe(0f, 0.01f);
+
+		toggle.PerformClick();                // -> checked: accent fades fully in (snapped, no host clock)
+		accent.Opacity.ShouldBe(1f, 0.01f);
+
+		toggle.PerformClick();                // -> unchecked: accent back to hidden
+		accent.Opacity.ShouldBe(0f, 0.01f);
+	}
+
+	[Test]
+	public void ToggleButton_registers_common_and_check_state_groups()
+	{
+		var toggle = new ToggleButton { Content = "Power" };
+
+		VisualStateManager.GoToState(toggle, "PointerOver", useTransitions: false).ShouldBeTrue();
+		VisualStateManager.GoToState(toggle, "Checked", useTransitions: false).ShouldBeTrue();
+		VisualStateManager.GoToState(toggle, "Indeterminate", useTransitions: false).ShouldBeTrue();
+		VisualStateManager.GoToState(toggle, "Unchecked", useTransitions: false).ShouldBeTrue();
+	}
 }

@@ -9,6 +9,13 @@ namespace SUIsei.Controls;
 /// </summary>
 public class ToggleButton : ButtonBase
 {
+	private static readonly HdrColor NormalBackground = HdrColor.FromRgb(60, 60, 70);
+	private static readonly HdrColor OverBackground = HdrColor.FromRgb(80, 80, 95);
+	private static readonly HdrColor PressedBackground = HdrColor.FromRgb(40, 40, 55);
+	private static readonly HdrColor AccentBackground = HdrColor.FromRgb(70, 120, 200);
+
+	public ToggleButton() => Template = DefaultTemplate;
+
 	public static readonly RoutedEvent CheckedEvent = RoutedEvent.Register(nameof(Checked), RoutingStrategy.Bubble);
 	public static readonly RoutedEvent UncheckedEvent = RoutedEvent.Register(nameof(Unchecked), RoutingStrategy.Bubble);
 	public static readonly RoutedEvent IndeterminateEvent = RoutedEvent.Register(nameof(Indeterminate), RoutingStrategy.Bubble);
@@ -91,4 +98,73 @@ public class ToggleButton : ButtonBase
 		VisualStateManager.GoToState(this, IsChecked switch { true => "Checked", null => "Indeterminate", _ => "Unchecked" }, useTransitions: true);
 		OnToggleStateChanged();
 	}
+
+	// The default toggle look: a rounded button whose pointer states animate the base border, layered under an accent
+	// overlay whose opacity the CheckStates group drives — so checked/unchecked cross-fades the accent in and out
+	// without fighting the hover/press background (two states, two properties, no conflict). CheckBox replaces this
+	// template entirely with its box-and-glyph look.
+	private static readonly ControlTemplate DefaultTemplate = new()
+	{
+		Factory = static control =>
+		{
+			var toggle = (ToggleButton)control;
+			var root = new Grid();
+
+			var baseBorder = new Border { Background = NormalBackground, CornerRadius = 4f };
+			var accent = new Border { Background = AccentBackground, CornerRadius = 4f, Opacity = 0f };
+			var presenter = new ContentPresenter
+			{
+				Margin = new Thickness(10f, 5f),
+				HorizontalAlignment = HorizontalAlignment.Center,
+				VerticalAlignment = VerticalAlignment.Center,
+			};
+			presenter.Content = toggle.Content;
+			toggle.ContentChanged += (_, _) => presenter.Content = toggle.Content;
+
+			root.Children.Add(baseBorder);
+			root.Children.Add(accent);
+			root.Children.Add(presenter);
+
+			var common = new VisualStateGroup { Name = "CommonStates" };
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = BackgroundTo(baseBorder, OverBackground, NormalBackground) });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = BackgroundTo(baseBorder, NormalBackground, OverBackground) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = BackgroundTo(baseBorder, OverBackground, PressedBackground) });
+
+			var check = new VisualStateGroup { Name = "CheckStates" };
+			check.States.Add(new VisualState { Name = "Unchecked", Storyboard = OpacityTo(accent, 0f) });
+			check.States.Add(new VisualState { Name = "Checked", Storyboard = OpacityTo(accent, 1f) });
+			check.States.Add(new VisualState { Name = "Indeterminate", Storyboard = OpacityTo(accent, 0.5f) });
+
+			VisualStateManager.SetVisualStateGroups(root, [common, check]);
+			return root;
+		},
+	};
+
+	private static Storyboard BackgroundTo(Border target, HdrColor from, HdrColor to) => new()
+	{
+		Children =
+		{
+			new ColorAnimation
+			{
+				From = from, To = to, Duration = TimeSpan.FromMilliseconds(120), FillBehavior = FillBehavior.HoldEnd,
+				Apply = target.SetAnimatedFill, Release = target.ClearAnimatedFill,
+			},
+		},
+	};
+
+	// The accent overlay's opacity fades up to `to` from its resting 0; on leaving a held state the clock releases the
+	// animation rung, reverting the overlay to its local 0, so unchecking snaps the accent off cleanly (no startup or
+	// cross-fade flash) while checking fades it in.
+	private static Storyboard OpacityTo(UIElement target, float to) => new()
+	{
+		Children =
+		{
+			new DoubleAnimation
+			{
+				To = to, Duration = TimeSpan.FromMilliseconds(120), FillBehavior = FillBehavior.HoldEnd,
+				Apply = v => target.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
+				Release = () => target.ClearAnimatedValue(UIElement.OpacityProperty),
+			},
+		},
+	};
 }

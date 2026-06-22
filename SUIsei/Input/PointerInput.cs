@@ -40,4 +40,10 @@ public readonly record struct PointerInput(
 	public static PointerInput Release(Vector2 position, PointerUpdateKind kind = PointerUpdateKind.LeftButtonReleased,
 		PointerButtons buttons = PointerButtons.None, uint pointerId = 0, PointerDeviceType device = PointerDeviceType.Mouse) =>
 		new(pointerId, device, position, kind, buttons, 1f, Vector2.Zero, 0);
+
+	/// <summary>A scroll-wheel event at <paramref name="position"/> carrying <paramref name="wheel"/> delta
+	/// (y = vertical, positive scrolls toward the top; x = horizontal). Routed to the element under the pointer.</summary>
+	public static PointerInput Scroll(Vector2 position, Vector2 wheel, PointerButtons buttons = PointerButtons.None,
+		uint pointerId = 0, PointerDeviceType device = PointerDeviceType.Mouse) =>
+		new(pointerId, device, position, PointerUpdateKind.None, buttons, 1f, wheel, 0);
 }

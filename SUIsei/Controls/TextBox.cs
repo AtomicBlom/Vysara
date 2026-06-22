@@ -15,6 +15,17 @@ public sealed class TextBox : Control
 	private static string _clipboard = string.Empty;
 	private static readonly Thickness Pad = new(4f, 2f);
 
+	// Chrome that reacts to interaction: the resting border/background are the public Background/BorderBrush; hover
+	// brightens the border and focus swaps in an accent border (thicker) over a slightly lifted background.
+	private static readonly HdrColor HoverBorder = HdrColor.FromRgb(130, 130, 150);
+	private static readonly HdrColor FocusBorder = HdrColor.FromRgb(80, 150, 240);
+	private static readonly HdrColor FocusBackground = HdrColor.FromRgb(36, 38, 48);
+
+	// The Windows caret cadence: solid through a half-period, then hidden through the next, repeating. The short ramp
+	// keeps it an effectively hard on/off (a fade would read as a pulse, not a caret).
+	private const double CaretBlinkHalfSeconds = 0.53;
+	private const double CaretBlinkRampSeconds = 0.04;
+
 	public static readonly DependencyProperty<TextBox, string> TextProperty =
 		DependencyProperty.Register<TextBox, string>(nameof(Text),
 			new PropertyMetadata<TextBox, string> { DefaultValue = "", Invalidates = InvalidationFlags.Measure, PropertyChanged = static (t, _, _) => t.OnTextChanged() });
@@ -26,6 +37,8 @@ public sealed class TextBox : Control
 	private int _caret;
 	private int _anchor;
 	private bool _focused;
+	private bool _pointerOver;
+	private readonly Storyboard _caretBlink;
 
 	public TextBox()
 	{
@@ -33,11 +46,14 @@ public sealed class TextBox : Control
 		AdoptChild(_textBlock);
 		AdoptChild(_caretVisual);
 		_caretVisual.Visibility = Visibility.Collapsed;
+		_caretBlink = BuildCaretBlink();
 
 		AddHandler(CharacterReceivedEvent, OnCharacterReceived);
 		AddHandler(KeyDownEvent, OnKeyDown);
 		AddHandler(GotFocusEvent, OnGotFocus);
 		AddHandler(LostFocusEvent, OnLostFocus);
+		AddHandler(PointerEnteredEvent, OnPointerEntered);
+		AddHandler(PointerExitedEvent, OnPointerExited);
 	}
 
 	public string Text
@@ -72,6 +88,7 @@ public sealed class TextBox : Control
 	{
 		_anchor = 0;
 		_caret = Text.Length;
+		RestartCaretBlink();
 		InvalidateArrange();
 	}
 
@@ -114,8 +131,47 @@ public sealed class TextBox : Control
 		return finalSize;
 	}
 
-	private protected override VisualContent? BuildContent() =>
-		new RectContent(new System.Numerics.Vector2(LayoutRect.Width, LayoutRect.Height), Background, 3f, BorderBrush, 1f);
+	/// <summary>True while the caret is currently in its visible blink phase (test seam).</summary>
+	internal float CaretOpacity => _caretVisual.Opacity;
+
+	private protected override VisualContent? BuildContent()
+	{
+		var brush = _focused ? FocusBorder : _pointerOver ? HoverBorder : BorderBrush;
+		var fill = _focused ? FocusBackground : Background;
+		var thickness = _focused ? 1.5f : 1f;
+		return new RectContent(new System.Numerics.Vector2(LayoutRect.Width, LayoutRect.Height), fill, 3f, brush, thickness);
+	}
+
+	// A repeating square-wave on the caret's Opacity: hold solid through the first half-period, ramp off, hold hidden
+	// through the second. RepeatBehavior.Forever means it never completes; restarting it (on each edit) makes the
+	// caret solid again, so it only blinks once typing goes idle.
+	private Storyboard BuildCaretBlink()
+	{
+		var blink = new DoubleAnimationUsingKeyFrames
+		{
+			Duration = TimeSpan.FromSeconds(2 * CaretBlinkHalfSeconds),
+			RepeatBehavior = RepeatBehavior.Forever,
+			Apply = v => _caretVisual.SetAnimatedValue(OpacityProperty, (float)v),
+			Release = () => _caretVisual.ClearAnimatedValue(OpacityProperty),
+		};
+		blink.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.Zero, Value = 1.0 });
+		blink.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.FromSeconds(CaretBlinkHalfSeconds - CaretBlinkRampSeconds), Value = 1.0 });
+		blink.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.FromSeconds(CaretBlinkHalfSeconds), Value = 0.0 });
+		return new Storyboard { Children = { blink } };
+	}
+
+	// Begin (or restart) the blink — solid first, then blinking. A no-op until focused and attached to a host clock.
+	private void RestartCaretBlink()
+	{
+		if (_focused && Clock is { } clock)
+			clock.Begin(_caretBlink);
+	}
+
+	private void StopCaretBlink()
+	{
+		Clock?.Stop(_caretBlink);
+		_caretVisual.ClearAnimatedValue(OpacityProperty);
+	}
 
 	// The x pixel of the caret/selection edge before character index `i`.
 	private float OffsetOf(int index)
@@ -135,13 +191,29 @@ public sealed class TextBox : Control
 	{
 		_focused = true;
 		_caret = _anchor = Text.Length;
+		RestartCaretBlink();
+		InvalidateContent();
 		InvalidateArrange();
 	}
 
 	private void OnLostFocus(object sender, RoutedEventArgs e)
 	{
 		_focused = false;
+		StopCaretBlink();
+		InvalidateContent();
 		InvalidateArrange();
+	}
+
+	private void OnPointerEntered(object sender, RoutedEventArgs e)
+	{
+		_pointerOver = true;
+		InvalidateContent();
+	}
+
+	private void OnPointerExited(object sender, RoutedEventArgs e)
+	{
+		_pointerOver = false;
+		InvalidateContent();
 	}
 
 	private void OnCharacterReceived(object sender, RoutedEventArgs e)
@@ -181,6 +253,7 @@ public sealed class TextBox : Control
 		_caret = Math.Clamp(position, 0, Text.Length);
 		if (!extend)
 			_anchor = _caret;
+		RestartCaretBlink();
 		InvalidateArrange();
 	}
 
@@ -231,6 +304,7 @@ public sealed class TextBox : Control
 	{
 		Text = text;                          // raises TextChanged + invalidates measure
 		_caret = _anchor = Math.Clamp(caret, 0, Text.Length);
+		RestartCaretBlink();
 		InvalidateArrange();
 	}
 }
