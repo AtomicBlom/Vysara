@@ -12,12 +12,35 @@ namespace SUIsei.Controls;
 [ContentProperty(Name = nameof(Content))]
 public sealed class ScrollViewer : FrameworkElement
 {
+	private static readonly HdrColor ThumbColor = HdrColor.FromRgb(110, 116, 132);
+	private const float ThumbThickness = 8f;
+	private const float ThumbMinLength = 28f;
+	private const float ThumbMargin = 2f;
+
+	private readonly Border _vThumb = new() { Background = ThumbColor, CornerRadius = ThumbThickness / 2f };
+	private float _thumbHeight;
+	private float _thumbTravel;
+	private bool _draggingThumb;
+	private float _dragStartPointerY;
+	private float _dragStartOffset;
+
 	public ScrollViewer()
 	{
 		ClipToBounds = true;
+		AdoptChild(_vThumb);
 		AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged);
 		AddHandler(KeyDownEvent, OnKeyDown);
+
+		// The thumb is a grab handle: a press starts a drag (capturing the pointer so it tracks past the thumb's
+		// edges), and the drag maps pointer travel onto the scroll range.
+		_vThumb.AddHandler(PointerPressedEvent, OnThumbPressed);
+		_vThumb.AddHandler(PointerMovedEvent, OnThumbMoved);
+		_vThumb.AddHandler(PointerReleasedEvent, OnThumbReleased);
+		_vThumb.AddHandler(PointerCaptureLostEvent, OnThumbCaptureLost);
 	}
+
+	// The host's DIP→pixel scale: pointer positions arrive in surface pixels, but the scroll offsets are in DIPs.
+	private float Scale => AttachedRoot?.LayoutScale is { } s and > 0f ? s : 1f;
 
 	public UIElement? Content
 	{
@@ -70,10 +93,11 @@ public sealed class ScrollViewer : FrameworkElement
 		InvalidateArrange();
 	}
 
-	internal override IReadOnlyList<UIElement> VisualChildren => Content is null ? [] : [Content];
+	internal override IReadOnlyList<UIElement> VisualChildren => Content is null ? [_vThumb] : [Content, _vThumb];
 
 	protected override Size MeasureOverride(Size available)
 	{
+		_vThumb.Measure(available);
 		if (Content is null)
 		{
 			ExtentWidth = ExtentHeight = 0f;
@@ -104,8 +128,62 @@ public sealed class ScrollViewer : FrameworkElement
 			var contentHeight = MathF.Max(ExtentHeight, finalSize.Height);
 			content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
 		}
+
+		ArrangeThumb(finalSize);
 		return finalSize;
 	}
+
+	// Size the thumb to the visible fraction of the content and slide it down in proportion to the scroll position;
+	// hide it when there is nothing to scroll.
+	private void ArrangeThumb(Size finalSize)
+	{
+		if (ScrollableHeight > 0f && ViewportHeight > 0f)
+		{
+			_thumbHeight = Math.Clamp(ViewportHeight * (ViewportHeight / ExtentHeight), ThumbMinLength, ViewportHeight);
+			_thumbTravel = ViewportHeight - _thumbHeight;
+			var y = _thumbTravel > 0f ? VerticalOffset / ScrollableHeight * _thumbTravel : 0f;
+			_vThumb.Visibility = Visibility.Visible;
+			_vThumb.Arrange(new Rect(finalSize.Width - ThumbThickness - ThumbMargin, y, ThumbThickness, _thumbHeight));
+		}
+		else
+		{
+			_thumbTravel = 0f;
+			_vThumb.Visibility = Visibility.Collapsed;
+			_vThumb.Arrange(new Rect(finalSize.Width, 0f, 0f, 0f));
+		}
+	}
+
+	private void OnThumbPressed(object sender, RoutedEventArgs e)
+	{
+		if (e is not PointerRoutedEventArgs p || ScrollableHeight <= 0f)
+			return;
+		_draggingThumb = true;
+		_dragStartPointerY = p.Pointer.Position.Y / Scale;
+		_dragStartOffset = VerticalOffset;
+		_vThumb.CapturePointer(0);
+		e.Handled = true;
+	}
+
+	private void OnThumbMoved(object sender, RoutedEventArgs e)
+	{
+		if (!_draggingThumb || e is not PointerRoutedEventArgs p)
+			return;
+		var dy = p.Pointer.Position.Y / Scale - _dragStartPointerY;
+		if (_thumbTravel > 0f)
+			SetVerticalOffset(_dragStartOffset + dy * ScrollableHeight / _thumbTravel);
+		e.Handled = true;
+	}
+
+	private void OnThumbReleased(object sender, RoutedEventArgs e)
+	{
+		if (!_draggingThumb)
+			return;
+		_draggingThumb = false;
+		_vThumb.ReleasePointerCapture(0);
+		e.Handled = true;
+	}
+
+	private void OnThumbCaptureLost(object sender, RoutedEventArgs e) => _draggingThumb = false;
 
 	private void OnPointerWheelChanged(object sender, RoutedEventArgs e)
 	{

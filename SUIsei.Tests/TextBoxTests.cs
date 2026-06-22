@@ -121,6 +121,20 @@ public sealed class TextBoxTests
 	}
 
 	[Test]
+	public void Long_text_scrolls_horizontally_to_keep_the_caret_in_view()
+	{
+		var (host, box) = Focused(); // 200-wide field
+		box.HorizontalScrollOffset.ShouldBe(0f); // empty: nothing to scroll
+
+		Type(host, "the quick brown fox jumps over the lazy dog several times in a row");
+		host.Tick(0.016, 0f, Surface); // arrange with the final caret (edits apply after layout)
+
+		box.HorizontalScrollOffset.ShouldBeGreaterThan(0f);                       // scrolled to follow the caret
+		box.CaretRect.X.ShouldBeLessThanOrEqualTo(box.LayoutRect.Width + 0.5f);   // caret stays inside the field
+		box.CaretRect.X.ShouldBeGreaterThanOrEqualTo(0f);
+	}
+
+	[Test]
 	public void Caret_does_not_blink_while_unfocused()
 	{
 		var host = new UIHost();

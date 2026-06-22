@@ -76,4 +76,31 @@ public sealed class ScrollViewerTests
 
 		viewer.VerticalOffset.ShouldBeGreaterThan(0f);
 	}
+
+	[Test]
+	public void Dragging_the_thumb_scrolls_the_viewer()
+	{
+		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
+		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
+		var host = new UIHost();
+		host.CreateRoot(UIPlacement.Overlay(0, 1f)).Root.Content = viewer;
+		var surface = new Vector2(80f, 100f);
+		host.Tick(0.016, 0f, surface);
+
+		// Press on the thumb (right edge, near the top where it rests at offset 0), drag down, release.
+		host.QueuePointer(PointerInput.Press(new Vector2(74f, 8f)));
+		host.Tick(0.016, 0f, surface);
+		host.QueuePointer(PointerInput.Move(new Vector2(74f, 48f), PointerButtons.Left));
+		host.Tick(0.016, 0f, surface);
+
+		viewer.VerticalOffset.ShouldBeGreaterThan(0f);
+
+		// Releasing ends the drag (capture released): a later move no longer scrolls.
+		host.QueuePointer(PointerInput.Release(new Vector2(74f, 48f)));
+		host.Tick(0.016, 0f, surface);
+		var afterRelease = viewer.VerticalOffset;
+		host.QueuePointer(PointerInput.Move(new Vector2(74f, 90f), PointerButtons.None));
+		host.Tick(0.016, 0f, surface);
+		viewer.VerticalOffset.ShouldBe(afterRelease);
+	}
 }

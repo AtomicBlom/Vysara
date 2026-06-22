@@ -38,6 +38,7 @@ public sealed class TextBox : Control
 	private int _anchor;
 	private bool _focused;
 	private bool _pointerOver;
+	private float _scrollOffset; // horizontal scroll (DIPs) keeping the caret inside the viewport
 	private readonly Storyboard _caretBlink;
 
 	public TextBox()
@@ -47,6 +48,7 @@ public sealed class TextBox : Control
 		AdoptChild(_caretVisual);
 		_caretVisual.Visibility = Visibility.Collapsed;
 		_caretBlink = BuildCaretBlink();
+		ClipToBounds = true; // long text scrolls within the field instead of spilling past its border
 
 		AddHandler(CharacterReceivedEvent, OnCharacterReceived);
 		AddHandler(KeyDownEvent, OnKeyDown);
@@ -100,8 +102,11 @@ public sealed class TextBox : Control
 		_textBlock.FontSize = FontSize;
 		_textBlock.Foreground = Foreground;
 
-		foreach (var child in VisualChildren)
-			child.Measure(available);
+		// Measure the text unbounded in width so it reports its full single-line extent (the field scrolls to it
+		// rather than wrapping or capping at the viewport).
+		_textBlock.Measure(new Size(float.PositiveInfinity, available.Height));
+		_caretVisual.Measure(available);
+		_selectionHighlight.Measure(available);
 
 		var lineHeight = FontAtlas.Default.LineHeight * FontSize;
 		var width = float.IsPositiveInfinity(available.Width) ? _textBlock.DesiredSize.Width + Pad.Horizontal + 2f : available.Width;
@@ -111,28 +116,47 @@ public sealed class TextBox : Control
 	protected override Size ArrangeOverride(Size finalSize)
 	{
 		var lineHeight = FontAtlas.Default.LineHeight * FontSize;
-		_textBlock.Arrange(new Rect(Pad.Left, Pad.Top, MathF.Max(0f, finalSize.Width - Pad.Horizontal), lineHeight));
+		var viewport = MathF.Max(0f, finalSize.Width - Pad.Horizontal);
+
+		// Keep the caret inside the viewport, then pull back so the text's end never floats past the right edge
+		// leaving blank space. Everything below arranges in this scrolled content space (clipped to the field).
+		var caretX = OffsetOf(_caret);
+		if (caretX - _scrollOffset < 0f)
+			_scrollOffset = caretX;
+		else if (caretX - _scrollOffset > viewport)
+			_scrollOffset = caretX - viewport;
+		var contentWidth = OffsetOf(Text.Length);
+		_scrollOffset = Math.Clamp(_scrollOffset, 0f, MathF.Max(0f, contentWidth - viewport));
+
+		var originX = Pad.Left - _scrollOffset;
+		_textBlock.Arrange(new Rect(originX, Pad.Top, MathF.Max(contentWidth, viewport), lineHeight));
 
 		_caretVisual.Visibility = _focused ? Visibility.Visible : Visibility.Collapsed;
-		_caretVisual.Arrange(new Rect(Pad.Left + OffsetOf(_caret), Pad.Top, 1f, lineHeight));
+		_caretVisual.Arrange(new Rect(originX + caretX, Pad.Top, 1f, lineHeight));
 
 		if (SelectionLength > 0)
 		{
-			var x0 = Pad.Left + OffsetOf(SelectionStart);
-			var x1 = Pad.Left + OffsetOf(SelectionStart + SelectionLength);
+			var x0 = originX + OffsetOf(SelectionStart);
+			var x1 = originX + OffsetOf(SelectionStart + SelectionLength);
 			_selectionHighlight.Visibility = Visibility.Visible;
 			_selectionHighlight.Arrange(new Rect(x0, Pad.Top, MathF.Max(0f, x1 - x0), lineHeight));
 		}
 		else
 		{
 			_selectionHighlight.Visibility = Visibility.Collapsed;
-			_selectionHighlight.Arrange(new Rect(Pad.Left, Pad.Top, 0f, lineHeight));
+			_selectionHighlight.Arrange(new Rect(originX, Pad.Top, 0f, lineHeight));
 		}
 		return finalSize;
 	}
 
-	/// <summary>True while the caret is currently in its visible blink phase (test seam).</summary>
+	/// <summary>The caret's current blink opacity (test seam).</summary>
 	internal float CaretOpacity => _caretVisual.Opacity;
+
+	/// <summary>The horizontal scroll offset in DIPs (test seam).</summary>
+	internal float HorizontalScrollOffset => _scrollOffset;
+
+	/// <summary>The caret's arranged rect within the field (test seam).</summary>
+	internal Rect CaretRect => _caretVisual.LayoutRect;
 
 	private protected override VisualContent? BuildContent()
 	{
