@@ -80,9 +80,12 @@ internal sealed class GalleryRenderer
 		var r = _rasterizer!;
 		BindImages(r);
 		var t0 = Stopwatch.GetTimestamp();
-		r.Clear(_clear);
+		var cleared = false; // fuse the clear into the first list's raster bands; later lists render over it
 		foreach (var (_, data) in _host.DrawLists)
-			r.RenderParallel(data);
+		{
+			r.RenderParallel(data, cleared ? null : _clear);
+			cleared = true;
+		}
 		var t1 = Stopwatch.GetTimestamp();
 		r.ResolveToBgra8(bgra);
 		var t2 = Stopwatch.GetTimestamp();
@@ -110,9 +113,12 @@ internal sealed class GalleryRenderer
 		Compose(width, height, seconds);
 		var r = _rasterizer!;
 		BindImages(r);
-		r.Clear(_clear);
+		var cleared = false;
 		foreach (var (_, data) in _host.DrawLists)
-			r.RenderParallel(data);
+		{
+			r.RenderParallel(data, cleared ? null : _clear);
+			cleared = true;
+		}
 		return r.ResolveToRgba8();
 	}
 

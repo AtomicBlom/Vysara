@@ -166,18 +166,23 @@ public sealed class SoftwareRasterizer
 	/// <summary>
 	/// Multithreaded twin of <see cref="Render"/> for the no-group-opacity case. The framebuffer is split into
 	/// horizontal bands and each band replays the whole command list (clamped to its own rows) on its own thread.
-	/// Bands write disjoint rows and every pixel is shaded by exactly the command the serial path would use, in the
-	/// same order, so the output is byte-identical to <see cref="Render"/> — only faster. Falls back to
-	/// <see cref="Render"/> when the list carries group-opacity layers, whose offscreen compositing spans the whole
-	/// surface and is not band-local.
+	/// When <paramref name="clearColor"/> is supplied, each band first fills its own rows with it — fusing the clear
+	/// into the same pass, so the just-cleared rows are still hot in cache when the raster blends over them (no
+	/// separate full-framebuffer clear pass). Pass <c>null</c> to render over existing contents (e.g. a second draw
+	/// list onto an already-cleared frame). Bands write disjoint rows and every pixel is shaded by exactly the command
+	/// the serial path would use, in the same order, so the output is byte-identical to a serial
+	/// <see cref="Clear"/>-then-<see cref="Render"/>. Falls back to that serial pair when the list carries
+	/// group-opacity layers, whose offscreen compositing spans the whole surface and is not band-local.
 	/// </summary>
-	public void RenderParallel(DrawListData draw, float paperWhite = 1f)
+	public void RenderParallel(DrawListData draw, Vector4? clearColor, float paperWhite = 1f)
 	{
 		SkippedCommands = 0;
 		LayersComposited = 0;
 
 		if (DrawHasLayers(draw))
 		{
+			if (clearColor is { } layerClear)
+				Clear(layerClear);
 			Render(draw, paperWhite);
 			return;
 		}
@@ -186,6 +191,8 @@ public sealed class SoftwareRasterizer
 		var verts = draw.Vertices;
 		var indices = draw.Indices;
 		var commands = draw.Commands;
+		var fb = _fb;
+		var width = _width;
 
 		const int bandHeight = 16;
 		var bands = (_height + bandHeight - 1) / bandHeight;
@@ -195,7 +202,9 @@ public sealed class SoftwareRasterizer
 		{
 			var y0 = b * bandHeight;
 			var y1 = Math.Min(_height - 1, y0 + bandHeight - 1);
-			return local + RasterizeBand(_fb, verts.Span, indices.Span, commands.Span, y0, y1, hdr, paperWhite);
+			if (clearColor is { } cc)
+				Array.Fill(fb, cc, y0 * width, (y1 - y0 + 1) * width); // fused clear: these rows stay hot for the raster
+			return local + RasterizeBand(fb, verts.Span, indices.Span, commands.Span, y0, y1, hdr, paperWhite);
 		}, local => Interlocked.Add(ref triangles, local));
 		TrianglesDrawn = triangles;
 	}
