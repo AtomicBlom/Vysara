@@ -38,6 +38,14 @@ public sealed class DrawListData
 	public uint Revision { get; init; }
 
 	/// <summary>
+	/// The region (in surface pixels) that changed versus the previous revision — the union of the bounds of every
+	/// vertex that differs, expanded to the whole surface on a structural change (commands added/removed/reordered),
+	/// when group-opacity layers are present, or on the first build. Lets a host repaint only the dirty rectangle.
+	/// The compositor stamps it; <see cref="Rect.IsEmpty"/> means nothing changed.
+	/// </summary>
+	public Rect Damage { get; internal set; }
+
+	/// <summary>
 	/// A deterministic, human-readable text snapshot of the whole draw list — the "golden draw-list" a producer's
 	/// CPU tests assert against. Stable across platforms (invariant-culture formatting).
 	/// </summary>

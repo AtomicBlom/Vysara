@@ -73,24 +73,59 @@ internal sealed class GalleryRenderer
 		return key;
 	}
 
-	/// <summary>Rasterize the last <see cref="Compose"/> and resolve it into <paramref name="bgra"/> (the GDI DIB
-	/// byte order) using the multithreaded raster + resolve. <paramref name="bgra"/> must be width*height*4 bytes.</summary>
-	public void PresentTo(byte[] bgra)
+	/// <summary>
+	/// Rasterize the last <see cref="Compose"/> and resolve it into <paramref name="bgra"/> (the GDI DIB byte order),
+	/// using the multithreaded raster + resolve. Only the changed region is repainted — the compositor's per-frame
+	/// damage rectangle — unless <paramref name="forceFull"/> (a resized buffer or an OS repaint). Returns the region
+	/// it touched, so the host knows what changed. <paramref name="bgra"/> must be width*height*4 bytes and is left
+	/// holding the previous frame's bytes outside the region.
+	/// </summary>
+	public PixelRect PresentTo(byte[] bgra, bool forceFull)
 	{
 		var r = _rasterizer!;
 		BindImages(r);
+		var region = forceFull ? PixelRect.Full(r.Width, r.Height) : DamageRegion(r.Width, r.Height);
+
 		var t0 = Stopwatch.GetTimestamp();
 		var cleared = false; // fuse the clear into the first list's raster bands; later lists render over it
 		foreach (var (_, data) in _host.DrawLists)
 		{
-			r.RenderParallel(data, cleared ? null : _clear);
+			r.RenderParallel(data, cleared ? null : _clear, region.X0, region.Y0, region.X1, region.Y1);
 			cleared = true;
 		}
 		var t1 = Stopwatch.GetTimestamp();
-		r.ResolveToBgra8(bgra);
+		r.ResolveToBgra8(bgra, region.X0, region.Y0, region.X1, region.Y1);
 		var t2 = Stopwatch.GetTimestamp();
 
 		LastTimings = new FrameTimings(_tickMs, _composeMs, Ms(t0, t1), Ms(t1, t2));
+		return region;
+	}
+
+	// The union of this frame's per-surface damage rectangles, in physical pixels, expanded by a slop margin for
+	// analytic-AA bleed and clamped to the framebuffer (inclusive bounds). Falls back to the whole frame if no surface
+	// reported damage (shouldn't happen once a present is triggered, but repaint-all is the safe default).
+	private PixelRect DamageRegion(int width, int height)
+	{
+		float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+		var any = false;
+		foreach (var (_, data) in _host.DrawLists)
+		{
+			var d = data.Damage;
+			if (d.IsEmpty)
+				continue;
+			minX = MathF.Min(minX, d.X); minY = MathF.Min(minY, d.Y);
+			maxX = MathF.Max(maxX, d.Right); maxY = MathF.Max(maxY, d.Bottom);
+			any = true;
+		}
+		if (!any)
+			return PixelRect.Full(width, height);
+
+		const int margin = 2; // analytic AA can touch ~1px past a quad edge; a little slop keeps it exact
+		var x0 = Math.Max(0, (int)MathF.Floor(minX) - margin);
+		var y0 = Math.Max(0, (int)MathF.Floor(minY) - margin);
+		var x1 = Math.Min(width - 1, (int)MathF.Ceiling(maxX) - 1 + margin);
+		var y1 = Math.Min(height - 1, (int)MathF.Ceiling(maxY) - 1 + margin);
+		return new PixelRect(x0, y0, x1, y1);
 	}
 
 	/// <summary>Serial reference render returning straight RGBA8 — used by the headless capture so its output exactly
@@ -152,4 +187,12 @@ internal sealed class GalleryRenderer
 internal readonly record struct FrameTimings(double TickMs, double ComposeMs, double RasterMs, double ResolveMs)
 {
 	public double TotalMs => TickMs + ComposeMs + RasterMs + ResolveMs;
+}
+
+/// <summary>An inclusive integer pixel rectangle (the dirty region a present touched).</summary>
+internal readonly record struct PixelRect(int X0, int Y0, int X1, int Y1)
+{
+	public static PixelRect Full(int width, int height) => new(0, 0, width - 1, height - 1);
+	public int Width => X1 - X0 + 1;
+	public int Height => Y1 - Y0 + 1;
 }

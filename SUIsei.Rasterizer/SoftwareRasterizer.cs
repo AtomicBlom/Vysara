@@ -174,13 +174,33 @@ public sealed class SoftwareRasterizer
 	/// <see cref="Clear"/>-then-<see cref="Render"/>. Falls back to that serial pair when the list carries
 	/// group-opacity layers, whose offscreen compositing spans the whole surface and is not band-local.
 	/// </summary>
-	public void RenderParallel(DrawListData draw, Vector4? clearColor, float paperWhite = 1f)
+	public void RenderParallel(DrawListData draw, Vector4? clearColor, float paperWhite = 1f) =>
+		RenderParallel(draw, clearColor, 0, 0, _width - 1, _height - 1, paperWhite);
+
+	/// <summary>
+	/// As <see cref="RenderParallel(DrawListData, Vector4?, float)"/>, but limited to the inclusive pixel rectangle
+	/// [<paramref name="rx0"/>..<paramref name="rx1"/>] × [<paramref name="ry0"/>..<paramref name="ry1"/>] — the
+	/// dirty-rectangle fast path. Bands cover only the region's rows, the fused clear fills only the region, and every
+	/// command is replayed scissored to the region (so an overlapped pixel is still composed from all its commands in
+	/// order). Pixels outside the region are left untouched.
+	/// </summary>
+	public void RenderParallel(DrawListData draw, Vector4? clearColor, int rx0, int ry0, int rx1, int ry1, float paperWhite = 1f)
 	{
 		SkippedCommands = 0;
 		LayersComposited = 0;
 
+		rx0 = Math.Max(0, rx0);
+		ry0 = Math.Max(0, ry0);
+		rx1 = Math.Min(_width - 1, rx1);
+		ry1 = Math.Min(_height - 1, ry1);
+		if (rx0 > rx1 || ry0 > ry1)
+			return;
+
 		if (DrawHasLayers(draw))
 		{
+			// Layers composite through whole-surface offscreen targets, so a region-limited replay isn't valid; do the
+			// full serial pair. (The compositor reports whole-surface damage when layers are present, so the region is
+			// the full frame here anyway.)
 			if (clearColor is { } layerClear)
 				Clear(layerClear);
 			Render(draw, paperWhite);
@@ -193,18 +213,25 @@ public sealed class SoftwareRasterizer
 		var commands = draw.Commands;
 		var fb = _fb;
 		var width = _width;
+		var fullWidth = rx0 == 0 && rx1 == width - 1;
 
 		const int bandHeight = 16;
-		var bands = (_height + bandHeight - 1) / bandHeight;
+		var bands = (ry1 - ry0 + bandHeight) / bandHeight;
 
 		var triangles = 0;
 		Parallel.For(0, bands, () => 0, (b, _, local) =>
 		{
-			var y0 = b * bandHeight;
-			var y1 = Math.Min(_height - 1, y0 + bandHeight - 1);
-			if (clearColor is { } cc)
-				Array.Fill(fb, cc, y0 * width, (y1 - y0 + 1) * width); // fused clear: these rows stay hot for the raster
-			return local + RasterizeBand(fb, verts.Span, indices.Span, commands.Span, y0, y1, hdr, paperWhite);
+			var y0 = ry0 + b * bandHeight;
+			var y1 = Math.Min(ry1, y0 + bandHeight - 1);
+			if (clearColor is { } cc) // fused clear: these rows stay hot for the raster
+			{
+				if (fullWidth)
+					Array.Fill(fb, cc, y0 * width, (y1 - y0 + 1) * width);
+				else
+					for (var y = y0; y <= y1; y++)
+						Array.Fill(fb, cc, y * width + rx0, rx1 - rx0 + 1);
+			}
+			return local + RasterizeBand(fb, verts.Span, indices.Span, commands.Span, y0, y1, rx0, rx1, hdr, paperWhite);
 		}, local => Interlocked.Add(ref triangles, local));
 		TrianglesDrawn = triangles;
 	}
@@ -212,7 +239,7 @@ public sealed class SoftwareRasterizer
 	// Rasterize every command's triangles clipped to rows [bandY0, bandY1] — the body of Render's command loop with
 	// the scissor's vertical extent intersected against the band. Returns the triangles touched (for the perf counter).
 	private int RasterizeBand(Vector4[] target, ReadOnlySpan<OverlayVertex> verts, ReadOnlySpan<ushort> indices,
-		ReadOnlySpan<DrawCommand> commands, int bandY0, int bandY1, bool hdr, float paperWhite)
+		ReadOnlySpan<DrawCommand> commands, int bandY0, int bandY1, int bandX0, int bandX1, bool hdr, float paperWhite)
 	{
 		var triangles = 0;
 		for (var ci = 0; ci < commands.Length; ci++)
@@ -225,9 +252,9 @@ public sealed class SoftwareRasterizer
 				continue;
 
 			var clip = cmd.ClipRect;
-			var sx0 = Math.Max(0, (int)MathF.Floor(clip.X));
+			var sx0 = Math.Max(bandX0, (int)MathF.Floor(clip.X));
 			var sy0 = Math.Max(bandY0, (int)MathF.Floor(clip.Y));
-			var sx1 = Math.Min(_width - 1, (int)MathF.Ceiling(clip.Right) - 1);
+			var sx1 = Math.Min(bandX1, (int)MathF.Ceiling(clip.Right) - 1);
 			var sy1 = Math.Min(bandY1, (int)MathF.Ceiling(clip.Bottom) - 1);
 			if (sx0 > sx1 || sy0 > sy1)
 				continue;
@@ -263,17 +290,32 @@ public sealed class SoftwareRasterizer
 	/// with the channel swap and written into <paramref name="dest"/>, so a window host needs no extra copy or
 	/// per-frame allocation. <paramref name="dest"/> must hold at least width*height*4 bytes.
 	/// </summary>
-	public void ResolveToBgra8(byte[] dest)
+	public void ResolveToBgra8(byte[] dest) => ResolveToBgra8(dest, 0, 0, _width - 1, _height - 1);
+
+	/// <summary>
+	/// As <see cref="ResolveToBgra8(byte[])"/>, but resolves only the inclusive pixel rectangle
+	/// [<paramref name="rx0"/>..<paramref name="rx1"/>] × [<paramref name="ry0"/>..<paramref name="ry1"/>] — the
+	/// dirty-rectangle fast path. Those pixels are written at their full-frame offsets in <paramref name="dest"/>;
+	/// the rest of <paramref name="dest"/> is left as the previous frame's bytes.
+	/// </summary>
+	public void ResolveToBgra8(byte[] dest, int rx0, int ry0, int rx1, int ry1)
 	{
 		if (dest.Length < _width * _height * 4)
 			throw new ArgumentException("destination buffer too small for the framebuffer", nameof(dest));
 
+		rx0 = Math.Max(0, rx0);
+		ry0 = Math.Max(0, ry0);
+		rx1 = Math.Min(_width - 1, rx1);
+		ry1 = Math.Min(_height - 1, ry1);
+		if (rx0 > rx1 || ry0 > ry1)
+			return;
+
 		var fb = _fb;
 		var width = _width;
-		Parallel.For(0, _height, y =>
+		Parallel.For(ry0, ry1 + 1, y =>
 		{
 			var row = y * width;
-			for (var x = 0; x < width; x++)
+			for (var x = rx0; x <= rx1; x++)
 			{
 				var c = fb[row + x];
 				var a = Saturate(c.W);

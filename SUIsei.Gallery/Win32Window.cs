@@ -210,10 +210,13 @@ internal sealed unsafe class Win32Window
 		// Nothing changed since the last present and the window is still valid: leave the last frame on screen.
 		if (!_forcePresent && key == _lastKey)
 			return;
+		var full = _forcePresent; // resize / OS repaint → repaint the whole client; otherwise just the damage rect
 		_lastKey = key;
 		_forcePresent = false;
 
-		_renderer.PresentTo(_bgra); // multithreaded raster + fused BGRA resolve straight into the DIB buffer
+		// Re-raster + resolve only the changed region into the DIB; the rest of _bgra still holds the last frame, so a
+		// (cheap) full blit of the buffer shows the correct whole frame.
+		_renderer.PresentTo(_bgra, full);
 
 		var hdc = PInvoke.GetDC(_hwnd);
 		Present(hdc);

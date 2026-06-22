@@ -37,8 +37,54 @@ public sealed class DrawListCompositor : IUICompositor
 		Walk(list, root, Matrix3x2.Identity, 1f, new Rect(0, 0, root.SurfaceSize.X, root.SurfaceSize.Y));
 		var rev = _revisions.TryGetValue(surface.Value, out var r) ? r + 1 : 1u;
 		_revisions[surface.Value] = rev;
-		_surfaces[surface.Value] = list.Build(root.IsHdrSurface, rev);
+
+		var built = list.Build(root.IsHdrSurface, rev);
+		built.Damage = _surfaces.TryGetValue(surface.Value, out var previous)
+			? ComputeDamage(previous, built, root.SurfaceSize)
+			: new Rect(0, 0, root.SurfaceSize.X, root.SurfaceSize.Y); // first build for this surface → repaint all
+		_surfaces[surface.Value] = built;
 		CompositeCount++;
+	}
+
+	// The pixel region that differs between two consecutive draw lists of the same surface — the union of the old and
+	// new positions of every vertex whose contents changed (so colour fades, moves, and resizes are all covered). A
+	// structural change (commands added/removed/reordered, or a different vertex count) or any group-opacity layer
+	// expands to the whole surface, since those can affect pixels beyond the literal vertex deltas.
+	private static Rect ComputeDamage(DrawListData previous, DrawListData current, Vector2 surfaceSize)
+	{
+		var pc = previous.Commands.Span;
+		var cc = current.Commands.Span;
+		var pv = previous.Vertices.Span;
+		var cv = current.Vertices.Span;
+
+		if (pv.Length != cv.Length || pc.Length != cc.Length || !pc.SequenceEqual(cc) || HasLayers(cc))
+			return new Rect(0, 0, surfaceSize.X, surfaceSize.Y);
+
+		float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+		var any = false;
+		for (var i = 0; i < cv.Length; i++)
+		{
+			if (cv[i].Equals(pv[i]))
+				continue;
+			Grow(ref minX, ref minY, ref maxX, ref maxY, pv[i].Position); // old position — erases where it was
+			Grow(ref minX, ref minY, ref maxX, ref maxY, cv[i].Position); // new position — paints where it is
+			any = true;
+		}
+		return any ? new Rect(minX, minY, maxX - minX, maxY - minY) : Rect.Zero;
+	}
+
+	private static void Grow(ref float minX, ref float minY, ref float maxX, ref float maxY, Vector2 p)
+	{
+		minX = MathF.Min(minX, p.X); minY = MathF.Min(minY, p.Y);
+		maxX = MathF.Max(maxX, p.X); maxY = MathF.Max(maxY, p.Y);
+	}
+
+	private static bool HasLayers(ReadOnlySpan<DrawCommand> commands)
+	{
+		foreach (ref readonly var cmd in commands)
+			if ((UIPrimKind)cmd.Tag is UIPrimKind.BeginLayer or UIPrimKind.EndLayer)
+				return true;
+		return false;
 	}
 
 	private static bool AnyDirty(Visual v)

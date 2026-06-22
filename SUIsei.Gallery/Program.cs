@@ -1,3 +1,5 @@
+using System.Numerics;
+using SUIsei;
 using SUIsei.Gallery;
 using SUIsei.Rasterizer;
 
@@ -38,7 +40,7 @@ if (args.Contains("--bench"))
 	var renderer = new GalleryRenderer(static () => { }) { Scale = scale };
 	var bgra = new byte[pixelW * pixelH * 4];
 
-	void RenderOne(int i) { renderer.Compose(pixelW, pixelH, i / 60.0); renderer.PresentTo(bgra); }
+	void RenderOne(int i) { renderer.Compose(pixelW, pixelH, i / 60.0); renderer.PresentTo(bgra, forceFull: true); }
 
 	for (var i = 0; i < 10; i++) // warm up (JIT + thread-pool spin-up + first-frame allocations)
 		RenderOne(i);
@@ -80,7 +82,7 @@ if (args.Contains("--selftest"))
 	var parallel = renderer.RenderParallelRgba(pixelW, pixelH, 0d); // parallel raster + exact resolve (RGBA)
 	renderer.Compose(pixelW, pixelH, 0d);
 	var bgra = new byte[pixelW * pixelH * 4];
-	renderer.PresentTo(bgra);                                      // parallel raster + LUT resolve (BGRA)
+	renderer.PresentTo(bgra, forceFull: true);                    // parallel raster + LUT resolve (BGRA)
 
 	int rasterDiff = 0, lutDiff = 0;
 	for (long i = 0; i < (long)pixelW * pixelH; i++)
@@ -100,6 +102,61 @@ if (args.Contains("--selftest"))
 	var ok = rasterDiff == 0 && lutDiff <= 1;
 	Console.WriteLine(ok ? "PASS" : "FAIL");
 	Environment.Exit(ok ? 0 : 1);
+}
+
+// Damage self-test: prove the dirty-rectangle present is correct. Two renderers are fed an identical input sequence
+// (a pointer sweep + a click, advancing time so hover animations run); one repaints only the compositor's damage
+// rectangle each frame, the other repaints the whole frame. Their buffers must match every frame — if the damage rect
+// ever missed a changed pixel, they would diverge.
+//   SUIsei.Gallery --selftest-damage [--size 960x720] [--scale 1] [--frames 48]
+if (args.Contains("--selftest-damage"))
+{
+	var (dipW, dipH) = TryGetArg(args, "--size", out var dsize) && TryParseSize(dsize, out var dp) ? dp : (960, 720);
+	var scale = TryGetArg(args, "--scale", out var ds) && float.TryParse(ds, out var dsc) && dsc > 0f ? dsc : 1f;
+	var frames = TryGetArg(args, "--frames", out var df) && int.TryParse(df, out var dn) ? Math.Max(2, dn) : 48;
+	var pixelW = (int)MathF.Round(dipW * scale);
+	var pixelH = (int)MathF.Round(dipH * scale);
+
+	var damaged = new GalleryRenderer(static () => { }) { Scale = scale };  // repaints only the damage rect
+	var reference = new GalleryRenderer(static () => { }) { Scale = scale }; // repaints the whole frame each time
+	var bgraDamaged = new byte[pixelW * pixelH * 4];
+	var bgraReference = new byte[pixelW * pixelH * 4];
+
+	var maxDiff = 0;
+	var partialFrames = 0;
+	double partialFraction = 0, partialMs = 0;
+	for (var i = 0; i < frames; i++)
+	{
+		// Crawl the pointer down the interactive left column (in DIPs, scaled to physical pixels) so it dwells on the
+		// buttons and checkboxes — hover state animates their backgrounds, producing real partial-damage frames — with
+		// a press/release midway. Feed the exact same events to both renderers so their content stays in lockstep.
+		var pos = new Vector2(80f * scale, i * 9f * scale);
+		damaged.QueuePointer(PointerInput.Move(pos)); reference.QueuePointer(PointerInput.Move(pos));
+		if (i == frames / 3) { damaged.QueuePointer(PointerInput.Press(pos)); reference.QueuePointer(PointerInput.Press(pos)); }
+		if (i == frames / 3 + 2) { damaged.QueuePointer(PointerInput.Release(pos)); reference.QueuePointer(PointerInput.Release(pos)); }
+
+		var t = i / 60.0;
+		damaged.Compose(pixelW, pixelH, t);
+		var region = damaged.PresentTo(bgraDamaged, forceFull: false);
+		reference.Compose(pixelW, pixelH, t);
+		reference.PresentTo(bgraReference, forceFull: true);
+
+		if (region.Width < pixelW || region.Height < pixelH)
+		{
+			partialFrames++;
+			partialFraction += region.Width * (double)region.Height / ((double)pixelW * pixelH);
+			partialMs += damaged.LastTimings.RasterMs + damaged.LastTimings.ResolveMs;
+		}
+		for (long p = 0; p < (long)pixelW * pixelH * 4; p++)
+			maxDiff = Math.Max(maxDiff, Math.Abs(bgraDamaged[p] - bgraReference[p]));
+	}
+
+	Console.WriteLine($"selftest-damage {pixelW}x{pixelH} @ {scale:0.##}x, {frames} frames");
+	Console.WriteLine($"  damaged vs full-repaint : max diff {maxDiff}  (must be 0)");
+	Console.WriteLine($"  partial-damage frames   : {partialFrames}/{frames}" +
+		(partialFrames > 0 ? $" (avg {partialFraction / partialFrames * 100:0.0}% of the frame, {partialMs / partialFrames:0.000} ms raster+resolve)" : ""));
+	Console.WriteLine(maxDiff == 0 ? "PASS" : "FAIL - dirty rect missed a changed pixel");
+	Environment.Exit(maxDiff == 0 ? 0 : 1);
 }
 
 var window = new Win32Window();
