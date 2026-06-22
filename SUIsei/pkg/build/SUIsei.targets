@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+    SUIsei NuGet consumer build targets.
+
+    Auto-imported by MSBuild when a project references the SUIsei NuGet package. Registers every *.xaml
+    file under the consuming project as <AdditionalFiles> so the bundled SUIsei.SourceGen incremental
+    generator can produce the typed control-tree and compiled x:Bind glue.
+
+    The generator DLL itself is in analyzers/dotnet/cs/ in this package; NuGet wires it as an analyzer
+    automatically. This targets file only handles the .xaml discovery.
+  -->
+
+  <ItemGroup>
+    <SUIseiXaml Include="$(MSBuildProjectDirectory)\**\*.xaml"
+               Exclude="$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
+    <AdditionalFiles Include="@(SUIseiXaml)" />
+    <UpToDateCheckInput Include="@(SUIseiXaml)" />
+  </ItemGroup>
+
+</Project>
