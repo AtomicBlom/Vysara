@@ -91,7 +91,7 @@ internal sealed class GalleryRenderer
 	}
 
 	/// <summary>Serial reference render returning straight RGBA8 — used by the headless capture so its output exactly
-	/// matches the golden software-rasterizer path (the parallel present path is byte-identical to this).</summary>
+	/// matches the golden software-rasterizer path (the parallel raster is byte-identical to this).</summary>
 	public byte[] Render(int width, int height, double seconds)
 	{
 		Compose(width, height, seconds);
@@ -100,6 +100,19 @@ internal sealed class GalleryRenderer
 		r.Clear(_clear);
 		foreach (var (_, data) in _host.DrawLists)
 			r.Render(data);
+		return r.ResolveToRgba8();
+	}
+
+	/// <summary>For the self-test: the parallel raster resolved through the <em>exact</em> (non-LUT) encode, so a diff
+	/// against <see cref="Render"/> isolates raster correctness from the present path's resolve-LUT approximation.</summary>
+	public byte[] RenderParallelRgba(int width, int height, double seconds)
+	{
+		Compose(width, height, seconds);
+		var r = _rasterizer!;
+		BindImages(r);
+		r.Clear(_clear);
+		foreach (var (_, data) in _host.DrawLists)
+			r.RenderParallel(data);
 		return r.ResolveToRgba8();
 	}
 

@@ -63,8 +63,28 @@ public sealed class SoftwareRasterizer
 	/// <summary>Bind a texture to a command <c>TextureIndex</c> (e.g. index 1 → the font atlas page for glyph runs).</summary>
 	public void BindTexture(int index, Texture texture) => _textures[index] = texture;
 
-	/// <summary>Fill the whole framebuffer with one linear-premultiplied colour (the cleared backbuffer).</summary>
-	public void Clear(Vector4 linearPremultiplied) => Array.Fill(_fb, linearPremultiplied);
+	/// <summary>Fill the whole framebuffer with one linear-premultiplied colour (the cleared backbuffer). Chunked
+	/// across threads for large surfaces — a constant fill, so the result is identical to a serial fill.</summary>
+	public void Clear(Vector4 linearPremultiplied)
+	{
+		var fb = _fb;
+		var n = fb.Length;
+		if (n < 1 << 18) // small (≲512²) surfaces aren't worth the parallel overhead
+		{
+			Array.Fill(fb, linearPremultiplied);
+			return;
+		}
+
+		var workers = Math.Min(Environment.ProcessorCount, n >> 16); // ≥64k elements per worker
+		var chunk = (n + workers - 1) / workers;
+		Parallel.For(0, workers, w =>
+		{
+			var start = w * chunk;
+			var count = Math.Min(chunk, n - start);
+			if (count > 0)
+				Array.Fill(fb, linearPremultiplied, start, count);
+		});
+	}
 
 	/// <summary>Rasterize one frame's draw list onto the framebuffer (over whatever <see cref="Clear"/> left).</summary>
 	/// <param name="paperWhite">HDR paper-white linear scale (ui.slang's <c>pc.paperWhite</c>); applied only when the
@@ -250,9 +270,9 @@ public sealed class SoftwareRasterizer
 				var a = Saturate(c.W);
 				var inv = a > 1e-6f ? 1f / a : 0f; // un-premultiply
 				var o = (row + x) * 4;
-				dest[o + 0] = ToSrgbByte(c.Z * inv); // B
-				dest[o + 1] = ToSrgbByte(c.Y * inv); // G
-				dest[o + 2] = ToSrgbByte(c.X * inv); // R
+				dest[o + 0] = SrgbByte(c.Z * inv); // B
+				dest[o + 1] = SrgbByte(c.Y * inv); // G
+				dest[o + 2] = SrgbByte(c.X * inv); // R
 				dest[o + 3] = (byte)MathF.Round(a * 255f);
 			}
 		});
@@ -425,6 +445,22 @@ public sealed class SoftwareRasterizer
 		var s = c <= 0.0031308f ? c * 12.92f : 1.055f * MathF.Pow(c, 1f / 2.4f) - 0.055f;
 		return (byte)MathF.Round(Saturate(s) * 255f);
 	}
+
+	// 16-bit linear → sRGB byte table: the per-pixel sRGB encode (a MathF.Pow) replaced by a 64 KB lookup. Built once
+	// from the exact ToSrgbByte, so a lookup at round(linear * 65535) reproduces it. 16 bits keeps the quantization
+	// error below the steepest (near-black) byte step, so it stays byte-identical — the gallery's --selftest asserts
+	// this against the serial ResolveToRgba8, which keeps using the exact encode.
+	private static readonly byte[] SrgbLut = BuildSrgbLut();
+
+	private static byte[] BuildSrgbLut()
+	{
+		var lut = new byte[65536];
+		for (var i = 0; i < lut.Length; i++)
+			lut[i] = ToSrgbByte(i / 65535f);
+		return lut;
+	}
+
+	private static byte SrgbByte(float linear) => SrgbLut[(int)(Saturate(linear) * 65535f + 0.5f)];
 
 	private static float Min3(float a, float b, float c) => MathF.Min(a, MathF.Min(b, c));
 	private static float Max3(float a, float b, float c) => MathF.Max(a, MathF.Max(b, c));

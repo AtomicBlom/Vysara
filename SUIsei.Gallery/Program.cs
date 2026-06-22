@@ -63,7 +63,10 @@ if (args.Contains("--bench"))
 	return;
 }
 
-// Self-test: prove the parallel present path is byte-identical to the serial software-rasterizer reference.
+// Self-test: two separate guarantees. (1) The parallel raster must be byte-identical to the serial software-
+// rasterizer reference (resolved through the same exact encode) — that's where a tiling bug would show. (2) The
+// present path's resolve LUT is a bounded ≤1-LSB approximation of the exact sRGB encode (a uniform LUT cannot be
+// bit-identical to MathF.Pow at the 255 rounding boundaries).
 //   SUIsei.Gallery --selftest [--size 960x720] [--scale 1]
 if (args.Contains("--selftest"))
 {
@@ -73,23 +76,30 @@ if (args.Contains("--selftest"))
 	var pixelH = (int)MathF.Round(dipH * scale);
 
 	var renderer = new GalleryRenderer(static () => { }) { Scale = scale };
-	var rgba = renderer.Render(pixelW, pixelH, 0d);          // serial reference (RGBA)
+	var serial = renderer.Render(pixelW, pixelH, 0d);              // serial raster + exact resolve (RGBA)
+	var parallel = renderer.RenderParallelRgba(pixelW, pixelH, 0d); // parallel raster + exact resolve (RGBA)
 	renderer.Compose(pixelW, pixelH, 0d);
 	var bgra = new byte[pixelW * pixelH * 4];
-	renderer.PresentTo(bgra);                                // parallel present (BGRA)
+	renderer.PresentTo(bgra);                                      // parallel raster + LUT resolve (BGRA)
 
-	var maxDiff = 0;
+	int rasterDiff = 0, lutDiff = 0;
 	for (long i = 0; i < (long)pixelW * pixelH; i++)
 	{
 		var o = i * 4;
-		maxDiff = Math.Max(maxDiff, Math.Abs(rgba[o + 0] - bgra[o + 2])); // R vs B
-		maxDiff = Math.Max(maxDiff, Math.Abs(rgba[o + 1] - bgra[o + 1])); // G
-		maxDiff = Math.Max(maxDiff, Math.Abs(rgba[o + 2] - bgra[o + 0])); // B vs R
-		maxDiff = Math.Max(maxDiff, Math.Abs(rgba[o + 3] - bgra[o + 3])); // A
+		for (var ch = 0; ch < 4; ch++)
+			rasterDiff = Math.Max(rasterDiff, Math.Abs(serial[o + ch] - parallel[o + ch]));
+		lutDiff = Math.Max(lutDiff, Math.Abs(parallel[o + 0] - bgra[o + 2])); // R vs B
+		lutDiff = Math.Max(lutDiff, Math.Abs(parallel[o + 1] - bgra[o + 1])); // G
+		lutDiff = Math.Max(lutDiff, Math.Abs(parallel[o + 2] - bgra[o + 0])); // B vs R
+		lutDiff = Math.Max(lutDiff, Math.Abs(parallel[o + 3] - bgra[o + 3])); // A
 	}
-	Console.WriteLine($"selftest {pixelW}x{pixelH} @ {scale:0.##}x: max channel diff (parallel vs serial) = {maxDiff}");
-	Console.WriteLine(maxDiff == 0 ? "PASS - byte-identical" : "FAIL - parallel path diverges from the serial oracle");
-	Environment.Exit(maxDiff == 0 ? 0 : 1);
+
+	Console.WriteLine($"selftest {pixelW}x{pixelH} @ {scale:0.##}x");
+	Console.WriteLine($"  raster (parallel vs serial, exact resolve) : max diff {rasterDiff}  (must be 0)");
+	Console.WriteLine($"  resolve LUT (vs exact sRGB encode)         : max diff {lutDiff}  (must be <= 1)");
+	var ok = rasterDiff == 0 && lutDiff <= 1;
+	Console.WriteLine(ok ? "PASS" : "FAIL");
+	Environment.Exit(ok ? 0 : 1);
 }
 
 var window = new Win32Window();
