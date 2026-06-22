@@ -12,14 +12,22 @@ namespace SUIsei.Controls;
 [ContentProperty(Name = nameof(Content))]
 public sealed class ScrollViewer : FrameworkElement
 {
-	private static readonly HdrColor ThumbColor = HdrColor.FromRgb(110, 116, 132);
+	// The thumb brightens and widens through rest → hover → grabbed, so it visibly reacts to the pointer.
+	private static readonly HdrColor ThumbRest = HdrColor.FromRgb(86, 92, 108);
+	private static readonly HdrColor ThumbHover = HdrColor.FromRgb(124, 132, 152);
+	private static readonly HdrColor ThumbActive = HdrColor.FromRgb(160, 168, 190);
 	private const float ThumbThickness = 8f;
+	private const float ThumbThicknessActive = 11f;
 	private const float ThumbMinLength = 28f;
 	private const float ThumbMargin = 2f;
 
-	private readonly Border _vThumb = new() { Background = ThumbColor, CornerRadius = ThumbThickness / 2f };
+	private readonly Border _vThumb = new() { Background = ThumbRest, CornerRadius = ThumbThickness / 2f };
+	private readonly ColorAnimation _thumbFade;
+	private readonly Storyboard _thumbFadeStory;
+	private HdrColor _thumbColor = ThumbRest; // the thumb's last target colour (the From of the next transition)
 	private float _thumbHeight;
 	private float _thumbTravel;
+	private bool _thumbOver;
 	private bool _draggingThumb;
 	private float _dragStartPointerY;
 	private float _dragStartOffset;
@@ -31,8 +39,17 @@ public sealed class ScrollViewer : FrameworkElement
 		AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged);
 		AddHandler(KeyDownEvent, OnKeyDown);
 
-		// The thumb is a grab handle: a press starts a drag (capturing the pointer so it tracks past the thumb's
-		// edges), and the drag maps pointer travel onto the scroll range.
+		_thumbFade = new ColorAnimation
+		{
+			Duration = TimeSpan.FromMilliseconds(120), FillBehavior = FillBehavior.HoldEnd,
+			Apply = _vThumb.SetAnimatedFill, Release = _vThumb.ClearAnimatedFill,
+		};
+		_thumbFadeStory = new Storyboard { Children = { _thumbFade } };
+
+		// The thumb is a grab handle: hovering/grabbing it lights it up, a press starts a drag (capturing the pointer
+		// so it tracks past the thumb's edges), and the drag maps pointer travel onto the scroll range.
+		_vThumb.AddHandler(PointerEnteredEvent, OnThumbEntered);
+		_vThumb.AddHandler(PointerExitedEvent, OnThumbExited);
 		_vThumb.AddHandler(PointerPressedEvent, OnThumbPressed);
 		_vThumb.AddHandler(PointerMovedEvent, OnThumbMoved);
 		_vThumb.AddHandler(PointerReleasedEvent, OnThumbReleased);
@@ -70,6 +87,9 @@ public sealed class ScrollViewer : FrameworkElement
 
 	public float ScrollableHeight => MathF.Max(0f, ExtentHeight - ViewportHeight);
 	public float ScrollableWidth => MathF.Max(0f, ExtentWidth - ViewportWidth);
+
+	/// <summary>The thumb's current interaction-state target colour (test seam): rest, hover, or grabbed.</summary>
+	internal HdrColor ThumbStateColor => _thumbColor;
 
 	public void ScrollToVerticalOffset(float offset) => SetVerticalOffset(offset);
 
@@ -142,8 +162,9 @@ public sealed class ScrollViewer : FrameworkElement
 			_thumbHeight = Math.Clamp(ViewportHeight * (ViewportHeight / ExtentHeight), ThumbMinLength, ViewportHeight);
 			_thumbTravel = ViewportHeight - _thumbHeight;
 			var y = _thumbTravel > 0f ? VerticalOffset / ScrollableHeight * _thumbTravel : 0f;
+			var thickness = _thumbOver || _draggingThumb ? ThumbThicknessActive : ThumbThickness; // widen while engaged
 			_vThumb.Visibility = Visibility.Visible;
-			_vThumb.Arrange(new Rect(finalSize.Width - ThumbThickness - ThumbMargin, y, ThumbThickness, _thumbHeight));
+			_vThumb.Arrange(new Rect(finalSize.Width - thickness - ThumbMargin, y, thickness, _thumbHeight));
 		}
 		else
 		{
@@ -151,6 +172,37 @@ public sealed class ScrollViewer : FrameworkElement
 			_vThumb.Visibility = Visibility.Collapsed;
 			_vThumb.Arrange(new Rect(finalSize.Width, 0f, 0f, 0f));
 		}
+	}
+
+	// Brighten/dim the thumb toward its current interaction state. Grabbed wins over hover wins over rest; animated
+	// through the host clock when attached, snapped when not (so the state is still observable headlessly).
+	private void UpdateThumbVisual()
+	{
+		var target = _draggingThumb ? ThumbActive : _thumbOver ? ThumbHover : ThumbRest;
+		if (AttachedRoot?.Clock is { } clock)
+		{
+			_thumbFade.From = _thumbColor;
+			_thumbFade.To = target;
+			clock.Begin(_thumbFadeStory);
+		}
+		else
+		{
+			_vThumb.SetAnimatedFill(target);
+		}
+		_thumbColor = target;
+		InvalidateArrange(); // the engaged thumb is wider
+	}
+
+	private void OnThumbEntered(object sender, RoutedEventArgs e)
+	{
+		_thumbOver = true;
+		UpdateThumbVisual();
+	}
+
+	private void OnThumbExited(object sender, RoutedEventArgs e)
+	{
+		_thumbOver = false;
+		UpdateThumbVisual();
 	}
 
 	private void OnThumbPressed(object sender, RoutedEventArgs e)
@@ -161,6 +213,7 @@ public sealed class ScrollViewer : FrameworkElement
 		_dragStartPointerY = p.Pointer.Position.Y / Scale;
 		_dragStartOffset = VerticalOffset;
 		_vThumb.CapturePointer(0);
+		UpdateThumbVisual();
 		e.Handled = true;
 	}
 
@@ -180,10 +233,15 @@ public sealed class ScrollViewer : FrameworkElement
 			return;
 		_draggingThumb = false;
 		_vThumb.ReleasePointerCapture(0);
+		UpdateThumbVisual();
 		e.Handled = true;
 	}
 
-	private void OnThumbCaptureLost(object sender, RoutedEventArgs e) => _draggingThumb = false;
+	private void OnThumbCaptureLost(object sender, RoutedEventArgs e)
+	{
+		_draggingThumb = false;
+		UpdateThumbVisual();
+	}
 
 	private void OnPointerWheelChanged(object sender, RoutedEventArgs e)
 	{

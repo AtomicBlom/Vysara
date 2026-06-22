@@ -103,4 +103,38 @@ public sealed class ScrollViewerTests
 		host.Tick(0.016, 0f, surface);
 		viewer.VerticalOffset.ShouldBe(afterRelease);
 	}
+
+	[Test]
+	public void Thumb_brightens_on_hover_and_while_grabbed()
+	{
+		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
+		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
+		var host = new UIHost();
+		host.CreateRoot(UIPlacement.Overlay(0, 1f)).Root.Content = viewer;
+		var surface = new Vector2(80f, 100f);
+		host.Tick(0.016, 0f, surface);
+
+		var rest = viewer.ThumbStateColor;
+
+		// Hover the thumb → brighter.
+		host.QueuePointer(PointerInput.Move(new Vector2(74f, 8f)));
+		host.Tick(0.016, 0f, surface);
+		var hover = viewer.ThumbStateColor;
+		hover.R.ShouldBeGreaterThan(rest.R);
+
+		// Grab it → brighter still.
+		host.QueuePointer(PointerInput.Press(new Vector2(74f, 8f)));
+		host.Tick(0.016, 0f, surface);
+		viewer.ThumbStateColor.R.ShouldBeGreaterThan(hover.R);
+
+		// Release while still over → back to the hover level.
+		host.QueuePointer(PointerInput.Release(new Vector2(74f, 8f)));
+		host.Tick(0.016, 0f, surface);
+		viewer.ThumbStateColor.R.ShouldBe(hover.R);
+
+		// Move away → back to rest.
+		host.QueuePointer(PointerInput.Move(new Vector2(10f, 50f)));
+		host.Tick(0.016, 0f, surface);
+		viewer.ThumbStateColor.R.ShouldBe(rest.R);
+	}
 }
