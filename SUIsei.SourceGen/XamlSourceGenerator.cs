@@ -80,8 +80,19 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 			.Where(static a => a.Path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
 			.Select(static (a, ct) => new XamlInput(a.Path, a.GetText(ct)?.ToString() ?? ""));
 
-		var results = inputs.Combine(context.CompilationProvider)
-			.Select(static (pair, ct) => Generate(pair.Left, pair.Right, ct))
+		// Narrow: instead of combining with the raw Compilation (a new reference on every keystroke),
+		// compute a fingerprint of the public type surface that matters to the generator — the current
+		// assembly's public types (page classes, ViewModels) plus the SUIsei control types. Equal
+		// fingerprint → the expensive Generate call is skipped even if the compilation reference changed.
+		// Body-only edits, whitespace, and comment changes never affect the fingerprint.
+		var results = inputs
+			.Combine(context.CompilationProvider)
+			.Select(static (pair, ct) =>
+			{
+				var (input, compilation) = pair;
+				return new CompilationSnapshot(input, compilation, ComputeFingerprint(compilation, ct));
+			})
+			.Select(static (snap, ct) => Generate(snap.Input, snap.Compilation, ct))
 			.WithTrackingName(TrackName);
 
 		context.RegisterSourceOutput(results, static (spc, result) =>
@@ -95,6 +106,16 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 
 	private readonly record struct XamlInput(string Path, string Text);
 	private readonly record struct GeneratedSource(string HintName, string Text);
+
+	// Combines the XAML input with the compilation but compares equal only when both the XAML text
+	// AND the public type surface (fingerprint) are unchanged — ignores the Compilation reference itself,
+	// which is a new object on every keystroke. This breaks the "incremental in name only" pattern that
+	// ran Generate on every C# edit even when no relevant type had changed.
+	private readonly record struct CompilationSnapshot(XamlInput Input, Compilation Compilation, string Fingerprint)
+	{
+		public bool Equals(CompilationSnapshot other) => Input == other.Input && Fingerprint == other.Fingerprint;
+		public override int GetHashCode() => (Input.GetHashCode() * 397) ^ Fingerprint.GetHashCode();
+	}
 
 	private readonly record struct DiagnosticInfo(DiagnosticDescriptor Descriptor, string FilePath, TextSpan Span, LinePositionSpan LineSpan, EquatableArray<string> Args)
 	{
@@ -1573,5 +1594,62 @@ public sealed class XamlSourceGenerator : IIncrementalGenerator
 		if (lp.Line < text.Lines.Count)
 			start = Math.Min(text.Lines[lp.Line].Start + lp.Character, text.Length);
 		return new DiagnosticInfo(descriptor, path, new TextSpan(start, 0), new LinePositionSpan(lp, lp), args);
+	}
+
+	// Fingerprint of the public type surface the generator depends on. Excludes method bodies,
+	// private members, and non-SUIsei external types, so only structural changes (new property,
+	// renamed type, added enum member) invalidate the incremental cache.
+	private static string ComputeFingerprint(Compilation c, CancellationToken ct)
+	{
+		var sb = new StringBuilder();
+
+		// Current assembly: page classes, ViewModels, code-behind types. Changes here affect
+		// {x:Bind} path resolution and event-handler signature checks.
+		foreach (var type in GetPublicTypes(c.Assembly.GlobalNamespace, ct).OrderBy(static t => t.ToDisplayString(), StringComparer.Ordinal))
+		{
+			ct.ThrowIfCancellationRequested();
+			sb.Append(type.ToDisplayString()).Append('{');
+			foreach (var m in type.GetMembers()
+				.Where(static m => m.DeclaredAccessibility == Accessibility.Public)
+				.OrderBy(static m => m.Name, StringComparer.Ordinal))
+				sb.Append(m.Name).Append(';');
+			sb.AppendLine("}");
+		}
+
+		// SUIsei assemblies: control types and their properties, used by ResolveType + FindProperty.
+		foreach (var type in GetSuiseiTypes(c, ct).OrderBy(static t => t.ToDisplayString(), StringComparer.Ordinal))
+		{
+			ct.ThrowIfCancellationRequested();
+			sb.Append(type.ToDisplayString()).Append('{');
+			foreach (var m in type.GetMembers()
+				.Where(static m => m.DeclaredAccessibility == Accessibility.Public)
+				.OrderBy(static m => m.Name, StringComparer.Ordinal))
+				sb.Append(m.Name).Append(';');
+			sb.AppendLine("}");
+		}
+
+		return sb.ToString();
+	}
+
+	private static IEnumerable<INamedTypeSymbol> GetPublicTypes(INamespaceOrTypeSymbol root, CancellationToken ct)
+	{
+		ct.ThrowIfCancellationRequested();
+		if (root is INamedTypeSymbol ts && ts.DeclaredAccessibility == Accessibility.Public)
+			yield return ts;
+		foreach (var member in root.GetMembers())
+			if (member is INamespaceOrTypeSymbol child)
+				foreach (var t in GetPublicTypes(child, ct))
+					yield return t;
+	}
+
+	private static IEnumerable<INamedTypeSymbol> GetSuiseiTypes(Compilation c, CancellationToken ct)
+	{
+		foreach (var module in c.Assembly.Modules)
+			foreach (var asm in module.ReferencedAssemblySymbols)
+			{
+				if (!asm.Name.StartsWith("SUIsei", StringComparison.Ordinal)) continue;
+				foreach (var t in GetPublicTypes(asm.GlobalNamespace, ct))
+					yield return t;
+			}
 	}
 }
