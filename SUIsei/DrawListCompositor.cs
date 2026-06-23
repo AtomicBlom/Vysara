@@ -97,7 +97,7 @@ public sealed class DrawListCompositor : IUICompositor
 		return false;
 	}
 
-	/// <summary>The last <see cref="DrawListData"/> produced for <paramref name="surface"/> (handed to <see cref="FrameInputs.DrawLists"/>).</summary>
+	/// <summary>The last <see cref="DrawListData"/> produced for <paramref name="surface"/> (handed to <see cref="UIHost.DrawLists"/>).</summary>
 	public DrawListData LastDraw(DrawListId surface) => _surfaces.TryGetValue(surface.Value, out var d) ? d : DrawListData.Empty;
 
 	private void Walk(UIDrawList list, Visual v, Matrix3x2 parent, float opacity, Rect clip)

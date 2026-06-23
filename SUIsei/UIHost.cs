@@ -45,7 +45,7 @@ public sealed class UIHost
 	/// <summary>The roots this host owns.</summary>
 	public IReadOnlyList<UIView> Views => _views;
 
-	/// <summary>The last <see cref="Render"/> output — the draw lists handed to <see cref="FrameInputs.DrawLists"/>.</summary>
+	/// <summary>The last <see cref="Render"/> output — the draw lists handed to the Loom backend.</summary>
 	public IReadOnlyList<(DrawListId Id, DrawListData Data)> DrawLists => _drawLists;
 
 	/// <summary>Add a root at <paramref name="placement"/>; returns the handle to keep. The first overlay gets
