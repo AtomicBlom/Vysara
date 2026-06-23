@@ -23,6 +23,7 @@
     <RepositoryType>git</RepositoryType>
     <Description>Retained-mode WinUI-like control tree and compositor for .NET. NativeAOT-clean, XAML-driven, with an incremental Roslyn source generator bundled in this package.</Description>
     <PackageTags>ui;xaml;winui;gamedev;dotnet;naot</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -62,6 +63,7 @@
     <!-- Consumer-facing build targets: registers *.xaml as AdditionalFiles so the bundled generator sees them. -->
     <None Include="pkg\build\SUIsei.targets"
           Pack="true" PackagePath="build" />
+    <None Include="..\README.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>
 
 </Project>
