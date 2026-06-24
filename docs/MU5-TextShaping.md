@@ -83,3 +83,21 @@ allocation-aware (the compositor caches draw lists, so per-relayout shaping is a
 
 P2 is the zero-regret increment and can land first under either backend. P1 is the gating change and should be
 confirmed before starting. P0 is cheap and answers the native-dependency question with evidence.
+
+## P0 result (spike run — throwaway, outside the repo)
+
+`HarfBuzzSharp` 14.2.0 + `HarfBuzzSharp.NativeAssets.Win32` restored and **ran natively on this `win-arm64` box
+under .NET 10** (process arch Arm64) — the native dependency is viable here. Shaping `CascadiaCode.ttf` surfaced a
+detail that sharpens P1:
+
+- **Cascadia's programming ligatures are `calt` 1-char → 1-contextual-glyph substitutions, not many-to-one `liga`.**
+  `"x => y"` shaped to six glyphs (`425, 861, 1425, 1431, 861, 426`): the `=` and `>` each became a *distinct
+  contextual glyph* (`1425`, `1431`) that together draw the `=>` shape. `"!="`/`"=="` likewise map to contextual
+  forms (`812`, `1774`, `1377`). Plain `"office"` substitutes nothing.
+- **Consequence:** glyph **count** is preserved (so caret/cluster mapping stays simple — one glyph per source char),
+  **but** the rendered glyph ids (`1425`, `1431`, `812`, `1774`, …) are reachable only through `GSUB`, never through
+  `cmap`. So P1 is mandatory *and* the baker must enumerate **GSUB-reachable** glyphs (walk the lookups, or bake the
+  full glyf/CFF glyph set), not just the `cmap` codepoint set, or ligature glyphs will be missing from the atlas.
+
+This reinforces the recommendation (HarfBuzzSharp; hand-rolling `calt` contextual chains is not worth it) and pins
+P1's real work: glyph-id keying **plus** GSUB-reachable glyph coverage in the baker.
