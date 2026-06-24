@@ -153,7 +153,8 @@ partial class XamlSourceGenerator
 	}
 
 	// Parse "x:Bind path[, Mode=OneTime|OneWay|TwoWay][, FallbackValue=X][, TargetNullValue=Y]".
-	// Paths are limited to one or two segments (e.g. Property or Object.Property); deeper nesting is not supported.
+	// The path is a dotted member chain of any depth (e.g. Property, Object.Property, A.B.C.D); every reference-typed
+	// intermediate is read null-conditionally so a null anywhere up the chain falls back rather than throwing.
 	private static bool TryParseXBind(string inner, out string[] path, out bool oneWay, out bool twoWay, out string? fallbackValue, out string? targetNullValue)
 	{
 		path = [];
@@ -175,8 +176,6 @@ partial class XamlSourceGenerator
 			if (!IsIdentifier(s))
 				return false;
 		}
-		if (segs.Length > 2)
-			return false;
 
 		for (var i = 1; i < parts.Length; i++)
 		{

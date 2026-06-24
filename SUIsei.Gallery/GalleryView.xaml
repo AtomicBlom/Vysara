@@ -11,6 +11,20 @@
         Background="#181A20">
 	<ScrollViewer>
 		<StackPanel Orientation="Vertical" Margin="28">
+			<!-- Menu bar: top-level items each open a MenuFlyout of MenuFlyoutItems -->
+			<MenuBar Margin="0,0,0,16">
+				<MenuBarItem Title="File">
+					<MenuFlyoutItem Text="New" Click="OnMenuReset" />
+					<MenuFlyoutItem Text="Quit" Click="OnMenuQuit" />
+				</MenuBarItem>
+				<MenuBarItem Title="Edit">
+					<MenuFlyoutItem Text="Increment counter" Click="OnMenuIncrement" />
+				</MenuBarItem>
+				<MenuBarItem Title="View">
+					<MenuFlyoutItem Text="Reset counter" Click="OnMenuReset" />
+				</MenuBarItem>
+			</MenuBar>
+
 			<TextBlock Text="SUIsei Control Gallery" FontSize="30" Foreground="#ECEFF6" />
 			<TextBlock Text="Authored in XAML, software-rasterized to a Win32 window - no GPU."
 			           FontSize="14" Foreground="#969CAA" Margin="0,2,0,18" />
@@ -39,6 +53,18 @@
 						<ToggleButton Content="Italic" Margin="0,0,8,0" />
 						<ToggleButton Content="Underline" />
 					</StackPanel>
+				</StackPanel>
+			</Border>
+
+			<!-- Sliders + nested x:Bind: the first slider is TwoWay-bound to Render.Bloom.Intensity (a three-segment
+			     path), and the label above it OneWay-binds the formatted echo Render.Bloom.IntensityLabel -->
+			<TextBlock Text="Sliders &amp; nested x:Bind" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
+			<Border Background="#22252E" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,18">
+				<StackPanel Orientation="Vertical">
+					<TextBlock Text="{x:Bind Render.Bloom.IntensityLabel, Mode=OneWay}" FontSize="15" Foreground="#ECEFF6" Margin="0,0,0,6" />
+					<Slider Minimum="0" Maximum="1" StepFrequency="0.01" Value="{x:Bind Render.Bloom.Intensity, Mode=TwoWay}" Margin="0,0,0,14" />
+					<TextBlock Text="Exposure" FontSize="13" Foreground="#969CAA" Margin="0,0,0,4" />
+					<Slider Minimum="0" Maximum="100" Value="40" />
 				</StackPanel>
 			</Border>
 

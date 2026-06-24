@@ -33,6 +33,10 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 	/// <summary>x:Bind source bound to the "Greet" button's <see cref="ButtonBase.Command"/>.</summary>
 	public ICommand GreetCommand { get; }
 
+	/// <summary>Nested-bind demo root: <c>{x:Bind Render.Bloom.Intensity}</c> is a three-segment path, so the slider
+	/// and its label exercise deep x:Bind (read, TwoWay write-back, and INPC tracking through each level).</summary>
+	public RenderSettings Render { get; } = new();
+
 	/// <summary>Two-way bound to the <see cref="TextBox"/>; drives <see cref="Greeting"/>.</summary>
 	public string Name
 	{
@@ -59,6 +63,12 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 		_clicks = 0;
 		ClickCounter.Text = "Clicks: 0";
 	}
+
+	private void OnMenuIncrement(object sender, RoutedEventArgs e) => Increment();
+
+	private void OnMenuReset(object sender, RoutedEventArgs e) => OnReset(sender, e);
+
+	private void OnMenuQuit(object sender, RoutedEventArgs e) => Quit?.Invoke();
 
 	private void OnShowMenu(object sender, RoutedEventArgs e)
 	{
@@ -98,5 +108,37 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 			}
 		}
 		return ImageSource.FromRgba8(width, height, pixels);
+	}
+
+	/// <summary>The middle level of the nested-bind demo path <c>Render.Bloom.Intensity</c> — a plain holder of the
+	/// (INPC) bloom settings.</summary>
+	internal sealed class RenderSettings
+	{
+		public BloomSettings Bloom { get; } = new();
+	}
+
+	/// <summary>The leaf level: an INPC bloom setting a slider drives (TwoWay) and a label echoes (OneWay). The
+	/// setter raises both the value and the formatted label so each bound target refreshes.</summary>
+	internal sealed class BloomSettings : INotifyPropertyChanged
+	{
+		public double Intensity
+		{
+			get;
+			set
+			{
+				if (field.Equals(value))
+					return;
+				field = value;
+				OnChanged(nameof(Intensity));
+				OnChanged(nameof(IntensityLabel));
+			}
+		} = 0.6;
+
+		/// <summary>A formatted echo of <see cref="Intensity"/> for a OneWay text binding.</summary>
+		public string IntensityLabel => $"Bloom intensity: {Intensity:0.00}";
+
+		public event PropertyChangedEventHandler? PropertyChanged;
+
+		private void OnChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 	}
 }

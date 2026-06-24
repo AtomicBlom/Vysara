@@ -86,25 +86,29 @@ partial class XamlSourceGenerator
 			var b = tracked[i];
 			if (!b.TwoWay)
 				continue;
-			// Build the write-back: _root.Path[0].Path[1]... = _root.TargetVar.TargetProp
-			var lhs = WriteBackLhs(b);
+			var writeBack = WriteBack(b, $"_root.{b.TargetVar}.{b.TargetProp}");
 			sb.AppendLine($"\tprivate void On_{i}_ControlChanged(object? sender, System.EventArgs e)");
 			sb.AppendLine("\t{");
 			sb.AppendLine($"\t\tif (_updating_{i}) return;");
 			sb.AppendLine($"\t\t_updating_{i} = true;");
 			sb.AppendLine("\t\ttry");
-			sb.AppendLine($"\t\t{{ {lhs} = _root.{b.TargetVar}.{b.TargetProp}; }}");
+			sb.AppendLine("\t\t{");
+			sb.AppendLine($"\t\t\t{writeBack}");
+			sb.AppendLine("\t\t}");
 			sb.AppendLine($"\t\tfinally {{ _updating_{i} = false; }}");
 			sb.AppendLine("\t}");
 		}
 
-		// Subscribe to each distinct INPC source.
+		// Subscribe to each distinct INPC source: the page (_root) plus every intermediate object up each path
+		// (the owner of each non-root segment), so a change anywhere along the chain rewires + refreshes. Each owner
+		// is read null-conditionally through its reference-typed parents, so a null intermediate yields a null source
+		// that Track() simply skips rather than throwing.
 		var trackExprs = new List<string> { "_root" };
 		foreach (var b in tracked)
 		{
-			if (b.Path.Length == 2)
+			for (var depth = 1; depth < b.Path.Length; depth++)
 			{
-				var owner = "_root." + b.Path[0];
+				var owner = OwnerExpr(b, depth);
 				if (!trackExprs.Contains(owner))
 					trackExprs.Add(owner);
 			}
@@ -129,12 +133,13 @@ partial class XamlSourceGenerator
 		sb.AppendLine("\t}");
 		sb.AppendLine();
 
-		// INPC change handler.
+		// INPC change handler. A non-leaf segment anywhere up any path is an "intermediate": a change to it swaps a
+		// sub-object, so we rewire (Subscribe) and refresh everything rather than updating a single leaf.
 		var intermediateNames = new HashSet<string>();
 		foreach (var b in tracked)
 		{
-			if (b.Path.Length == 2)
-				intermediateNames.Add(b.Path[0]);
+			for (var i = 0; i < b.Path.Length - 1; i++)
+				intermediateNames.Add(b.Path[i]);
 		}
 		var leafUpdates = new Dictionary<string, List<int>>();
 		for (var i = 0; i < tracked.Count; i++)
@@ -210,22 +215,43 @@ partial class XamlSourceGenerator
 		return read;
 	}
 
-	// Build the left-hand-side write-back expression for TwoWay: _root.A.B... (up to the leaf's owner).
-	private static string WriteBackLhs(Bind b)
+	// The control→source assignment statement for a TwoWay reverse wire. A single-segment path assigns directly.
+	// A deeper path writes through the leaf's owner; when that owner is reference-typed the chain to it is read
+	// null-conditionally and the write guarded (a null intermediate becomes a no-op rather than an NRE), whereas a
+	// value-typed owner is assigned in place (binding a local copy would not write back to the source).
+	private static string WriteBack(Bind b, string rhs)
 	{
 		if (b.Path.Length == 1)
-			return $"_root.{b.Path[0]}";
+			return $"_root.{b.Path[0]} = {rhs};";
+
+		var leaf = b.Path[b.Path.Length - 1];
+		if (b.ResultTypes[b.Path.Length - 2].IsReferenceType)
+			return $"if ({OwnerExpr(b, b.Path.Length - 1)} is {{ }} __o) __o.{leaf} = {rhs};";
+
 		var sb = new StringBuilder("_root");
-		for (var i = 0; i < b.Path.Length - 1; i++)
+		for (var i = 0; i < b.Path.Length; i++)
 			sb.Append('.').Append(b.Path[i]);
-		sb.Append('.').Append(b.Path[b.Path.Length - 1]);
-		return sb.ToString();
+		return $"{sb} = {rhs};";
 	}
 
 	private static string ReadExpr(Bind b)
 	{
 		var sb = new StringBuilder("_root");
 		for (var i = 0; i < b.Path.Length; i++)
+		{
+			var acc = i == 0 ? "." : (b.ResultTypes[i - 1].IsReferenceType ? "?." : ".");
+			sb.Append(acc).Append(b.Path[i]);
+		}
+		return sb.ToString();
+	}
+
+	// The object that owns segment <paramref name="depth"/> of the path: <c>_root</c> joined with the first
+	// <paramref name="depth"/> segments, each reference-typed parent read null-conditionally so the expression is
+	// safe to evaluate even when an intermediate is null (the subscription side then simply skips a null source).
+	private static string OwnerExpr(Bind b, int depth)
+	{
+		var sb = new StringBuilder("_root");
+		for (var i = 0; i < depth; i++)
 		{
 			var acc = i == 0 ? "." : (b.ResultTypes[i - 1].IsReferenceType ? "?." : ".");
 			sb.Append(acc).Append(b.Path[i]);

@@ -17,6 +17,10 @@ public sealed class MenuFlyout
 
 	public bool IsOpen => _root is not null;
 
+	/// <summary>Raised when the menu closes (item invoke, light dismiss, or an explicit <see cref="Hide"/>) — lets an
+	/// owner such as <see cref="MenuBar"/> drop its open-item bookkeeping.</summary>
+	public event Action? Closed;
+
 	/// <summary>Open the menu anchored under <paramref name="target"/> (which must be attached to a live root).</summary>
 	public void ShowAt(UIElement target)
 	{
@@ -62,6 +66,7 @@ public sealed class MenuFlyout
 		_root = null;
 		_menu = null;
 		_dismissLayer = null;
+		Closed?.Invoke();
 	}
 
 	private void OnItemClick(object sender, RoutedEventArgs e) => Hide();
