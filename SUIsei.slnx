@@ -9,4 +9,5 @@
   <Project Path="SUIsei.Gallery\SUIsei.Gallery.csproj" />
   <Project Path="SUIsei.Text\SUIsei.Text.csproj" />
   <Project Path="SUIsei.Text.Tool\SUIsei.Text.Tool.csproj" />
+  <Project Path="SUIsei.HarfBuzz\SUIsei.HarfBuzz.csproj" />
 </Solution>
