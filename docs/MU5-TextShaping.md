@@ -75,6 +75,17 @@ allocation-aware (the compositor caches draw lists, so per-relayout shaping is a
   `TryGetGlyphById`, `TryGetGlyphId`); a codepoint-only atlas is unchanged. Baker: `"keying": "glyphId"` (default
   off) emits `glyphId`(+`unicode`) — the **tool and committed `ui-default` stay code-point-keyed**, honouring the
   "make it an option" requirement. Verified end to end against CascadiaCode.ttf.
+- **Pluggability split: DONE.** `ITextShaper` now resolves against an `IGlyphSource` (code-point/glyph-id → `Glyph`,
+  advances, EM metrics) rather than a concrete `FontAtlas`, so the **shaping backend and the imagery backend swap
+  independently**: a shaper is written against the interface, and a non-MTSDF imagery source (e.g. a bitmap atlas)
+  can implement `IGlyphSource`. MTSDF-specific bits (the distance range) stay off the interface. Resolution stays
+  inside the shaper (not the compositor) because a code-point-keyed atlas has no glyph ids — routing through the
+  source handles both the default and an id-emitting shaper.
+- **Platform shapers (DWrite / Core Text): deferred by decision.** A Windows `DWriteTextShaper : ITextShaper` (and a
+  macOS Core Text one) is a clean drop-in at this seam — an *optional, capability-gated* backend like Vulkan/DX12,
+  not the default. Not pursued now. A full DWrite engine replacement (its *bitmap* rasterizer in place of MTSDF) is a
+  separate, larger call: it would be a parallel render path, Windows-only, abandoning resolution-independent,
+  cross-platform-parity, AOT-clean MTSDF — so it stays out unless small-text quality ever forces it.
 - **Remaining:** GSUB-reachable glyph harvesting in the baker, the HarfBuzz shaper, and the bake-and-verify.
 
 The remaining work, refined by the P0 spike and the constraints above:

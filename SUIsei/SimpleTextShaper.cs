@@ -7,23 +7,23 @@ namespace SUIsei;
 /// </summary>
 public sealed class SimpleTextShaper : ITextShaper
 {
-	public float Measure(ReadOnlySpan<char> text, FontAtlas font)
+	public float Measure(ReadOnlySpan<char> text, IGlyphSource source)
 	{
 		var width = 0f;
 		foreach (var c in text)
-			width += font.Advance(c);
+			width += source.Advance(c);
 		return width;
 	}
 
-	public float Shape(ReadOnlySpan<char> text, FontAtlas font, List<ShapedGlyph> output)
+	public float Shape(ReadOnlySpan<char> text, IGlyphSource source, List<ShapedGlyph> output)
 	{
 		var pen = 0f;
 		for (var i = 0; i < text.Length; i++)
 		{
 			var c = text[i];
-			if (font.TryGetGlyph(c, out var g) && g.HasGeometry)
+			if (source.TryGetGlyph(c, out var g) && g.HasGeometry)
 				output.Add(new ShapedGlyph(g, pen, 0f, 0f, i));
-			pen += font.Advance(c);
+			pen += source.Advance(c);
 		}
 		return pen;
 	}

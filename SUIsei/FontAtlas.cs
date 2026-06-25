@@ -10,7 +10,7 @@ namespace SUIsei;
 /// emits — a PNG page (RGBA8 MTSDF) and a JSON layout. The page is decoded linear/UNORM, no mips: MTSDF texels are
 /// signed distances, never sRGB colour. Plane bounds are EM units in a y-down, baseline-at-origin frame.
 /// </summary>
-public sealed class FontAtlas
+public sealed class FontAtlas : IGlyphSource
 {
 	private readonly Dictionary<int, Glyph> _glyphs;          // keyed by Unicode code point (the cmap fast path)
 	private readonly Dictionary<int, Glyph> _glyphsById;      // keyed by font glyph id (empty for a codepoint-only atlas)
