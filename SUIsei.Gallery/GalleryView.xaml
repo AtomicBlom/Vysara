@@ -27,7 +27,10 @@
 
 			<TextBlock Text="SUIsei Control Gallery" FontSize="30" Foreground="#ECEFF6" />
 			<TextBlock Text="Authored in XAML, software-rasterized to a Win32 window - no GPU."
-			           FontSize="14" Foreground="#969CAA" Margin="0,2,0,18" />
+			           FontSize="14" Foreground="#969CAA" Margin="0,2,0,8" />
+			<!-- Programming ligatures, shaped by HarfBuzz against a glyph-id Cascadia atlas -->
+			<TextBlock Text="Shaped by HarfBuzz:  -&gt; =&gt; != == &gt;= &lt;= :: |&gt; //"
+			           FontSize="22" Foreground="#9FE0A0" Margin="0,0,0,18" />
 
 			<!-- Buttons, commands, and a flyout -->
 			<TextBlock Text="Buttons, commands &amp; menu" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />

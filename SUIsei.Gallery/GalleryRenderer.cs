@@ -1,8 +1,12 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Text;
+
 using SUIsei.Drawing;
+using SUIsei.HarfBuzz;
 using SUIsei.Input;
 using SUIsei.Rasterizer;
+using SUIsei.Text;
 
 namespace SUIsei.Gallery;
 
@@ -19,7 +23,8 @@ internal sealed class GalleryRenderer
 	private readonly UIHost _host = new();
 	private readonly UIView _view;
 	private readonly GalleryView _gallery = new();
-	private readonly Texture _fontPage = Texture.FromAtlas(FontAtlas.Default.Image);
+	private readonly FontAtlas _font = BuildShapedFont();
+	private readonly Texture _fontPage;
 	private readonly Vector4 _clear = GalleryView.PageBackground.ToPremultiplied().ToVector4();
 	private readonly HashSet<int> _boundImages = [];
 	private SoftwareRasterizer? _rasterizer;
@@ -28,9 +33,35 @@ internal sealed class GalleryRenderer
 
 	public GalleryRenderer(Action onQuit)
 	{
+		_fontPage = Texture.FromAtlas(_font.Image);
 		_gallery.Quit = onQuit;
-		_view = _host.CreateRoot(UIPlacement.Overlay(0, 1f), interactive: true);
+		// Composite against the glyph-id atlas so its HarfBuzz shaper drives every glyph run (ligatures included).
+		_view = _host.CreateRoot(UIPlacement.Overlay(0, 1f), interactive: true, compositor: new DrawListCompositor(_font));
 		_view.Root.Content = _gallery.Root;
+	}
+
+	// Bake a glyph-id-keyed Cascadia atlas (printable ASCII + the GSUB-reachable ligature/contextual glyphs) from the
+	// embedded font program, and install a HarfBuzz shaper on it — so the gallery's text is really shaped, and
+	// programming ligatures (-> => != == >= etc.) resolve to their contextual glyphs.
+	private static FontAtlas BuildShapedFont()
+	{
+		var fontBytes = ReadEmbeddedFont();
+		var bake = MsdfBaker.BakeFont(fontBytes, "gallery",
+			new BakeOptions { Charset = ["ascii"], GlyphIdKeyed = true, AtlasPageSize = 4096 });
+		using var json = new MemoryStream(Encoding.UTF8.GetBytes(bake.FontJson));
+		using var png = new MemoryStream(bake.PngPage);
+		var atlas = FontAtlas.Load(json, png);
+		atlas.Shaper = new HarfBuzzTextShaper(fontBytes);
+		return atlas;
+	}
+
+	private static byte[] ReadEmbeddedFont()
+	{
+		using var stream = typeof(GalleryRenderer).Assembly.GetManifestResourceStream("CascadiaCode.ttf")
+			?? throw new InvalidOperationException("Embedded font 'CascadiaCode.ttf' not found.");
+		using var ms = new MemoryStream();
+		stream.CopyTo(ms);
+		return ms.ToArray();
 	}
 
 	/// <summary>The DIP→pixel scale (display DPI / 96). Layout runs in DIPs and the render walk scales to physical

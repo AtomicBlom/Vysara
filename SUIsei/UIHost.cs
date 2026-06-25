@@ -49,10 +49,11 @@ public sealed class UIHost
 	public IReadOnlyList<(DrawListId Id, DrawListData Data)> DrawLists => _drawLists;
 
 	/// <summary>Add a root at <paramref name="placement"/>; returns the handle to keep. The first overlay gets
-	/// <see cref="UISurface.Hud"/> (list 0); subsequent views take higher ids.</summary>
-	public UIView CreateRoot(in UIPlacement placement, bool interactive = true)
+	/// <see cref="UISurface.Hud"/> (list 0); subsequent views take higher ids. Pass <paramref name="compositor"/> to
+	/// use a non-default compositor — e.g. one bound to a specific (glyph-id / shaped) <see cref="FontAtlas"/>.</summary>
+	public UIView CreateRoot(in UIPlacement placement, bool interactive = true, IUICompositor? compositor = null)
 	{
-		var root = new UIRoot(new DrawListId(_nextSurface++))
+		var root = new UIRoot(new DrawListId(_nextSurface++), compositor)
 		{
 			LayoutScale  = placement.LayoutScale,
 			InputManager = Input,
