@@ -86,20 +86,19 @@ allocation-aware (the compositor caches draw lists, so per-relayout shaping is a
   not the default. Not pursued now. A full DWrite engine replacement (its *bitmap* rasterizer in place of MTSDF) is a
   separate, larger call: it would be a parallel render path, Windows-only, abandoning resolution-independent,
   cross-platform-parity, AOT-clean MTSDF — so it stays out unless small-text quality ever forces it.
-- **Remaining:** GSUB-reachable glyph harvesting in the baker, the HarfBuzz shaper, and the bake-and-verify.
+- **GSUB harvest: DONE.** `GsubHarvest` walks the LookupList collecting outputs from Single/Multiple/Alternate/
+  Ligature/Reverse + unwrapped Extension subtables (Contextual/Chaining carry none of their own); `OpenTypeFont`
+  exposes `CollectGsubOutputGlyphs`; the baker unions these into a glyph-id atlas. Cross-validated against HarfBuzz.
+- **HarfBuzz shaper: DONE.** `SUIsei.HarfBuzz` (separate project, keeps `SUIsei` core dependency-light) provides
+  `HarfBuzzTextShaper : ITextShaper` over `HarfBuzzSharp`, resolving shaped glyph ids through `IGlyphSource`.
+- **Bake + verify: DONE.** The gallery bakes a glyph-id Cascadia atlas at startup, installs the shaper via the new
+  `UIHost.CreateRoot(compositor:)` argument, and a headless capture + subagent confirmed `-> => != == >= <= :: |>`
+  render as their Cascadia ligature glyphs.
 
-The remaining work, refined by the P0 spike and the constraints above:
-
-- **GSUB harvest (baker):** the reader currently keeps only `head`/`maxp`/`hhea`/`hmtx`/`OS/2`/`cmap`/outlines and
-  discards the table directory. Add a GSUB *output-glyph* harvester (not a full applier): walk the LookupList and
-  collect every glyph id produced by Single (1), Multiple (2), Alternate (3), and Ligature (4) subtables, following
-  Extension (7); Contextual/Chaining (5/6) need no harvest of their own since they invoke the other lookups (already
-  harvested). Union with the cmap glyph set → the bake set, so Cascadia's contextual `=`/`>`/`!` forms get cells.
-- **HarfBuzz shaper (`SUIsei.HarfBuzz`, a new project — keep `SUIsei` core dependency-light):** a `HarfBuzzTextShaper :
-  ITextShaper` over `HarfBuzzSharp` + a font blob; map each shaped `(glyphId, advance, offset, cluster)` to the atlas
-  `Glyph` via `TryGetGlyphById`. The host/gallery installs it (`font.Shaper = new HarfBuzzTextShaper(...)`).
-- **Bake + verify:** bake a glyph-id Cascadia atlas (GSUB-harvested), load it in the gallery, install the shaper, and
-  confirm `-> => != ==` render as ligatures via a headless capture + subagent check.
+**MU5 is complete:** seam + `IGlyphSource` decoupling, opt-in glyph-id atlas, GSUB harvest, HarfBuzz shaper, and a
+live ligature demo. Cross-platform shaping (Linux/macOS native assets) and platform shapers (DWrite / Core Text)
+remain available at the seam but are not pursued. (Aside, unrelated to text: the gallery `--selftest` reports a
+parallel-vs-serial raster diff of 30 — a pre-existing rasterizer issue, present before this work.)
 
 ## Phased plan
 
