@@ -12,10 +12,13 @@ namespace SUIsei;
 /// </summary>
 public sealed class FontAtlas
 {
-	private readonly Dictionary<int, Glyph> _glyphs;
+	private readonly Dictionary<int, Glyph> _glyphs;          // keyed by Unicode code point (the cmap fast path)
+	private readonly Dictionary<int, Glyph> _glyphsById;      // keyed by font glyph id (empty for a codepoint-only atlas)
+	private readonly Dictionary<int, int> _codepointToGid;    // code point → glyph id (when ids were baked)
 
 	private FontAtlas(AtlasImage image, int width, int height, float distanceRange, float bakeSize,
-		float lineHeight, float ascender, float descender, Dictionary<int, Glyph> glyphs)
+		float lineHeight, float ascender, float descender, Dictionary<int, Glyph> glyphs,
+		Dictionary<int, Glyph> glyphsById, Dictionary<int, int> codepointToGid)
 	{
 		Image = image;
 		Width = width;
@@ -26,6 +29,8 @@ public sealed class FontAtlas
 		Ascender = ascender;
 		Descender = descender;
 		_glyphs = glyphs;
+		_glyphsById = glyphsById;
+		_codepointToGid = codepointToGid;
 	}
 
 	/// <summary>The decoded MTSDF page as neutral RGBA8 pixels — hand to the engine glue to upload as a GPU texture.</summary>
@@ -50,6 +55,17 @@ public sealed class FontAtlas
 
 	/// <summary>Look up a glyph by Unicode code point. Returns false for code points outside the baked charset.</summary>
 	public bool TryGetGlyph(int codepoint, out Glyph glyph) => _glyphs.TryGetValue(codepoint, out glyph);
+
+	/// <summary>True when the atlas was baked with glyph ids, so it can be addressed by a shaper that emits ids
+	/// (e.g. HarfBuzz). A codepoint-only atlas returns false and supports just <see cref="TryGetGlyph"/>.</summary>
+	public bool HasGlyphIds => _glyphsById.Count > 0;
+
+	/// <summary>Look up a glyph by font glyph id — the key a shaper addresses (including ligature/contextual glyphs
+	/// that have no code point). Only populated when <see cref="HasGlyphIds"/>.</summary>
+	public bool TryGetGlyphById(int glyphId, out Glyph glyph) => _glyphsById.TryGetValue(glyphId, out glyph);
+
+	/// <summary>Map a Unicode code point to its font glyph id (the cmap), when ids were baked into the atlas.</summary>
+	public bool TryGetGlyphId(int codepoint, out int glyphId) => _codepointToGid.TryGetValue(codepoint, out glyphId);
 
 	/// <summary>
 	/// The MTSDF distance range in screen pixels for a glyph run drawn at <paramref name="fontSizePx"/>.
@@ -94,26 +110,43 @@ public sealed class FontAtlas
 		var ascender = metrics.GetProperty("ascender").GetSingle();
 		var descender = metrics.GetProperty("descender").GetSingle();
 
+		// A glyph entry carries a "unicode" (code point), a "glyphId" (font glyph index), or both. A codepoint-keyed
+		// atlas has only "unicode"; a glyph-id-keyed atlas (for a shaper) has "glyphId" and, where one exists, also the
+		// source "unicode". We index each glyph into whichever maps it has a key for, so both lookup paths stay valid.
 		var glyphs = new Dictionary<int, Glyph>();
+		var glyphsById = new Dictionary<int, Glyph>();
+		var codepointToGid = new Dictionary<int, int>();
 		foreach (var g in root.GetProperty("glyphs").EnumerateArray())
 		{
-			var cp = g.GetProperty("unicode").GetInt32();
+			var cp = g.TryGetProperty("unicode", out var u) ? u.GetInt32() : -1;
+			var gid = g.TryGetProperty("glyphId", out var gi) ? gi.GetInt32() : -1;
 			var advance = g.GetProperty("advance").GetSingle();
 
+			Glyph glyph;
 			if (g.TryGetProperty("planeBounds", out var pb) && g.TryGetProperty("atlasBounds", out var ab))
 			{
-				glyphs[cp] = new Glyph(
-					cp, advance, HasGeometry: true,
+				glyph = new Glyph(
+					cp, gid, advance, HasGeometry: true,
 					pb.GetProperty("left").GetSingle(), pb.GetProperty("top").GetSingle(),
 					pb.GetProperty("right").GetSingle(), pb.GetProperty("bottom").GetSingle(),
 					ab.GetProperty("left").GetSingle() / width, ab.GetProperty("top").GetSingle() / height,
 					ab.GetProperty("right").GetSingle() / width, ab.GetProperty("bottom").GetSingle() / height);
 			}
 			else
-				glyphs[cp] = new Glyph(cp, advance, HasGeometry: false, 0, 0, 0, 0, 0, 0, 0, 0);
+				glyph = new Glyph(cp, gid, advance, HasGeometry: false, 0, 0, 0, 0, 0, 0, 0, 0);
+
+			if (cp >= 0)
+				glyphs[cp] = glyph;
+			if (gid >= 0)
+			{
+				glyphsById[gid] = glyph;
+				if (cp >= 0)
+					codepointToGid[cp] = gid;
+			}
 		}
 
-		return new FontAtlas(atlasImage, width, height, distanceRange, bakeSize, lineHeight, ascender, descender, glyphs);
+		return new FontAtlas(atlasImage, width, height, distanceRange, bakeSize, lineHeight, ascender, descender,
+			glyphs, glyphsById, codepointToGid);
 	}
 
 	/// <summary>
