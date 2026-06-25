@@ -37,7 +37,7 @@ internal static class MsdfGenerator
 				GenerateRow(shape, windings, pixels, width, py, invRange, projection);
 
 		CorrectPolarity(shape, bitmap, projection);
-		ErrorCorrect(bitmap);
+		ErrorCorrect(shape, bitmap, projection);
 		return bitmap;
 	}
 
@@ -204,22 +204,36 @@ internal static class MsdfGenerator
 	}
 
 	/// <summary>
-	/// Error correction against the true distance. Where the reconstructed median's inside/outside disagrees with
-	/// the alpha channel (the true signed distance — a reliable oracle), collapse RGB to the true value. This erases
-	/// residual false edges from channel medial-axis coincidences while leaving genuine corner sharpening intact.
+	/// Error correction against the glyph's <em>exact</em> fill (the scanline nonzero-winding test) rather than the
+	/// reconstructed alpha — because the overlapping-contour combiner can produce a wrong-signed <em>true</em> distance
+	/// in a thin region near a sharp concave/reversal corner (e.g. the inner "beak" of Cascadia's <c>|&gt;</c> ring),
+	/// where the field reports outside well inside the ink. An accurate field's sign at a texel centre always matches
+	/// the exact fill there, so a disagreement marks an artifact: reflect the true-distance channel across 0.5 to the
+	/// correct side (which preserves its antialiasing magnitude) and collapse RGB onto it. Genuine edges and sharp
+	/// corners agree in sign and are left untouched, so multi-channel sharpening survives everywhere it is real.
 	/// </summary>
-	private static void ErrorCorrect(GlyphBitmap bitmap)
+	private static void ErrorCorrect(Shape shape, GlyphBitmap bitmap, CellProjection projection)
 	{
 		var px = bitmap.Pixels;
-		for (var o = 0; o < px.Length; o += 4)
+		for (var py = 0; py < bitmap.Height; py++)
 		{
-			var median = Median(px[o], px[o + 1], px[o + 2]);
-			var trueValue = px[o + 3];
-			if (median > 0.5f != trueValue > 0.5f)
+			for (var pxi = 0; pxi < bitmap.Width; pxi++)
 			{
-				px[o] = trueValue;
-				px[o + 1] = trueValue;
-				px[o + 2] = trueValue;
+				var o = (py * bitmap.Width + pxi) * 4;
+				var insideExact = shape.WindingAt(projection.Project(pxi, py)) != 0;
+
+				// Reflect the true-distance channel to the exact-fill side (1 - v flips across 0.5, keeping |v - 0.5|).
+				if (px[o + 3] > 0.5f != insideExact)
+					px[o + 3] = 1f - px[o + 3];
+
+				var median = Median(px[o], px[o + 1], px[o + 2]);
+				if (median > 0.5f != insideExact)
+				{
+					var trueValue = px[o + 3];
+					px[o] = trueValue;
+					px[o + 1] = trueValue;
+					px[o + 2] = trueValue;
+				}
 			}
 		}
 	}
