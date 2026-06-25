@@ -14,6 +14,7 @@ internal sealed class UIDrawList
 	private readonly List<ushort> _indices = [];
 	private readonly List<DrawCommand> _commands = [];
 	private readonly List<ImageSource> _images = [];
+	private readonly List<ShapedGlyph> _glyphBuf = [];
 	private readonly Vector2 _surfaceSize;
 
 	// Open run state — extended while (kind, tex, clip) match; flushed into a command otherwise.
@@ -56,11 +57,12 @@ internal sealed class UIDrawList
 	}
 
 	/// <summary>
-	/// Lay out a text run as MTSDF glyph quads (PlanningUI.md §D3): advance-based LTR, no shaping (MU5). The run's
-	/// local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the first line's
-	/// ascenders sit at the top. Each visible glyph emits a quad with its atlas UV and the shared per-run
-	/// <c>screenPxRange</c> in <see cref="OverlayVertex.Custom"/>.x; all glyphs share <c>(Glyph, atlas, clip)</c> so they
-	/// batch into one indexed draw.
+	/// Lay out a text run as MTSDF glyph quads (PlanningUI.md §D3) through the atlas's <see cref="FontAtlas.Shaper"/>,
+	/// so kerning / ligatures / contextual forms apply when a real shaper is installed (the default is advance-based
+	/// LTR). The run's local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the
+	/// first line's ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by
+	/// <paramref name="fontSizePx"/>) with its atlas UV and the shared per-run <c>screenPxRange</c> in
+	/// <see cref="OverlayVertex.Custom"/>.x; all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw.
 	/// </summary>
 	public void AddGlyphRun(string text, float fontSizePx, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip, int textureId = 1)
 	{
@@ -69,30 +71,28 @@ internal sealed class UIDrawList
 		EnsureRun(UIPrimKind.Glyph, textureId, clip);
 
 		var @params = new Vector4(font.ScreenPxRange(fontSizePx), 0f, 0f, 0f);
-		var penX = 0f;
 		var baselineY = -font.Ascender * fontSizePx; // ascender is negative (y-down), so the top sits near y=0
 
-		foreach (var ch in text)
+		_glyphBuf.Clear();
+		font.Shaper.Shape(text, font, _glyphBuf);
+		foreach (var sg in _glyphBuf)
 		{
-			if (font.TryGetGlyph(ch, out var g) && g.HasGeometry)
-			{
-				var x0 = penX + g.PlaneLeft * fontSizePx;
-				var x1 = penX + g.PlaneRight * fontSizePx;
-				var y0 = baselineY + g.PlaneTop * fontSizePx;
-				var y1 = baselineY + g.PlaneBottom * fontSizePx;
+			var g = sg.Glyph; // the shaper omits zero-geometry glyphs, so every entry draws a quad
+			var penX = (sg.PenXEm + sg.XOffsetEm) * fontSizePx;
+			var x0 = penX + g.PlaneLeft * fontSizePx;
+			var x1 = penX + g.PlaneRight * fontSizePx;
+			var y0 = baselineY + (sg.YOffsetEm + g.PlaneTop) * fontSizePx;
+			var y1 = baselineY + (sg.YOffsetEm + g.PlaneBottom) * fontSizePx;
 
-				var baseV = (ushort)_verts.Count;
-				AddVertex(new Vector2(x0, y0), new Vector2(g.U0, g.V0), matrix, color, @params);
-				AddVertex(new Vector2(x1, y0), new Vector2(g.U1, g.V0), matrix, color, @params);
-				AddVertex(new Vector2(x1, y1), new Vector2(g.U1, g.V1), matrix, color, @params);
-				AddVertex(new Vector2(x0, y1), new Vector2(g.U0, g.V1), matrix, color, @params);
+			var baseV = (ushort)_verts.Count;
+			AddVertex(new Vector2(x0, y0), new Vector2(g.U0, g.V0), matrix, color, @params);
+			AddVertex(new Vector2(x1, y0), new Vector2(g.U1, g.V0), matrix, color, @params);
+			AddVertex(new Vector2(x1, y1), new Vector2(g.U1, g.V1), matrix, color, @params);
+			AddVertex(new Vector2(x0, y1), new Vector2(g.U0, g.V1), matrix, color, @params);
 
-				_indices.Add(baseV); _indices.Add((ushort)(baseV + 1)); _indices.Add((ushort)(baseV + 2));
-				_indices.Add(baseV); _indices.Add((ushort)(baseV + 2)); _indices.Add((ushort)(baseV + 3));
-				_runIdxCount += 6;
-			}
-
-			penX += font.Advance(ch) * fontSizePx;
+			_indices.Add(baseV); _indices.Add((ushort)(baseV + 1)); _indices.Add((ushort)(baseV + 2));
+			_indices.Add(baseV); _indices.Add((ushort)(baseV + 2)); _indices.Add((ushort)(baseV + 3));
+			_runIdxCount += 6;
 		}
 	}
 

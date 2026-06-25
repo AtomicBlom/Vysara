@@ -57,6 +57,11 @@ public sealed class FontAtlas
 	/// </summary>
 	public float ScreenPxRange(float fontSizePx) => DistanceRange * fontSizePx / BakeSize;
 
+	/// <summary>The shaper that turns text into positioned glyphs for this atlas (PlanningUI.md §D3 / MU5). Defaults
+	/// to the advance-based <see cref="SimpleTextShaper"/>; swap it (e.g. for a HarfBuzz shaper) to enable ligatures,
+	/// contextual forms, and kerning across measurement, the compositor, and caret math at once.</summary>
+	public ITextShaper Shaper { get; set; } = new SimpleTextShaper();
+
 	/// <summary>Advance width of a code point in EM (falls back to the space glyph's advance for unknown code points).</summary>
 	public float Advance(int codepoint)
 	{
@@ -65,14 +70,8 @@ public sealed class FontAtlas
 		return _glyphs.TryGetValue(' ', out var space) ? space.Advance : 0.5f;
 	}
 
-	/// <summary>Measure a single-line string's advance width in EM units (no shaping/kerning).</summary>
-	public float MeasureWidth(ReadOnlySpan<char> text)
-	{
-		var w = 0f;
-		foreach (var c in text)
-			w += Advance(c);
-		return w;
-	}
+	/// <summary>Measure a single-line string's advance width in EM units, through the atlas's <see cref="Shaper"/>.</summary>
+	public float MeasureWidth(ReadOnlySpan<char> text) => Shaper.Measure(text, this);
 
 	/// <summary>Decode an atlas from its JSON layout + PNG page streams.</summary>
 	public static FontAtlas Load(Stream json, Stream png)
