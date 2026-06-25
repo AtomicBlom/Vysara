@@ -39,7 +39,7 @@ internal static class AtlasBaker
 			var glyphId = chosen.Font.GetGlyphIndex(cp);
 			var advance = chosen.Font.GetAdvanceWidth(glyphId) / (double)chosen.Font.UnitsPerEm;
 			var shape = chosen.Font.GetOutline(glyphId);
-			works.Add(new GlyphWork { Codepoint = cp, Advance = advance, Shape = shape.IsEmpty ? null : shape, Font = chosen.Font });
+			works.Add(new GlyphWork { Codepoint = cp, GlyphId = glyphId, Advance = advance, Shape = shape.IsEmpty ? null : shape, Font = chosen.Font });
 		}
 
 		var geometry = works.Where(w => w.Shape is not null).ToArray();

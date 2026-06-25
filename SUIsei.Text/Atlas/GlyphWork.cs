@@ -11,7 +11,8 @@ namespace SUIsei.Text.Atlas;
 /// </summary>
 internal sealed class GlyphWork
 {
-	public int Codepoint;
+	public int Codepoint;       // -1 for a glyph reached by id alone (e.g. a ligature with no code point)
+	public int GlyphId;         // the font glyph index
 	public double Advance;
 	public Shape? Shape;
 	public OpenTypeFont? Font;

@@ -41,11 +41,21 @@ internal static class FontJsonWriter
 			w.WriteNumber("underlineThickness", 0);
 			w.WriteEndObject();
 
+			// Code-point-keyed (default): order + key by "unicode". Glyph-id-keyed: order + key by "glyphId" and emit
+			// "unicode" only where the glyph has a source code point (a ligature/contextual glyph has none).
+			var ordered = fontset.GlyphIdKeyed ? glyphs.OrderBy(g => g.GlyphId) : glyphs.OrderBy(g => g.Codepoint);
 			w.WriteStartArray("glyphs");
-			foreach (var g in glyphs.OrderBy(g => g.Codepoint))
+			foreach (var g in ordered)
 			{
 				w.WriteStartObject();
-				w.WriteNumber("unicode", g.Codepoint);
+				if (fontset.GlyphIdKeyed)
+				{
+					w.WriteNumber("glyphId", g.GlyphId);
+					if (g.Codepoint >= 0)
+						w.WriteNumber("unicode", g.Codepoint);
+				}
+				else
+					w.WriteNumber("unicode", g.Codepoint);
 				w.WriteNumber("advance", g.Advance);
 				if (g.HasGeometry)
 				{

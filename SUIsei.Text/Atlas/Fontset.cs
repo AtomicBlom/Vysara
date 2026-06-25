@@ -22,6 +22,11 @@ public sealed class Fontset
 	public int GlyphSize { get; init; } = 32;
 	public int AtlasPageSize { get; init; } = 1024;
 
+	/// <summary>When true, the atlas is keyed by font glyph id (each entry carries <c>glyphId</c>, plus <c>unicode</c>
+	/// where one exists) so a shaper can address it; when false (the default) it is keyed by code point. Opt-in via the
+	/// fontset's <c>"keying": "glyphId"</c>. The tool and the committed <c>ui-default</c> stay code-point-keyed.</summary>
+	public bool GlyphIdKeyed { get; init; }
+
 	/// <summary>Top-level charset tokens (block names / U+ ranges / "ascii"), in addition to any per-font ranges.</summary>
 	public IReadOnlyList<string> Charset { get; init; } = [];
 
@@ -86,6 +91,8 @@ public sealed class Fontset
 			GlyphSize = root.TryGetProperty("glyphSize", out var gs) ? gs.GetInt32() : 32,
 			AtlasPageSize = root.TryGetProperty("atlasPageSize", out var aps) ? aps.GetInt32() : 1024,
 			Charset = ReadStringArray(root, "charset"),
+			GlyphIdKeyed = root.TryGetProperty("keying", out var k)
+				&& string.Equals(k.GetString(), "glyphId", StringComparison.OrdinalIgnoreCase),
 		};
 	}
 

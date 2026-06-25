@@ -37,6 +37,7 @@ public static class MsdfBaker
 			PxRange = o.PxRange,
 			GlyphSize = o.GlyphSize,
 			AtlasPageSize = o.AtlasPageSize,
+			GlyphIdKeyed = o.GlyphIdKeyed,
 		};
 
 		return AtlasBaker.Bake(fontset, _ => fontBytes);
@@ -73,4 +74,7 @@ public sealed class BakeOptions
 	public int PxRange { get; init; } = 4;
 	public int GlyphSize { get; init; } = 32;
 	public int AtlasPageSize { get; init; } = 1024;
+
+	/// <summary>Key the atlas by font glyph id (for a shaper) instead of by code point. Default false.</summary>
+	public bool GlyphIdKeyed { get; init; }
 }
