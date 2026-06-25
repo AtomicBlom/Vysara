@@ -67,6 +67,29 @@ on codepoints. The default shaper reproduces today's behaviour (codepoint→glyp
 until a real shaper is installed. `FontAtlas` owns the active `ITextShaper` (swappable). Keep the hot path
 allocation-aware (the compositor caches draw lists, so per-relayout shaping is acceptable, but avoid per-frame work).
 
+## Status
+
+- **P2 — shaping seam: DONE** (`ITextShaper`/`ShapedGlyph` + `SimpleTextShaper`; `FontAtlas.MeasureWidth` and
+  `UIDrawList.AddGlyphRun` route through `FontAtlas.Shaper`; behaviour-preserving, tested).
+- **P1 — glyph-id atlas (opt-in): DONE.** Runtime: `Glyph.GlyphId` + dual-mode `FontAtlas` (`HasGlyphIds`,
+  `TryGetGlyphById`, `TryGetGlyphId`); a codepoint-only atlas is unchanged. Baker: `"keying": "glyphId"` (default
+  off) emits `glyphId`(+`unicode`) — the **tool and committed `ui-default` stay code-point-keyed**, honouring the
+  "make it an option" requirement. Verified end to end against CascadiaCode.ttf.
+- **Remaining:** GSUB-reachable glyph harvesting in the baker, the HarfBuzz shaper, and the bake-and-verify.
+
+The remaining work, refined by the P0 spike and the constraints above:
+
+- **GSUB harvest (baker):** the reader currently keeps only `head`/`maxp`/`hhea`/`hmtx`/`OS/2`/`cmap`/outlines and
+  discards the table directory. Add a GSUB *output-glyph* harvester (not a full applier): walk the LookupList and
+  collect every glyph id produced by Single (1), Multiple (2), Alternate (3), and Ligature (4) subtables, following
+  Extension (7); Contextual/Chaining (5/6) need no harvest of their own since they invoke the other lookups (already
+  harvested). Union with the cmap glyph set → the bake set, so Cascadia's contextual `=`/`>`/`!` forms get cells.
+- **HarfBuzz shaper (`SUIsei.HarfBuzz`, a new project — keep `SUIsei` core dependency-light):** a `HarfBuzzTextShaper :
+  ITextShaper` over `HarfBuzzSharp` + a font blob; map each shaped `(glyphId, advance, offset, cluster)` to the atlas
+  `Glyph` via `TryGetGlyphById`. The host/gallery installs it (`font.Shaper = new HarfBuzzTextShaper(...)`).
+- **Bake + verify:** bake a glyph-id Cascadia atlas (GSUB-harvested), load it in the gallery, install the shaper, and
+  confirm `-> => != ==` render as ligatures via a headless capture + subagent check.
+
 ## Phased plan
 
 - **P0 — De-risk the native lib (no commitment):** add `HarfBuzzSharp` to a throwaway spike, shape `"office =>"`
