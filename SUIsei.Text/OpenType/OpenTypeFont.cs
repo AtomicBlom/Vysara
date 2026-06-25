@@ -13,9 +13,11 @@ public sealed class OpenTypeFont
 	private readonly IGlyphOutlineSource _outlines;
 	private readonly CmapSubtable? _cmap;
 	private readonly ushort[] _advances; // per longHorMetric, last entry repeats for trailing glyphs
+	private readonly SfntReader _file;
+	private readonly int _gsubOffset;     // -1 when the font has no GSUB table
 
 	private OpenTypeFont(int unitsPerEm, int numGlyphs, int typoAscender, int typoDescender, int typoLineGap,
-		IGlyphOutlineSource outlines, CmapSubtable? cmap, ushort[] advances)
+		IGlyphOutlineSource outlines, CmapSubtable? cmap, ushort[] advances, SfntReader file, int gsubOffset)
 	{
 		UnitsPerEm = unitsPerEm;
 		NumGlyphs = numGlyphs;
@@ -25,6 +27,19 @@ public sealed class OpenTypeFont
 		_outlines = outlines;
 		_cmap = cmap;
 		_advances = advances;
+		_file = file;
+		_gsubOffset = gsubOffset;
+	}
+
+	/// <summary>True when the font carries a <c>GSUB</c> table (so it can produce ligature/contextual glyphs).</summary>
+	public bool HasGsub => _gsubOffset >= 0;
+
+	/// <summary>Add every glyph id the font's <c>GSUB</c> can produce as a substitution output to <paramref name="into"/>
+	/// (a no-op when the font has no <c>GSUB</c>) — the reachable glyph set a glyph-id atlas must also bake.</summary>
+	public void CollectGsubOutputGlyphs(HashSet<int> into)
+	{
+		if (_gsubOffset >= 0)
+			GsubHarvest.CollectOutputGlyphs(_file, _gsubOffset, into);
 	}
 
 	/// <summary>Font design units per EM (the outline coordinate scale; commonly 1000 or 2048).</summary>
@@ -93,8 +108,9 @@ public sealed class OpenTypeFont
 		var advances = ReadAdvances(file, tables, numGlyphs);
 		var cmap = tables.TryGetValue("cmap", out var c) ? CmapSubtable.Parse(file, c.Offset) : null;
 		var outlines = CreateOutlineSource(file, tables, indexToLocFormat, numGlyphs);
+		var gsubOffset = tables.TryGetValue("GSUB", out var gsub) ? gsub.Offset : -1;
 
-		return new OpenTypeFont(unitsPerEm, numGlyphs, typoAsc, typoDesc, typoGap, outlines, cmap, advances);
+		return new OpenTypeFont(unitsPerEm, numGlyphs, typoAsc, typoDesc, typoGap, outlines, cmap, advances, file, gsubOffset);
 	}
 
 	private static (int Asc, int Desc, int Gap) ReadMetrics(

@@ -42,6 +42,24 @@ internal static class AtlasBaker
 			works.Add(new GlyphWork { Codepoint = cp, GlyphId = glyphId, Advance = advance, Shape = shape.IsEmpty ? null : shape, Font = chosen.Font });
 		}
 
+		// In glyph-id mode, also bake every glyph the primary font's GSUB can produce (ligatures, contextual forms):
+		// those have no code point and a shaper addresses them by id. Glyph-id keying is single-font — ids are the
+		// primary font's — so harvest + outline come from the primary font.
+		if (fontset.GlyphIdKeyed)
+		{
+			var have = new HashSet<int>(works.Select(w => w.GlyphId));
+			var outputs = new HashSet<int>();
+			primary.CollectGsubOutputGlyphs(outputs);
+			foreach (var gid in outputs)
+			{
+				if (gid <= 0 || !have.Add(gid))
+					continue;
+				var advance = primary.GetAdvanceWidth(gid) / (double)primary.UnitsPerEm;
+				var shape = primary.GetOutline(gid);
+				works.Add(new GlyphWork { Codepoint = -1, GlyphId = gid, Advance = advance, Shape = shape.IsEmpty ? null : shape, Font = primary });
+			}
+		}
+
 		var geometry = works.Where(w => w.Shape is not null).ToArray();
 		Parallel.ForEach(geometry, w => GenerateGlyph(w, fontset.GlyphSize, fontset.PxRange));
 
