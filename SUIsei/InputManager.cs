@@ -173,8 +173,10 @@ public sealed class InputManager
 	{
 		UIElement? best = null;
 		var bestZ = int.MinValue;
-		foreach (var view in views)
+		//Used in hotpath, so we avoid the enumerator
+		for (var index = 0; index < views.Count; index++)
 		{
+			var view = views[index];
 			if (!view.Interactive || view.Placement.Kind != UIPlacementKind.Overlay)
 				continue;
 			var scale = view.Root.LayoutScale > 0f ? view.Root.LayoutScale : 1f;
@@ -188,6 +190,7 @@ public sealed class InputManager
 				var element = overlays[i].Element;
 				hit = element.HitTest(dip - new Vector2(element.LayoutRect.X, element.LayoutRect.Y));
 			}
+
 			if (hit is null && view.Root.Content is { } content)
 				hit = content.HitTest(dip - new Vector2(content.LayoutRect.X, content.LayoutRect.Y));
 
@@ -197,6 +200,7 @@ public sealed class InputManager
 				bestZ = view.Placement.ZLayer;
 			}
 		}
+
 		return best;
 	}
 

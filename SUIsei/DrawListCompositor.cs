@@ -91,9 +91,14 @@ public sealed class DrawListCompositor : IUICompositor
 	{
 		if (v.IsDirty)
 			return true;
-		foreach (var c in v.Children)
+		// avoid the enumerator as this is often called on the hot path of an engine.
+		for (var index = 0; index < v.Children.Count; index++)
+		{
+			var c = v.Children[index];
 			if (AnyDirty(c))
 				return true;
+		}
+
 		return false;
 	}
 
