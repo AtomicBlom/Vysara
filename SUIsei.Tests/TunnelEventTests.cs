@@ -44,7 +44,7 @@ public sealed class TunnelEventTests
 	{
 		var order = new List<string>();
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay());
+		var view = host.CreateRoot(UILayer.Default);
 		var mid  = new Border { Width = 200f, Height = 200f, Background = HdrColor.FromRgb(100, 100, 100) };
 		var leaf = new Border { Width = 100f, Height = 100f, Background = HdrColor.FromRgb(200, 200, 200) };
 		mid.Child           = leaf;
@@ -87,7 +87,7 @@ public sealed class TunnelEventTests
 	{
 		var order = new List<string>();
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay());
+		var view = host.CreateRoot(UILayer.Default);
 		var mid  = new Border { Width = 200f, Height = 200f, Background = HdrColor.FromRgb(100, 100, 100) };
 		var leaf = new Border { Width = 100f, Height = 100f, Background = HdrColor.FromRgb(200, 200, 200) };
 		mid.Child           = leaf;

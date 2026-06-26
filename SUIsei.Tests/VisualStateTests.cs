@@ -38,7 +38,7 @@ public sealed class VisualStateTests
 	public void Go_to_state_animates_through_the_host_clock()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var control = new ContentControl { Background = HdrColor.FromRgb(0, 0, 0), Width = 20, Height = 20 };
 		view.Root.Content = control;
 		VisualStateManager.GetVisualStateGroups(control).Add(CommonStates(control, out _, out var over));

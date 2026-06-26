@@ -14,7 +14,7 @@ public sealed class PointerCaptureTests
 	private static UIHost MakeHost(out UIView view)
 	{
 		var host = new UIHost();
-		view = host.CreateRoot(UIPlacement.Overlay());
+		view = host.CreateRoot(UILayer.Default);
 		return host;
 	}
 

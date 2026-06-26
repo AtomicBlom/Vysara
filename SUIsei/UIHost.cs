@@ -48,18 +48,18 @@ public sealed class UIHost
 	/// <summary>The last <see cref="Render"/> output — the draw lists handed to the Loom backend.</summary>
 	public IReadOnlyList<(DrawListId Id, DrawListData Data)> DrawLists => _drawLists;
 
-	/// <summary>Add a root at <paramref name="placement"/>; returns the handle to keep. The first overlay gets
+	/// <summary>Add a root at <paramref name="layer"/>; returns the handle to keep. The first overlay gets
 	/// <see cref="UISurface.Hud"/> (list 0); subsequent views take higher ids. Pass <paramref name="compositor"/> to
 	/// use a non-default compositor — e.g. one bound to a specific (glyph-id / shaped) <see cref="FontAtlas"/>.</summary>
-	public UIView CreateRoot(in UIPlacement placement, bool interactive = true, IUICompositor? compositor = null)
+	public UIView CreateRoot(in UILayer layer, bool interactive = true, IUICompositor? compositor = null)
 	{
 		var root = new UIRoot(new DrawListId(_nextSurface++), compositor)
 		{
-			LayoutScale  = placement.LayoutScale,
+			LayoutScale  = layer.LayoutScale,
 			InputManager = Input,
 			Clock        = Clock
 		};
-		var view = new UIView(root, placement, interactive);
+		var view = new UIView(root, layer, interactive);
 		_views.Add(view);
 		return view;
 	}

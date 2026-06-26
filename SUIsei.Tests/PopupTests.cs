@@ -13,7 +13,7 @@ public sealed class PopupTests
 	private static (UIHost Host, UIView View, Popup Popup) Build()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var popup = new Popup
 		{
 			Child = new Border { Width = 50f, Height = 30f, Background = HdrColor.FromRgb(10, 10, 10) },

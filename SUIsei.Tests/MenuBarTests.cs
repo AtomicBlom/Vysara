@@ -16,7 +16,7 @@ public sealed class MenuBarTests
 	private static (UIHost Host, UIView View, MenuBar Bar) Build(out MenuBarItem file, out MenuBarItem edit)
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var bar = new MenuBar { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
 
 		file = new MenuBarItem { Title = "File" };

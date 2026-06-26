@@ -16,7 +16,7 @@ public sealed class TextBoxTests
 	private static (UIHost Host, TextBox Box) Focused()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var box = new TextBox { Width = 200f };
 		view.Root.Content = box;
 		host.Tick(0.016, 0f, Surface);
@@ -138,7 +138,7 @@ public sealed class TextBoxTests
 	public void Caret_does_not_blink_while_unfocused()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var box = new TextBox { Width = 200f };
 		view.Root.Content = box;
 

@@ -30,7 +30,7 @@ public sealed class HotReloadTests
 			view.InitializeComponent();
 			var oldRoot = view.Root;
 
-			var uiView = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+			var uiView = host.CreateRoot(UILayer.Default);
 			uiView.Root.Content = view.Root;
 
 			HotReload.NotifyUpdate([typeof(SampleView)]);
@@ -53,7 +53,7 @@ public sealed class HotReloadTests
 		{
 			var host = FreshHost();
 			var view = new BindingView();   // ctor runs InitializeComponent → tracked + bound
-			var uiView = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+			var uiView = host.CreateRoot(UILayer.Default);
 			uiView.Root.Content = view.Root;
 			view.Label.Text.ShouldBe("start");
 
@@ -83,7 +83,7 @@ public sealed class HotReloadTests
 			var view = new SampleView();
 			view.InitializeComponent();
 			var oldRoot = view.Root;
-			host.CreateRoot(UIPlacement.Overlay(0, 1f)).Root.Content = view.Root;
+			host.CreateRoot(UILayer.Default).Root.Content = view.Root;
 
 			HotReload.NotifyUpdate([typeof(string)]);   // an unrelated type
 			host.Tick(0.016, 0f, new Vector2(800f, 600f));
@@ -107,7 +107,7 @@ public sealed class HotReloadTests
 		var view = new SampleView();
 		view.InitializeComponent();
 		var oldRoot = view.Root;
-		host.CreateRoot(UIPlacement.Overlay(0, 1f)).Root.Content = view.Root;
+		host.CreateRoot(UILayer.Default).Root.Content = view.Root;
 
 		HotReload.NotifyUpdate([typeof(SampleView)]);
 		host.Tick(0.016, 0f, new Vector2(800f, 600f));

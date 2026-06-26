@@ -18,7 +18,7 @@ public sealed class SliderTests
 	private static (UIHost Host, Slider Slider) Laid()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var slider = new Slider
 		{
 			Minimum = 0d, Maximum = 100d, Value = 0d, StepFrequency = 1d,

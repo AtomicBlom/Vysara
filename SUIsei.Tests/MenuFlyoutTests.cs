@@ -14,7 +14,7 @@ public sealed class MenuFlyoutTests
 	public void ShowAt_opens_and_item_invoke_closes_and_fires()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var anchor = new Button { Width = 80f, Height = 24f };
 		view.Root.Content = anchor;
 		host.Tick(0.016, 0f, new Vector2(300f, 300f));

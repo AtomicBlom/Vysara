@@ -177,7 +177,7 @@ public sealed class InputManager
 		for (var index = 0; index < views.Count; index++)
 		{
 			var view = views[index];
-			if (!view.Interactive || view.Placement.Kind != UIPlacementKind.Overlay)
+			if (!view.Interactive)
 				continue;
 			var scale = view.Root.LayoutScale > 0f ? view.Root.LayoutScale : 1f;
 			var dip = pos / scale;
@@ -194,10 +194,10 @@ public sealed class InputManager
 			if (hit is null && view.Root.Content is { } content)
 				hit = content.HitTest(dip - new Vector2(content.LayoutRect.X, content.LayoutRect.Y));
 
-			if (hit is not null && view.Placement.ZLayer >= bestZ)
+			if (hit is not null && view.Layer.ZLayer >= bestZ)
 			{
 				best = hit;
-				bestZ = view.Placement.ZLayer;
+				bestZ = view.Layer.ZLayer;
 			}
 		}
 

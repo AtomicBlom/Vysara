@@ -66,7 +66,7 @@ public sealed class ScrollViewerTests
 		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
 		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
 		var host = new UIHost();
-		host.CreateRoot(UIPlacement.Overlay(0, 1f)).Root.Content = viewer;
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
 		host.Tick(0.016, 0f, new Vector2(80f, 100f));
 
 		// Wheel down (negative delta) over the content scrolls toward the bottom (offset increases).
@@ -83,7 +83,7 @@ public sealed class ScrollViewerTests
 		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
 		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
 		var host = new UIHost();
-		host.CreateRoot(UIPlacement.Overlay(0, 1f)).Root.Content = viewer;
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
 		var surface = new Vector2(80f, 100f);
 		host.Tick(0.016, 0f, surface);
 
@@ -110,7 +110,7 @@ public sealed class ScrollViewerTests
 		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
 		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
 		var host = new UIHost();
-		host.CreateRoot(UIPlacement.Overlay(0, 1f)).Root.Content = viewer;
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
 		var surface = new Vector2(80f, 100f);
 		host.Tick(0.016, 0f, surface);
 

@@ -238,7 +238,7 @@ public sealed class AnimationTests
 	public void Host_tick_advances_the_clock_before_layout()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var border = new Border { Background = HdrColor.FromRgb(10, 10, 10), Width = 20, Height = 20 };
 		view.Root.Content = border;
 

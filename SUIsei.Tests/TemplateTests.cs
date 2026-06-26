@@ -83,7 +83,7 @@ public sealed class TemplateTests
 	public void Button_hover_animates_its_background_through_the_visual_state_manager()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var button = new Button { Content = "Go", Width = 40, Height = 20 };
 		view.Root.Content = button;
 		host.Tick(0.016, 0f, new Vector2(100, 100));
@@ -101,7 +101,7 @@ public sealed class TemplateTests
 	public void Pressing_a_templated_buttons_inner_part_focuses_the_button()
 	{
 		var host = new UIHost();
-		var view = host.CreateRoot(UIPlacement.Overlay(0, 1f));
+		var view = host.CreateRoot(UILayer.Default);
 		var button = new Button { Content = "Go", Width = 60, Height = 24 };
 		view.Root.Content = button;
 		host.Tick(0.016, 0f, new Vector2(200, 200)); // lay out → realize the template
