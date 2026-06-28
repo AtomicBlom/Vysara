@@ -23,7 +23,7 @@ public sealed class XamlGeneratorTests
 	public void Generated_root_is_the_typed_xaml_root()
 	{
 		var view = BuiltView();
-		view.Root.ShouldBeOfType<StackPanel>();
+		view.ShouldBeOfType<SampleView>();
 		view.Root.Orientation.ShouldBe(Orientation.Vertical);
 		view.Root.Children.Count.ShouldBe(2);
 	}

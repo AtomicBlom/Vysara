@@ -5,11 +5,11 @@ using System.Reflection.Metadata;
 namespace SUIsei;
 
 /// <summary>
-/// XAML Hot Reload support. A generated view registers itself here in <c>InitializeComponent()</c> (a no-capture
-/// <see cref="Track"/> call), and each <see cref="UIHost"/> registers itself on construction. When the runtime
-/// applies a metadata delta (an edited <c>.xaml</c> re-runs the source generator under <c>dotnet watch</c>), the
-/// <see cref="HotReloadHandler"/> records the changed types; the next <see cref="UIHost.Tick"/> drains them and
-/// rebuilds the affected views on the UI thread — never on the hot-reload agent's thread.
+/// XAML Hot Reload support. A generated view registers itself here in <c>InitializeComponent()</c> and each
+/// <see cref="UIHost"/> registers itself on construction. When the runtime applies a metadata delta (an edited
+/// <c>.xaml</c> re-runs the source generator under <c>dotnet watch</c>), the <see cref="HotReloadHandler"/>
+/// records the changed types; the next <see cref="UIHost.Tick"/> drains them and rebuilds the affected views on
+/// the UI thread — never on the hot-reload agent's thread.
 /// <para>
 /// Bookkeeping is gated on <see cref="Enabled"/>, which defaults to <see cref="MetadataUpdater.IsSupported"/>:
 /// it is <c>false</c> under NativeAOT / optimized publish, so the whole mechanism is inert and trimmable there,
@@ -18,9 +18,10 @@ namespace SUIsei;
 /// </summary>
 public static class HotReload
 {
-	// A tracked view: a weak handle to the instance plus no-capture delegates (so the entry never keeps the view
-	// alive). Rebuild re-runs the generated InitializeComponent; GetRoot reads its current root element.
-	private sealed record Entry(WeakReference Target, Action<object> Rebuild, Func<object, UIElement> GetRoot);
+	// A tracked view: a weak handle to the component object, a no-capture rebuild delegate, and an optional
+	// getRoot that maps the component to its UIElement root (null when the component IS the root).
+	// Stored type-erased so the list is homogeneous.
+	private sealed record Entry(WeakReference<object> Target, Action<object> Rebuild, Func<object, UIElement>? GetRoot);
 
 	private static readonly object Sync = new();
 	private static readonly List<Entry> Components = [];
@@ -31,8 +32,27 @@ public static class HotReload
 	/// <c>true</c> in tests to exercise the rebuild path without the hot-reload agent.</summary>
 	public static bool Enabled { get; set; } = MetadataUpdater.IsSupported;
 
-	/// <summary>Register a generated view. <paramref name="rebuild"/> and <paramref name="getRoot"/> must be
-	/// no-capture (static) delegates that take the instance, so the registry holds only a weak reference. Idempotent.</summary>
+	/// <summary>Register a generated view where the component IS the root UIElement (non-sealed root type, e.g.
+	/// ContentControl). <paramref name="rebuild"/> must be a no-capture static delegate. Idempotent.</summary>
+	public static void Track<T>(T component, Action<T> rebuild) where T : UIElement
+	{
+		if (!Enabled)
+			return;
+		lock (Sync)
+		{
+			Prune();
+			foreach (var c in Components)
+			{
+				if (c.Target.TryGetTarget(out var t) && ReferenceEquals(t, component))
+					return;
+			}
+			Components.Add(new Entry(new WeakReference<object>(component), o => rebuild((T)o), null));
+		}
+	}
+
+	/// <summary>Register a generated view where the component wraps a separate UIElement root (sealed root type,
+	/// e.g. Border or StackPanel). <paramref name="rebuild"/> rebuilds the component in-place (reassigning its
+	/// Root field); <paramref name="getRoot"/> returns the current root UIElement after rebuild. Idempotent.</summary>
 	public static void Track(object component, Action<object> rebuild, Func<object, UIElement> getRoot)
 	{
 		if (!Enabled)
@@ -42,10 +62,10 @@ public static class HotReload
 			Prune();
 			foreach (var c in Components)
 			{
-				if (c.Target.Target is { } t && ReferenceEquals(t, component))
+				if (c.Target.TryGetTarget(out var t) && ReferenceEquals(t, component))
 					return;
 			}
-			Components.Add(new Entry(new WeakReference(component), rebuild, getRoot));
+			Components.Add(new Entry(new WeakReference<object>(component), rebuild, getRoot));
 		}
 	}
 
@@ -72,7 +92,7 @@ public static class HotReload
 			{
 				foreach (var c in Components)
 				{
-					if (c.Target.Target is { } t)
+					if (c.Target.TryGetTarget(out var t))
 						Pending.Add(t.GetType());
 				}
 			}
@@ -85,8 +105,8 @@ public static class HotReload
 	}
 
 	/// <summary>Drain queued rebuilds. Called at the top of <see cref="UIHost.Tick"/> so reconstruction happens on
-	/// the ticking thread. Each affected view is rebuilt and, if it was hosted as a <see cref="UIRoot.Content"/>,
-	/// its fresh root is re-hosted in place.</summary>
+	/// the ticking thread. Each affected view is rebuilt (in-place for inheritance roots; with Root reassignment for
+	/// composition roots) and the hosting <see cref="UIRoot.Content"/> is re-assigned to trigger re-layout.</summary>
 	public static void ProcessPending()
 	{
 		if (!Enabled)
@@ -105,17 +125,19 @@ public static class HotReload
 
 		foreach (var c in comps)
 		{
-			if (c.Target.Target is not { } target)
+			if (!c.Target.TryGetTarget(out var target))
 				continue;
 			if (Array.IndexOf(types, target.GetType()) < 0)
 				continue;
-			// Only rebuild views currently hosted as a UIRoot.Content (the standard hosting). An unhosted tracked
-			// view has nothing on screen to refresh, so it is skipped rather than silently rebuilt.
-			var host = FindHostingRoot(c.GetRoot(target));
+			// Only rebuild views currently hosted as a UIRoot.Content. An unhosted tracked view has nothing on
+			// screen to refresh, so it is skipped rather than silently rebuilt.
+			var host = FindHostingRoot(c);
 			if (host is null)
 				continue;
 			c.Rebuild(target);
-			host.Content = c.GetRoot(target);
+			// For composition roots the Root field is reassigned during rebuild; retrieve the new instance.
+			var newElement = c.GetRoot != null ? c.GetRoot(target) : (UIElement)target;
+			host.Content = newElement;
 		}
 	}
 
@@ -130,10 +152,12 @@ public static class HotReload
 		}
 	}
 
-	// The UIRoot currently hosting `element` directly as its Content, across all live hosts (the standard
-	// `uiRoot.Content = view.Root` hosting); null when the view is not hosted that way.
-	private static UIRoot? FindHostingRoot(UIElement element)
+	// Find the UIRoot currently hosting this entry's UIElement as its Content, across all live hosts.
+	private static UIRoot? FindHostingRoot(Entry entry)
 	{
+		if (!entry.Target.TryGetTarget(out var target))
+			return null;
+		var element = entry.GetRoot != null ? entry.GetRoot(target) : (UIElement)target;
 		lock (Sync)
 		{
 			PruneHosts();
@@ -151,7 +175,7 @@ public static class HotReload
 		return null;
 	}
 
-	private static void Prune() => Components.RemoveAll(c => c.Target.Target is null);
+	private static void Prune() => Components.RemoveAll(c => !c.Target.TryGetTarget(out _));
 
 	private static void PruneHosts() => Hosts.RemoveAll(wr => !wr.TryGetTarget(out _));
 }

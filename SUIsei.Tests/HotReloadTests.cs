@@ -8,7 +8,11 @@ namespace SUIsei.Tests;
 /// XAML Hot Reload (PlanningUI.md MU6). Exercises the runtime rebuild path with no hot-reload agent by forcing
 /// <see cref="HotReload.Enabled"/> on: a metadata update is simulated via <see cref="HotReload.NotifyUpdate"/>,
 /// and the next <see cref="UIHost.Tick"/> drains it — re-running the generated <c>RebuildComponent()</c> and
-/// re-hosting the fresh root. The registry is process-global, so these run isolated and reset around each test.
+/// re-hosting the view. The registry is process-global, so these run isolated and reset around each test.
+/// <para>
+/// With the composition model (sealed root types like StackPanel) the view wraps a Root UIElement that is
+/// reassigned on rebuild; the host is updated to the new Root. Tests verify that named fields are recreated.
+/// </para>
 /// </summary>
 [NotInParallel]
 public sealed class HotReloadTests
@@ -21,23 +25,23 @@ public sealed class HotReloadTests
 	}
 
 	[Test]
-	public void Rebuild_swaps_in_a_fresh_root_and_rehosts()
+	public void Rebuild_reconstructs_named_children_in_place()
 	{
 		try
 		{
 			var host = FreshHost();
 			var view = new SampleView();
 			view.InitializeComponent();
-			var oldRoot = view.Root;
+			var oldTitle = view.Title; // a named child — gets a new instance on rebuild
 
 			var uiView = host.CreateRoot(UILayer.Default);
-			uiView.Root.Content = view.Root;
+			uiView.Root.Content = view.Root; // view.Root is the hosted StackPanel
 
 			HotReload.NotifyUpdate([typeof(SampleView)]);
 			host.Tick(0.016, 0f, new Vector2(800f, 600f));
 
-			view.Root.ShouldNotBeSameAs(oldRoot);              // re-ran InitializeComponent → fresh tree
-			uiView.Root.Content.ShouldBeSameAs(view.Root);     // and the host now points at the fresh root
+			view.Title.ShouldNotBeSameAs(oldTitle);         // named field re-created in-place
+			uiView.Root.Content.ShouldBeSameAs(view.Root);  // new Root hosted after rebuild
 		}
 		finally
 		{
@@ -54,7 +58,7 @@ public sealed class HotReloadTests
 			var host = FreshHost();
 			var view = new BindingView();   // ctor runs InitializeComponent → tracked + bound
 			var uiView = host.CreateRoot(UILayer.Default);
-			uiView.Root.Content = view.Root;
+			uiView.Root.Content = view.Root; // view.Root is the hosted StackPanel
 			view.Label.Text.ShouldBe("start");
 
 			HotReload.NotifyUpdate([typeof(BindingView)]);
@@ -82,13 +86,13 @@ public sealed class HotReloadTests
 			var host = FreshHost();
 			var view = new SampleView();
 			view.InitializeComponent();
-			var oldRoot = view.Root;
+			var oldTitle = view.Title;
 			host.CreateRoot(UILayer.Default).Root.Content = view.Root;
 
 			HotReload.NotifyUpdate([typeof(string)]);   // an unrelated type
 			host.Tick(0.016, 0f, new Vector2(800f, 600f));
 
-			view.Root.ShouldBeSameAs(oldRoot);          // untouched
+			view.Title.ShouldBeSameAs(oldTitle);        // untouched — same child instance
 		}
 		finally
 		{
@@ -106,12 +110,12 @@ public sealed class HotReloadTests
 		var host = new UIHost();
 		var view = new SampleView();
 		view.InitializeComponent();
-		var oldRoot = view.Root;
+		var oldTitle = view.Title;
 		host.CreateRoot(UILayer.Default).Root.Content = view.Root;
 
 		HotReload.NotifyUpdate([typeof(SampleView)]);
 		host.Tick(0.016, 0f, new Vector2(800f, 600f));
 
-		view.Root.ShouldBeSameAs(oldRoot);              // nothing tracked, nothing rebuilt
+		view.Title.ShouldBeSameAs(oldTitle);            // nothing tracked, nothing rebuilt
 	}
 }

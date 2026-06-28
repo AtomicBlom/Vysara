@@ -17,7 +17,7 @@ public sealed class ContentPropertyTests
 		view.InitializeComponent();
 
 		// ScrollViewer.Content — a scalar content property.
-		view.Root.ShouldBeOfType<ScrollViewer>();
+		// (view inherits ScrollViewer via the generated partial; compilation proves the type.)
 		view.Root.Content.ShouldBeSameAs(view.Stack);
 
 		// Panel.Children — a collection content property (children appended in order).

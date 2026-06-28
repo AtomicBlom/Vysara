@@ -223,6 +223,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		if (rootVar is null)
 			return new GenResult(default, gen.Diagnostics.ToArray());
 		var rootTypeName = gen.RootType?.ToDisplayString() ?? "global::SUIsei.UIElement";
+		var rootIsSealed = gen.RootType?.IsSealed ?? true;
 
 		// OneTime bindings (no Mode or Mode=OneTime) are emitted as direct assignments in InitializeComponent.
 		// OneWay/TwoWay bindings need a _Bindings tracking class for INPC subscriptions.
@@ -236,11 +237,10 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		if (ns is not null)
 			sb.AppendLine($"namespace {ns};");
 		sb.AppendLine();
-		sb.AppendLine($"partial class {cls}");
+		sb.AppendLine(rootIsSealed ? $"partial class {cls}" : $"partial class {cls} : {rootTypeName}");
 		sb.AppendLine("{");
 		foreach (var f in gen.Fields)
 			sb.AppendLine($"\t{f}");
-		sb.AppendLine($"\tinternal {rootTypeName} Root = null!;");
 		if (hasBindings)
 			sb.AppendLine($"\tprivate {cls}_Bindings? __bindings;");
 		sb.AppendLine();
@@ -251,7 +251,6 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			sb.AppendLine($"\t\t{b.TargetVar}.{b.TargetProp} = {OneTimeExpr(b)};");
 		foreach (var wire in gen.EventWires)
 			sb.AppendLine($"\t\t{wire}");
-		sb.AppendLine($"\t\tRoot = {rootVar};");
 		if (hasBindings)
 		{
 			sb.AppendLine($"\t\t__bindings = new {cls}_Bindings(this);");
@@ -259,7 +258,10 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		}
 		// Register for XAML Hot Reload with no-capture delegates (the registry holds only a weak reference). Inert
 		// unless hot reload is active; idempotent across rebuilds.
-		sb.AppendLine($"\t\tglobal::SUIsei.HotReload.Track(this, static __c => ((global::{fullClass})__c).RebuildComponent(), static __c => ((global::{fullClass})__c).Root);");
+		if (!rootIsSealed)
+			sb.AppendLine($"\t\tglobal::SUIsei.HotReload.Track<global::{fullClass}>(this, static __c => __c.RebuildComponent());");
+		else
+			sb.AppendLine($"\t\tglobal::SUIsei.HotReload.Track(this, static __c => ((global::{fullClass})__c).RebuildComponent(), static __c => (global::SUIsei.UIElement)((global::{fullClass})__c).{rootVar});");
 		sb.AppendLine("\t}");
 		sb.AppendLine();
 		// Re-runs construction in place for XAML Hot Reload: detach the old binding subscriptions, then rebuild the
@@ -268,6 +270,12 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		sb.AppendLine("\t{");
 		if (hasBindings)
 			sb.AppendLine("\t\t__bindings?.StopTracking();");
+		// Only a Panel root needs Children cleared before re-running InitializeComponent; other roots
+		// (ContentControl, Border, ScrollViewer, etc.) reset their content via property assignment.
+		var panelType = gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Panel");
+		var rootIsPanel = panelType != null && gen.RootType != null && IsAssignableTo(gen.RootType, panelType);
+		if (rootIsPanel)
+			sb.AppendLine(rootIsSealed ? $"\t\t{rootVar}.Children.Clear();" : "\t\tthis.Children.Clear();");
 		sb.AppendLine("\t\tInitializeComponent();");
 		sb.AppendLine("\t}");
 		if (gen.Methods.Length > 0)
@@ -306,6 +314,16 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			// VSM in the same template can target it.
 			var = hasName ? nameAttr!.Value : NewName(gen, "__t");
 			scope.Emit($"var {var} = new {typeName}();");
+		}
+		else if (isRoot && !type.IsSealed)
+		{
+			var = "this"; // component inherits the XAML root type; properties assign to 'this', no new() emitted
+		}
+		else if (isRoot) // sealed root: use composition (Root field or named field)
+		{
+			var = hasName ? nameAttr!.Value : "Root";
+			gen.Fields.Add($"internal {typeName} {var} = null!;");
+			scope.Emit($"{var} = new {typeName}();");
 		}
 		else if (hasName)
 		{
@@ -452,5 +470,15 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		}
 
 		return var;
+	}
+	private static bool IsAssignableTo(ITypeSymbol type, ITypeSymbol targetType)
+	{
+		var current = (ITypeSymbol?)type;
+		while (current != null)
+		{
+			if (SymbolEqualityComparer.Default.Equals(current, targetType)) return true;
+			current = current.BaseType;
+		}
+		return false;
 	}
 }
