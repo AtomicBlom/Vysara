@@ -1,11 +1,11 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A vertical items panel that realizes only the containers intersecting its viewport (PlanningUI.md §D1.6). MU4
+/// A vertical items panel that realizes only the containers intersecting its viewport. It
 /// assumes a uniform <see cref="RowHeight"/>, so the visible window is pure arithmetic from <see cref="VerticalOffset"/>;
 /// containers that scroll out are recycled back to the <see cref="IItemContainerSource"/>. It reports the full extent
 /// (<c>ItemCount × RowHeight</c>) so an outer scroller sees the true size. Variable-height virtualization, a scroll
-/// chrome, and wheel/scrollbar input are later refinements; the offset is set directly here.
+/// chrome, and wheel/scrollbar input are later refinements; the offset is set directly.
 /// </summary>
 public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 {

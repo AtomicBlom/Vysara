@@ -2,8 +2,8 @@ namespace SUIsei;
 
 /// <summary>
 /// The default <see cref="ITextShaper"/>: advance-based, left-to-right, one glyph per code point — no kerning,
-/// ligatures, or contextual forms (PlanningUI.md §D3). Each glyph's cluster is its character index. This reproduces
-/// the original glyph layout exactly, so a font with no installed shaper behaves as it always has.
+/// ligatures, or contextual forms. Each glyph's cluster is its character index. This is the glyph layout
+/// a font with no installed shaper uses.
 /// </summary>
 public sealed class SimpleTextShaper : ITextShaper
 {

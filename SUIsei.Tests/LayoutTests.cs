@@ -4,7 +4,7 @@ using SUIsei.Drawing;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU0 Phase B layout coverage (PlanningUI.md §D2 / §D8): two-pass measure/arrange for StackPanel, Border insets,
+/// Layout coverage: two-pass measure/arrange for StackPanel, Border insets,
 /// alignment, Grid pixel/auto/star track resolution, and Canvas absolute placement — built as a tree, run through
 /// <see cref="UIRoot.LayoutPass"/>, and asserted on <c>DesiredSize</c>/<c>LayoutRect</c> with no engine.
 /// </summary>

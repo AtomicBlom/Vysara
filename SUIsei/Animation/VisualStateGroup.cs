@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// A set of mutually exclusive <see cref="VisualState"/>s (PlanningUI.md §D5.7) — e.g. the <c>CommonStates</c> group
+/// A set of mutually exclusive <see cref="VisualState"/>s — e.g. the <c>CommonStates</c> group
 /// (<c>Normal</c>/<c>PointerOver</c>/<c>Pressed</c>). Exactly one state in a group is current at a time; entering a
 /// new one stops the previous state's storyboard. Groups are independent of one another.
 /// </summary>

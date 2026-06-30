@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// Back easing: overshoots slightly before settling (PlanningUI.md §D5.7). <c>f(t) = t³ − t·A·sin(πt)</c>, where
+/// Back easing: overshoots slightly before settling. <c>f(t) = t³ − t·A·sin(πt)</c>, where
 /// <see cref="Amplitude"/> <c>A</c> scales the overshoot.
 /// </summary>
 public sealed class BackEase : EasingFunctionBase

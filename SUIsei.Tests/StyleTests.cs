@@ -3,7 +3,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU3 style system: <see cref="Style"/> writes the Style rung of the DP precedence ladder (below Local, above
+/// Style system: <see cref="Style"/> writes the Style rung of the DP precedence ladder (below Local, above
 /// Default); <see cref="Style.BasedOn"/> chains base-first so derived setters override base; assigning a new
 /// <see cref="Style"/> clears the previous style's setter values before applying the new ones.
 /// </summary>

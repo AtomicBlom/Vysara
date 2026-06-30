@@ -1,6 +1,6 @@
 namespace SUIsei.Controls;
 
-/// <summary>The base of templatable controls (PlanningUI.md §D2.1/§D1.6). Sets <see cref="UIElement.IsTabStop"/> to
+/// <summary>The base of templatable controls. Sets <see cref="UIElement.IsTabStop"/> to
 /// <c>true</c> by default so all controls participate in Tab navigation. A <see cref="Template"/> defines the visual
 /// tree: it is applied lazily on first measure, becomes the control's single visual child, and carries the
 /// <see cref="VisualStateManager"/> groups.</summary>

@@ -1,8 +1,8 @@
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU0 Phase B coverage for the reflection-free dependency-property model + value-precedence ladder
-/// (PlanningUI.md §D1 / §D8): resolve <c>Animation &gt; Local &gt; Style &gt; Inherited &gt; Default</c>, fire the
+/// Coverage for the reflection-free dependency-property model + value-precedence ladder:
+/// resolve <c>Animation &gt; Local &gt; Style &gt; Inherited &gt; Default</c>, fire the
 /// typed change callback only on a <em>resolved</em> change, and ensure <c>SetValue</c> never clobbers an active
 /// animation. Asserted directly on a probe object — no engine, no GPU.
 /// </summary>

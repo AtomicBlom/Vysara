@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Defines a control's visual tree (PlanningUI.md §D1.6). The <see cref="Factory"/> — generated from a
+/// Defines a control's visual tree. The <see cref="Factory"/> — generated from a
 /// <c>&lt;ControlTemplate&gt;</c>, or hand-written — <c>new</c>s the subtree given the templated control, wiring its
 /// <c>{TemplateBinding}</c>s and <see cref="VisualStateManager"/> groups at instantiation.
 /// </summary>

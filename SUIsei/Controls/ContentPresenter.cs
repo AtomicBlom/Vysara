@@ -3,7 +3,7 @@ using System.Numerics;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Presents a single <see cref="Content"/> (PlanningUI.md §D2.1) — the lightweight presenter a control template
+/// Presents a single <see cref="Content"/> — the lightweight presenter a control template
 /// points at. When a <see cref="ContentTemplate"/> is set, the content is realized through that
 /// <see cref="DataTemplate"/>; otherwise a <see cref="UIElement"/> is hosted as-is and any other value is wrapped in
 /// a <see cref="TextBlock"/> (the shared <see cref="ContentHelper"/> policy). An optional solid

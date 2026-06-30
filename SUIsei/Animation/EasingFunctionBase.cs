@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// The base of the built-in easing functions (PlanningUI.md §D5.7). A subclass defines the raw ease-in shape in
+/// The base of the built-in easing functions. A subclass defines the raw ease-in shape in
 /// <see cref="EaseCore"/>; this base mirrors it for <see cref="EasingMode.EaseOut"/> and splices the two halves for
 /// <see cref="EasingMode.EaseInOut"/>, matching WinUI.
 /// </summary>

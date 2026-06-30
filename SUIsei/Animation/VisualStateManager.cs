@@ -3,7 +3,7 @@ using SUIsei.Controls;
 namespace SUIsei;
 
 /// <summary>
-/// Drives a control between named visual states (PlanningUI.md §D5.7). The <see cref="VisualStateGroupsProperty"/>
+/// Drives a control between named visual states. The <see cref="VisualStateGroupsProperty"/>
 /// attached property carries the groups on a control's template root; <see cref="GoToState"/> stops the current
 /// state's storyboard and starts the target's. When the control is attached to a host its
 /// <see cref="AnimationClock"/> animates the transition; when detached (or <c>useTransitions</c> is

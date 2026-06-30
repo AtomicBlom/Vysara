@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// Adds the WinUI framework-level layout inputs on top of <see cref="UIElement"/> (PlanningUI.md §D2.1):
+/// Adds the WinUI framework-level layout inputs on top of <see cref="UIElement"/>:
 /// explicit <see cref="Width"/>/<see cref="Height"/> (NaN = Auto), <see cref="MinWidth"/>/<see cref="MaxWidth"/>
 /// (and the height pair), <see cref="Margin"/>, and alignment. It implements the WinUI
 /// <c>MeasureCore</c>/<c>ArrangeCore</c> wrapper — deflate by margin, clamp to min/max/explicit, call the
@@ -20,7 +20,7 @@ public abstract class FrameworkElement : UIElement
 	public HorizontalAlignment HorizontalAlignment { get; set { if (field != value) { field = value; InvalidateArrange(); } } } = HorizontalAlignment.Stretch;
 	public VerticalAlignment VerticalAlignment { get; set { if (field != value) { field = value; InvalidateArrange(); } } } = VerticalAlignment.Stretch;
 
-	/// <summary>Optional name (the <c>x:Name</c> the generator assigns; diagnostics for now).</summary>
+	/// <summary>Optional name (the <c>x:Name</c> the generator assigns; diagnostics only).</summary>
 	public string? Name { get; set; }
 
 	public static readonly DependencyProperty<FrameworkElement, Style?> StyleProperty =
@@ -31,7 +31,7 @@ public abstract class FrameworkElement : UIElement
 			});
 
 	/// <summary>The style applied to this element. Writing clears the previous style's setters before applying the
-	/// new one (Style rung; below Local, above Default — §D1.6).</summary>
+	/// new one (Style rung; below Local, above Default).</summary>
 	public Style? Style { get => GetValue(StyleProperty); set => SetValue(StyleProperty, value); }
 
 	/// <summary>Per-element resource dictionary (the lookup root for <c>{StaticResource}</c> at runtime).</summary>

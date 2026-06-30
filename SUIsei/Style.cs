@@ -2,7 +2,7 @@ namespace SUIsei;
 
 /// <summary>
 /// An ordered collection of <see cref="Setter"/>s applied to a <see cref="FrameworkElement"/> via the Style
-/// rung of the DP precedence ladder (PlanningUI.md §D1.6). <see cref="BasedOn"/> forms a chain: base setters
+/// rung of the DP precedence ladder. <see cref="BasedOn"/> forms a chain: base setters
 /// apply first so derived setters override them. When replaced, the previous style's setters are cleared before
 /// the new style is applied.
 /// </summary>

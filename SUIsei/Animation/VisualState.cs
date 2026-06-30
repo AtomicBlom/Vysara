@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// One named look a control can be in (PlanningUI.md §D5.7) — e.g. <c>Normal</c>, <c>PointerOver</c>, <c>Pressed</c>.
+/// One named look a control can be in — e.g. <c>Normal</c>, <c>PointerOver</c>, <c>Pressed</c>.
 /// Entering the state runs its <see cref="Storyboard"/> (a null storyboard is the resting/default look).
 /// </summary>
 public sealed class VisualState

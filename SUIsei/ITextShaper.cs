@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// Turns a run of text into positioned glyphs against an <see cref="IGlyphSource"/> (PlanningUI.md §D3 / MU5) — it
+/// Turns a run of text into positioned glyphs against an <see cref="IGlyphSource"/> — it
 /// is written against the source interface, never a concrete atlas, so the shaping backend and the imagery backend
 /// stay independent. The default <see cref="SimpleTextShaper"/> is advance-based, one glyph per code point (no
 /// kerning or ligatures); a real shaper (e.g. HarfBuzz) applies the font's <c>GSUB</c>/<c>GPOS</c> to produce

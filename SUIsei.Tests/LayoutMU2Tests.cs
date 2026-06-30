@@ -4,7 +4,7 @@ using SUIsei.Drawing;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU2 layout completion (PlanningUI.md §D2.3 / §D8): Grid row/column span (a child's cell sums the tracks it spans)
+/// Layout completion: Grid row/column span (a child's cell sums the tracks it spans)
 /// and <see cref="ContentPresenter"/> content hosting (a string → a <see cref="TextBlock"/>; a UIElement directly).
 /// </summary>
 public sealed class LayoutMU2Tests

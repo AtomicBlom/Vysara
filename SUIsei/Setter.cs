@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// A single property assignment within a <see cref="Style"/> (PlanningUI.md §D1.6). Writes the Style rung of
+/// A single property assignment within a <see cref="Style"/>. Writes the Style rung of
 /// the DP precedence ladder, so Local values and animations still win over a Style-sourced value.
 /// </summary>
 public sealed class Setter

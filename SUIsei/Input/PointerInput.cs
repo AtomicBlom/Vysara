@@ -3,13 +3,13 @@ using System.Numerics;
 namespace SUIsei;
 
 /// <summary>
-/// One device-neutral pointer event the host queues into a <see cref="UIHost"/> between frames (PlanningUI.md §D5.2).
+/// One device-neutral pointer event the host queues into a <see cref="UIHost"/> between frames.
 /// WinUI-shaped so mouse, pen and touch share one struct; the host (Sandbox/Silk.NET) translates raw input into
 /// this, keeping graphics/windowing types out of <c>SUIsei</c>. <see cref="Position"/> is in surface pixels
 /// (the same space as the composited <c>DrawListData</c> / the framebuffer); the host hit-tests and routes it in <see cref="UIHost.Tick"/>.
 /// </summary>
 /// <param name="PointerId">Distinguishes simultaneous pointers (multi-touch); mouse is a single stable id.</param>
-/// <param name="Device">Mouse / pen / touch (MU2 drives mouse only).</param>
+/// <param name="Device">Mouse / pen / touch (only mouse is currently driven).</param>
 /// <param name="Position">Pointer position in surface pixels.</param>
 /// <param name="Update">The button edge this event carries, or <see cref="PointerUpdateKind.None"/> for a move.</param>
 /// <param name="Buttons">The buttons held after this event.</param>

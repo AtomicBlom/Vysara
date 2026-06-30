@@ -6,7 +6,7 @@ using SUIsei.Drawing;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU2 2D hit-testing (PlanningUI.md §D5.4 / §D8): a laid-out tree, then <see cref="UIElement.HitTest"/> with a
+/// 2D hit-testing: a laid-out tree, then <see cref="UIElement.HitTest"/> with a
 /// point in the element's local space — reverse-z (top-most wins), respecting <c>IsHitTestVisible</c>/
 /// <c>Visibility</c>/<c>RenderTransform</c>, and only where an element actually draws (so transparent panels fall
 /// through). Pure over the laid-out tree — no engine.

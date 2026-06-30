@@ -5,7 +5,7 @@ using System.Text;
 namespace SUIsei;
 
 /// <summary>
-/// A retained composition node (PlanningUI.md §D2.5) — the tree a pluggable <see cref="IUICompositor"/> renders.
+/// A retained composition node — the tree a pluggable <see cref="IUICompositor"/> renders.
 /// Carries a 2D <see cref="Transform"/> (animatable independently of layout), group <see cref="Opacity"/>, an
 /// optional <see cref="Clip"/>, and a damage flag for incremental recomposition. Backend-neutral.
 /// </summary>
@@ -29,7 +29,7 @@ public abstract class Visual
 	/// </summary>
 	public LayerEffect? Effect { get; set; }
 
-	/// <summary>Damage flag — a visual-only change marks the subtree for recomposition (MU2 incremental path).</summary>
+	/// <summary>Damage flag — a visual-only change marks the subtree for recomposition (the incremental path).</summary>
 	public bool IsDirty { get; internal set; } = true;
 
 	public IReadOnlyList<Visual> Children => _children;
@@ -40,7 +40,7 @@ public abstract class Visual
 	/// <summary>Mark this visual (and implicitly its subtree, via the walk) as needing recomposition.</summary>
 	public void MarkDirty() => IsDirty = true;
 
-	/// <summary>A deterministic text form of the composition subtree — the element→visual test seam (PlanningUI.md §D8.1).</summary>
+	/// <summary>A deterministic text form of the composition subtree — the element→visual test seam.</summary>
 	public string Dump()
 	{
 		var sb = new StringBuilder();

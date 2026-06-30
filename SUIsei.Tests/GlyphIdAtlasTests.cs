@@ -3,7 +3,7 @@ using System.Text;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// The glyph-id-keyed atlas mode (PlanningUI.md §D3 / MU5): a baked atlas may carry <c>glyphId</c> per entry (with
+/// The glyph-id-keyed atlas mode: a baked atlas may carry <c>glyphId</c> per entry (with
 /// <c>unicode</c> where one exists) so a shaper can address glyphs — including ligature/contextual glyphs that have
 /// no code point — by id. A plain codepoint-keyed atlas stays the default and reports no ids.
 /// </summary>

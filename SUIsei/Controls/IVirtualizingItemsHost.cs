@@ -1,8 +1,8 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A panel that virtualizes its children by pulling them from an <see cref="IItemContainerSource"/> (PlanningUI.md
-/// §D1.6). An <see cref="ItemsControl"/> detects this on its panel and hands it the source instead of pushing all
+/// A panel that virtualizes its children by pulling them from an <see cref="IItemContainerSource"/>.
+/// An <see cref="ItemsControl"/> detects this on its panel and hands it the source instead of pushing all
 /// the containers itself.
 /// </summary>
 internal interface IVirtualizingItemsHost

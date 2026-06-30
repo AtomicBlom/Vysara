@@ -3,7 +3,7 @@ using System.Numerics;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A context menu (PlanningUI.md MU6): <see cref="ShowAt"/> opens a list of <see cref="Items"/> in the root's
+/// A context menu: <see cref="ShowAt"/> opens a list of <see cref="Items"/> in the root's
 /// overlay layer just below the target, with a full-surface light-dismiss layer behind it. Invoking an item (which
 /// fires its <see cref="ButtonBase.Click"/> / <see cref="ButtonBase.Command"/>) or pressing outside closes it.
 /// </summary>

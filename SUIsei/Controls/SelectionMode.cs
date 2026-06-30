@@ -1,6 +1,6 @@
 namespace SUIsei.Controls;
 
-/// <summary>How many items a <see cref="ListView"/> allows selected at once (PlanningUI.md §D1.6).</summary>
+/// <summary>How many items a <see cref="ListView"/> allows selected at once.</summary>
 public enum SelectionMode
 {
 	/// <summary>Selection is disabled.</summary>

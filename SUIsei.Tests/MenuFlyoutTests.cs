@@ -5,7 +5,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="MenuFlyout"/> (PlanningUI.md MU6): <see cref="MenuFlyout.ShowAt"/> opens items in the root overlay,
+/// <see cref="MenuFlyout"/>: <see cref="MenuFlyout.ShowAt"/> opens items in the root overlay,
 /// and invoking an item fires its click and closes the menu (removing both overlays).
 /// </summary>
 public sealed class MenuFlyoutTests

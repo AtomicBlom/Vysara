@@ -1,6 +1,6 @@
 namespace SUIsei;
 
-/// <summary>Animates a <see cref="Point"/> from <see cref="From"/> to <see cref="To"/> over the duration (PlanningUI.md §D5.7).</summary>
+/// <summary>Animates a <see cref="Point"/> from <see cref="From"/> to <see cref="To"/> over the duration.</summary>
 public sealed class PointAnimation : AnimationTimeline<Point>
 {
 	/// <summary>The start point (null ⇒ origin).</summary>
@@ -20,7 +20,7 @@ public sealed class PointAnimation : AnimationTimeline<Point>
 		return new Point(from.X + (to.X - from.X) * t, from.Y + (to.Y - from.Y) * t);
 	}
 
-	// A point has no built-in animatable channel in MU4; a target must supply an explicit apply closure.
+	// A point has no built-in animatable channel; a target must supply an explicit apply closure.
 	protected override (Action<Point> Apply, Action Release) ResolveChannel(UIElement target, string property) =>
 		(static _ => { }, static () => { });
 }

@@ -3,7 +3,7 @@ using System.Numerics;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Hosts a single <see cref="Content"/> (PlanningUI.md §D2.1). Without a <see cref="Control.Template"/> it hosts the
+/// Hosts a single <see cref="Content"/>. Without a <see cref="Control.Template"/> it hosts the
 /// content directly (a <see cref="UIElement"/> as-is; a string wrapped in a <see cref="TextBlock"/>) and draws an
 /// optional solid <see cref="Background"/>. With a template, the control's visual tree comes from the template and a
 /// <c>{TemplateBinding Content}</c> routes <see cref="Content"/> into the template's <see cref="ContentPresenter"/>;

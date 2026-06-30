@@ -5,7 +5,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="ButtonBase.Command"/> / <see cref="ButtonBase.CommandParameter"/> (PlanningUI.md MU6): a click
+/// <see cref="ButtonBase.Command"/> / <see cref="ButtonBase.CommandParameter"/>: a click
 /// executes the command with the parameter, and while a command is set the button's <c>IsEnabled</c> tracks
 /// <see cref="ICommand.CanExecute"/>.
 /// </summary>

@@ -6,7 +6,7 @@ namespace SUIsei.Controls;
 
 /// <summary>
 /// A range control that picks a <see cref="Value"/> in <c>[<see cref="Minimum"/>, <see cref="Maximum"/>]</c> by
-/// dragging a thumb along a track, clicking the track, or with the keyboard (PlanningUI.md §D5.7). The default
+/// dragging a thumb along a track, clicking the track, or with the keyboard. The default
 /// template draws an unfilled rail, an accent fill up to the thumb, and a draggable thumb, and carries a
 /// <c>CommonStates</c> visual-state group (<c>Normal</c>/<c>PointerOver</c>/<c>Pressed</c>/<c>Disabled</c>) that the
 /// pointer drives. <see cref="Value"/> is coerced into range and snapped to <see cref="StepFrequency"/> on input;

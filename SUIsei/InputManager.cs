@@ -4,11 +4,11 @@ using System.Text;
 namespace SUIsei;
 
 /// <summary>
-/// Per-host pointer routing (PlanningUI.md §D5.1/§D5.4): hit-tests each queued <see cref="PointerInput"/> over the
+/// Per-host pointer routing: hit-tests each queued <see cref="PointerInput"/> over the
 /// host's interactive overlay views, raises tunnel-then-bubble pointer routed events, tracks the "over" chain (so
 /// enter/exit fire per element), implicitly captures on press so a press→release pair routes to the same target
 /// (the basis for <c>Button.Click</c>), and supports explicit drag capture via
-/// <see cref="RequestCapture"/>/<see cref="RequestRelease"/>. Persistent host state; headless (no engine/backend, §D8).
+/// <see cref="RequestCapture"/>/<see cref="RequestRelease"/>. Persistent host state; headless (no engine/backend).
 /// </summary>
 public sealed class InputManager
 {
@@ -168,7 +168,7 @@ public sealed class InputManager
 		return null;
 	}
 
-	// Surface priority (PlanningUI.md §D5.4): topmost screen layer wins.
+	// Surface priority: topmost screen layer wins.
 	private static UIElement? HitTest(Vector2 pos, IReadOnlyList<UIView> views)
 	{
 		UIElement? best = null;

@@ -4,7 +4,7 @@ using SUIsei.Input;
 namespace SUIsei;
 
 /// <summary>
-/// Per-host focus state machine (PlanningUI.md §D5.5). Tracks the focused element, raises the four focus
+/// Per-host focus state machine. Tracks the focused element, raises the four focus
 /// routed events (GettingFocus/LosingFocus tunnel, GotFocus/LostFocus bubble), and drives Tab/Shift-Tab
 /// navigation across a set of <see cref="UIView"/>s respecting <see cref="UIElement.IsTabStop"/>,
 /// <see cref="UIElement.IsEnabled"/>, <see cref="UIElement.TabIndex"/>, and focus scopes.
@@ -72,7 +72,7 @@ public sealed class FocusManager
 	}
 
 	/// <summary>
-	/// Focus the nearest focusable element at or above <paramref name="hit"/> in the tree (PlanningUI.md §D5.5) —
+	/// Focus the nearest focusable element at or above <paramref name="hit"/> in the tree —
 	/// the pointer-press path. A click that lands on a non-focusable part (e.g. a control's template root or its
 	/// content) focuses the control itself, matching WinUI. Returns false when no focusable ancestor exists (focus is
 	/// left unchanged).
@@ -106,7 +106,7 @@ public sealed class FocusManager
 			return TrySetFocus(candidates[next], FocusState.Keyboard);
 		}
 
-		// Arrow directions fall back to Next/Previous for now (spatial nav is MU5+).
+		// Arrow directions fall back to Next/Previous; there is no spatial navigation.
 		return false;
 	}
 

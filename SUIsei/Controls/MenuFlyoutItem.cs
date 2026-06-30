@@ -1,6 +1,6 @@
 namespace SUIsei.Controls;
 
-/// <summary>A single command row in a <see cref="MenuFlyout"/> (PlanningUI.md MU6): a <see cref="ButtonBase"/> with
+/// <summary>A single command row in a <see cref="MenuFlyout"/>: a <see cref="ButtonBase"/> with
 /// a <see cref="Text"/> label and a flat full-width template that highlights on hover. Click invocation and
 /// <see cref="ButtonBase.Command"/> come from the base; the flyout closes itself on invoke.</summary>
 public sealed class MenuFlyoutItem : ButtonBase

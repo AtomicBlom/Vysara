@@ -64,7 +64,7 @@ public sealed class XamlGeneratorDriverTests
 						x:Class="{fqClass}" Orientation="Vertical" />
 			""";
 
-		// Two views whose short class name is identical (A.MainView vs B.MainView): the old short-name hint
+		// Two views whose short class name is identical (A.MainView vs B.MainView): a short-name hint
 		// ("MainView.g.cs") would be emitted twice and crash the compilation; the fully-qualified hint must not.
 		var result = XamlGeneratorHarness.RunMany(
 			[("A.xaml", View("A.MainView")), ("B.xaml", View("B.MainView"))],

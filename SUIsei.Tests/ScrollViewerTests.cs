@@ -6,7 +6,7 @@ using SUIsei.Input;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="ScrollViewer"/> (PlanningUI.md MU6): reports extent/viewport/scrollable range, offsets its content
+/// <see cref="ScrollViewer"/>: reports extent/viewport/scrollable range, offsets its content
 /// by the scroll position clamped to range, clips to the viewport, and scrolls on a wheel event.
 /// </summary>
 public sealed class ScrollViewerTests

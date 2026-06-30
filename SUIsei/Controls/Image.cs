@@ -3,7 +3,7 @@ using SUIsei.Drawing;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Draws an <see cref="ImageSource"/> (PlanningUI.md MU6), scaled into its layout bounds per <see cref="Stretch"/>.
+/// Draws an <see cref="ImageSource"/>, scaled into its layout bounds per <see cref="Stretch"/>.
 /// Measures to the source's natural pixel size (in DIPs) so an unconstrained image takes its intrinsic size; an
 /// explicit <c>Width</c>/<c>Height</c> on the element overrides that as usual.
 /// </summary>

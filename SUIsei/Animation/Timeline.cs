@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// The base of everything an <see cref="AnimationClock"/> advances (PlanningUI.md §D5.7): a span of animated time
+/// The base of everything an <see cref="AnimationClock"/> advances: a span of animated time
 /// with a <see cref="Duration"/>, a <see cref="BeginTime"/> offset, repeat/reverse behaviour, and a fill rule for
 /// what happens when it ends. Plain authoring data — the clock owns the running state.
 /// </summary>

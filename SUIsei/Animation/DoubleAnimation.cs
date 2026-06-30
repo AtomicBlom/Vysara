@@ -2,7 +2,7 @@ namespace SUIsei;
 
 /// <summary>
 /// Animates a scalar from <see cref="From"/> to <see cref="To"/> (or by <see cref="By"/>) over the duration
-/// (PlanningUI.md §D5.7). A null <see cref="From"/> starts at zero; a null <see cref="To"/> with a
+/// A null <see cref="From"/> starts at zero; a null <see cref="To"/> with a
 /// <see cref="By"/> ends at <c>From + By</c>.
 /// </summary>
 public sealed class DoubleAnimation : AnimationTimeline<double>

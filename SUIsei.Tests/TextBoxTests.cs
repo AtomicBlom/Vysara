@@ -6,7 +6,7 @@ using SUIsei.Input;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="TextBox"/> editing model (PlanningUI.md MU6), driven through the real input pipeline: focus the box,
+/// <see cref="TextBox"/> editing model, driven through the real input pipeline: focus the box,
 /// queue text/keys, tick. Covers insert, Backspace, Shift-selection + replace, cut/paste, and TextChanged.
 /// </summary>
 public sealed class TextBoxTests

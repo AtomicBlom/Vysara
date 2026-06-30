@@ -1,8 +1,8 @@
 namespace SUIsei.Tests;
 
 /// <summary>
-/// The sRGB→linear + premultiply contract of the UI authoring colour (PlanningUI.md §D4.4). This is the "pure
-/// math" the doc calls out for headless testing: <see cref="HdrColor.ToPremultiplied"/> must linearize the
+/// The sRGB→linear + premultiply contract of the UI authoring colour. This is pure
+/// math suited to headless testing: <see cref="HdrColor.ToPremultiplied"/> must linearize the
 /// sRGB-authored channels and premultiply <em>in linear space</em> so the navy/blue HUD colours round-trip back to
 /// their authored sRGB bytes when the sRGB backbuffer re-encodes the shader's linear output on store.
 /// </summary>

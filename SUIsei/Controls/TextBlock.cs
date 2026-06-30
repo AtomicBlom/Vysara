@@ -1,8 +1,8 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A run of text (PlanningUI.md §D2.1 / §D3). MU1 measures + emits glyphs against the engine's default MTSDF font
-/// (<see cref="FontAtlas.Default"/>): an advance-based width (no HarfBuzz shaping — that is MU5) and a
+/// A run of text. Measures and emits glyphs against the engine's default MTSDF font
+/// (<see cref="FontAtlas.Default"/>): an advance-based width (no HarfBuzz shaping) and a
 /// <see cref="GlyphRunContent"/> the compositor lays out into <see cref="Glyph"/> draws.
 /// </summary>
 public sealed class TextBlock : FrameworkElement

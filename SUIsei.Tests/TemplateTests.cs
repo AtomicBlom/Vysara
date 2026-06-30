@@ -5,7 +5,7 @@ using SUIsei.Drawing;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// Template runtime coverage (PlanningUI.md §D1.6): a <see cref="ControlTemplate"/> realized on first measure becomes
+/// Template runtime coverage: a <see cref="ControlTemplate"/> realized on first measure becomes
 /// the control's single visual child; <c>{TemplateBinding Content}</c> routes the control's content into the
 /// template's <see cref="ContentPresenter"/> (live via <see cref="ContentControl.ContentChanged"/>);
 /// <see cref="ContentPresenter.ContentTemplate"/> realizes a <see cref="DataTemplate"/>; and

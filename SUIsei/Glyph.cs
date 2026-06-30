@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// One baked glyph from a <see cref="FontAtlas"/> (PlanningUI.md §D3). Plane bounds are EM units in a y-down,
+/// One baked glyph from a <see cref="FontAtlas"/>. Plane bounds are EM units in a y-down,
 /// baseline-at-origin frame (the on-screen quad, scaled by the font px size); the UV rect addresses the glyph's
 /// MTSDF cell in the atlas page (0..1, v=0 at the top — the atlas is baked with <c>yOrigin: top</c>). Whitespace
 /// glyphs set <see cref="HasGeometry"/> false and carry only an <see cref="Advance"/>.

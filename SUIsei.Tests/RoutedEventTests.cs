@@ -3,7 +3,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU2 routed events (PlanningUI.md §D5.3 / §D8): bubble target→root ordering, <c>Handled</c> short-circuit, and the
+/// Routed events: bubble target→root ordering, <c>Handled</c> short-circuit, and the
 /// composite <c>Button.Click</c> synthesized from a pointer press+release (and suppressed by a press-then-leave).
 /// </summary>
 public sealed class RoutedEventTests

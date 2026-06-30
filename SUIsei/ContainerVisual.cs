@@ -1,4 +1,4 @@
 namespace SUIsei;
 
-/// <summary>A grouping node with no content of its own (PlanningUI.md §D2.5).</summary>
+/// <summary>A grouping node with no content of its own.</summary>
 public sealed class ContainerVisual : Visual;

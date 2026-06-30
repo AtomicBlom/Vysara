@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A top-level entry in a <see cref="MenuBar"/> (PlanningUI.md MU6): a <see cref="ButtonBase"/> showing a
+/// A top-level entry in a <see cref="MenuBar"/>: a <see cref="ButtonBase"/> showing a
 /// <see cref="Title"/> that, when invoked, opens its <see cref="Items"/> as a <see cref="MenuFlyout"/> anchored
 /// below it. The flat template highlights on hover/press through a <c>CommonStates</c> group; the owning
 /// <see cref="MenuBar"/> keeps at most one item's menu open at a time.

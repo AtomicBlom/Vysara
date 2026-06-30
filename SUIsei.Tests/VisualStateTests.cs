@@ -4,7 +4,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// VisualStateManager coverage (PlanningUI.md §D5.7): GoToState stops the current state's storyboard and starts the
+/// VisualStateManager coverage: GoToState stops the current state's storyboard and starts the
 /// target's, groups are independent, and a detached control (no host clock) snaps to the target's end values so the
 /// transition is still observable headlessly.
 /// </summary>

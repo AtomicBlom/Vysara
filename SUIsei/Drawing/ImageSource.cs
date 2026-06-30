@@ -3,7 +3,7 @@ using StbImageSharp;
 namespace SUIsei.Drawing;
 
 /// <summary>
-/// A decoded RGBA8 image an <see cref="Controls.Image"/> draws (PlanningUI.md MU6). SUIsei stays GPU-free: the
+/// A decoded RGBA8 image an <see cref="Controls.Image"/> draws. SUIsei stays GPU-free: the
 /// source holds neutral pixels (decoded with StbImageSharp, the same decoder as <see cref="FontAtlas"/>) and a
 /// stable <see cref="TextureIndex"/>; the engine glue uploads it once and binds it by that index, the same texture
 /// channel the white texel (0) and glyph atlas (1) ride. Indices start at 2 so they never collide with those two.

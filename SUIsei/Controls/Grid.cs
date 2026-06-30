@@ -1,11 +1,11 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A row/column grid (PlanningUI.md §D2.3): Pixel tracks are fixed, Auto tracks size to their largest child, and
+/// A row/column grid: Pixel tracks are fixed, Auto tracks size to their largest child, and
 /// Star tracks share the leftover space by weight after Pixel/Auto are subtracted. Children select a cell with the
 /// attached <see cref="RowProperty"/>/<see cref="ColumnProperty"/> and may span tracks with
 /// <see cref="RowSpanProperty"/>/<see cref="ColumnSpanProperty"/>. An empty definition list defaults to one Star
-/// track. MU2 limitation: a spanning child does not drive Auto-track sizing (only single-cell children do).
+/// track. Limitation: a spanning child does not drive Auto-track sizing (only single-cell children do).
 /// </summary>
 public sealed class Grid : Panel
 {

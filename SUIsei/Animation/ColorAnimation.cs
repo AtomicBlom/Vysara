@@ -1,9 +1,8 @@
 namespace SUIsei;
 
 /// <summary>
-/// Animates an <see cref="HdrColor"/> from <see cref="From"/> to <see cref="To"/> over the duration (PlanningUI.md
-/// §D5.7). Interpolation is component-wise in the authored colour space (a cheap, deterministic lerp; perceptual
-/// interpolation is a later refinement).
+/// Animates an <see cref="HdrColor"/> from <see cref="From"/> to <see cref="To"/> over the duration.
+/// Interpolation is component-wise in the authored colour space (a cheap, deterministic lerp).
 /// </summary>
 public sealed class ColorAnimation : AnimationTimeline<HdrColor>
 {

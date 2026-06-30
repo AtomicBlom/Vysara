@@ -1,7 +1,7 @@
 namespace SUIsei.Tests;
 
 /// <summary>
-/// The text-shaping seam (PlanningUI.md §D3 / MU5): a <see cref="FontAtlas"/> measures + lays out through its
+/// The text-shaping seam: a <see cref="FontAtlas"/> measures + lays out through its
 /// <see cref="FontAtlas.Shaper"/>. The default is the advance-based <see cref="SimpleTextShaper"/>; installing a
 /// different <see cref="ITextShaper"/> changes layout everywhere that goes through the atlas.
 /// </summary>

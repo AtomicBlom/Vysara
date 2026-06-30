@@ -6,7 +6,7 @@ using SUIsei.Input;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU3 keyboard focus: <see cref="FocusManager.TrySetFocus"/> raises GettingFocus→GotFocus→LostFocus in the
+/// Keyboard focus: <see cref="FocusManager.TrySetFocus"/> raises GettingFocus→GotFocus→LostFocus in the
 /// correct tunnel/bubble order; Tab navigation sorts by <c>(TabIndex, document order)</c> and wraps; elements with
 /// <c>IsTabStop=false</c> or <c>IsEnabled=false</c> are skipped; a pointer press transfers focus.
 /// </summary>

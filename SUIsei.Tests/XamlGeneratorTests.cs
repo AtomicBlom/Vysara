@@ -4,7 +4,7 @@ using SUIsei.Tests.Generated;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU0 Phase C end-to-end proof (PlanningUI.md §D1.4): <c>Sample/SampleView.xaml</c> is compiled by
+/// End-to-end proof: <c>Sample/SampleView.xaml</c> is compiled by
 /// SUIsei.SourceGen into a partial <see cref="SampleView"/> with typed <c>x:Name</c> fields and an
 /// <c>InitializeComponent()</c> that builds the tree with generated <c>new</c> (no reflection, no backend).
 /// These tests construct that tree and assert the generated names / literal+enum properties / container wiring,

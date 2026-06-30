@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>The ordered child collection of a <see cref="Panel"/>; adds re-parent the child and invalidate the
-/// owner's measure (PlanningUI.md §D2.1).</summary>
+/// owner's measure.</summary>
 public sealed class UIElementCollection
 {
 	private readonly List<UIElement> _items = [];

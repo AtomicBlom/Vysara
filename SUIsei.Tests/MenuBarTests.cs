@@ -5,7 +5,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="MenuBar"/> / <see cref="MenuBarItem"/> (PlanningUI.md MU6): items lay out left to right, invoking an
+/// <see cref="MenuBar"/> / <see cref="MenuBarItem"/>: items lay out left to right, invoking an
 /// item opens its drop-down in the root overlay, invoking a drop-down entry fires and closes it, and the bar keeps
 /// at most one item's menu open at a time.
 /// </summary>

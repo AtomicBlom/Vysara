@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
-/// <summary>Absolute positioning by the attached <see cref="LeftProperty"/>/<see cref="TopProperty"/>
-/// (PlanningUI.md §D2.3): children measure unconstrained and arrange at their (Left, Top) with their desired size;
+/// <summary>Absolute positioning by the attached <see cref="LeftProperty"/>/<see cref="TopProperty"/>:
+/// children measure unconstrained and arrange at their (Left, Top) with their desired size;
 /// the Canvas itself desires nothing.</summary>
 public sealed class Canvas : Panel
 {

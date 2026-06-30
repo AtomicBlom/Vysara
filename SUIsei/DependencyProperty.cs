@@ -3,13 +3,13 @@ namespace SUIsei;
 /// <summary>
 /// A reflection-free dependency property — the WinUI semantics (typed metadata, change/coerce callbacks, value
 /// precedence) with the <see cref="Type"/>-keyed, string-dispatched mechanism replaced by a dense integer slot
-/// (<see cref="GlobalIndex"/>) and typed delegates (PlanningUI.md §D1.1). Abstract base; the concrete property is
+/// (<see cref="GlobalIndex"/>) and typed delegates. Abstract base; the concrete property is
 /// always a <see cref="DependencyProperty{TOwner, TValue}"/>. Identity is by reference.
 /// </summary>
 public abstract class DependencyProperty
 {
 	// Dense, monotonically increasing slot ids assigned at registration — lets DependencyObject use a small
-	// int-keyed store instead of a reference-hashed dictionary (PlanningUI.md §D1.2).
+	// int-keyed store instead of a reference-hashed dictionary.
 	private static int _next;
 
 	private protected DependencyProperty(string name, DependencyPropertyKind kind, InvalidationFlags invalidates)
@@ -38,13 +38,13 @@ public abstract class DependencyProperty
 		new(name, DependencyPropertyKind.Normal, metadata);
 
 	/// <summary>Register an attached dependency property declared by <typeparamref name="TOwner"/> (e.g. <c>Grid.Row</c>),
-	/// settable on any <see cref="DependencyObject"/> target (PlanningUI.md §D1.3).</summary>
+	/// settable on any <see cref="DependencyObject"/> target.</summary>
 	public static DependencyProperty<TOwner, TValue> RegisterAttached<TOwner, TValue>(string name, PropertyMetadata<TOwner, TValue> metadata)
 		where TOwner : DependencyObject =>
 		new(name, DependencyPropertyKind.Attached, metadata);
 
 	// Non-generic seams the (non-generic) effective-value store calls; the generic subclass casts and dispatches
-	// the typed delegates — so there is no reflection anywhere on the set path (PlanningUI.md §D1.2).
+	// the typed delegates — so there is no reflection anywhere on the set path.
 	internal abstract object? DefaultValueBoxed { get; }
 	internal abstract void RaiseChanged(DependencyObject owner, object? oldValue, object? newValue);
 	internal abstract object? CoerceBoxed(DependencyObject owner, object? value);
@@ -52,7 +52,7 @@ public abstract class DependencyProperty
 	public override string ToString() => $"{Name}#{GlobalIndex}";
 }
 
-/// <summary>The concrete, typed dependency property (PlanningUI.md §D1.1).</summary>
+/// <summary>The concrete, typed dependency property.</summary>
 public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty where TOwner : DependencyObject
 {
 	internal DependencyProperty(string name, DependencyPropertyKind kind, PropertyMetadata<TOwner, TValue> metadata)

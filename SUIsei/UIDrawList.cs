@@ -57,7 +57,7 @@ internal sealed class UIDrawList
 	}
 
 	/// <summary>
-	/// Lay out a text run as MTSDF glyph quads (PlanningUI.md §D3) through the atlas's <see cref="FontAtlas.Shaper"/>,
+	/// Lay out a text run as MTSDF glyph quads through the atlas's <see cref="FontAtlas.Shaper"/>,
 	/// so kerning / ligatures / contextual forms apply when a real shaper is installed (the default is advance-based
 	/// LTR). The run's local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the
 	/// first line's ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by

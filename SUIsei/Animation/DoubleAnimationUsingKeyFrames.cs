@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// Animates a scalar through a sequence of <see cref="DoubleKeyFrame"/>s (PlanningUI.md §D5.7). Each key's
+/// Animates a scalar through a sequence of <see cref="DoubleKeyFrame"/>s. Each key's
 /// <see cref="DoubleKeyFrame.KeyTime"/> is normalized against the <see cref="Timeline.Duration"/>; the value before
 /// the first key holds at its value, the value after the last key holds at its value, and each segment is lerped with
 /// the upper key's own easing. Keyframes are assumed to be in ascending <see cref="DoubleKeyFrame.KeyTime"/> order.

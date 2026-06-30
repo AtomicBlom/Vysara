@@ -49,14 +49,14 @@ public sealed class UIRoot
 	/// storyboards (e.g. <see cref="VisualStateManager"/>). Null for a root used standalone in tests.</summary>
 	internal AnimationClock? Clock { get; set; }
 
-	/// <summary>The composition tree this root renders (PlanningUI.md §D2.5).</summary>
+	/// <summary>The composition tree this root renders.</summary>
 	public RootVisual Visual { get; } = new();
 
 	/// <summary>True for an HDR surface (drives colour linearization downstream).</summary>
 	public bool IsHdrSurface { get => Visual.IsHdrSurface; set => Visual.IsHdrSurface = value; }
 
 	/// <summary>DIP→pixel scale: window DPI/96 for an overlay, author-chosen texel density for an in-world quad
-	/// (PlanningUI.md §D2.8). Layout runs in DIPs; the render walk scales positions by this.</summary>
+	/// Layout runs in DIPs; the render walk scales positions by this.</summary>
 	public float LayoutScale { get; set; } = 1f;
 
 	/// <summary>Add an overlay element composited above <see cref="Content"/> (a popup/flyout, or its full-surface
@@ -85,7 +85,7 @@ public sealed class UIRoot
 	public void LayoutPass(Size availablePixels)
 	{
 		// Update the root visual's surface size + DIP→pixel scale, marking dirty only on a real change so a fully
-		// static frame produces no damage (and the compositor's frame-level no-op kicks in — §D2.4/§D2.5).
+		// static frame produces no damage (and the compositor's frame-level no-op kicks in).
 		var size = new Vector2(availablePixels.Width, availablePixels.Height);
 		if (Visual.SurfaceSize != size)
 		{
@@ -150,7 +150,7 @@ public sealed class UIRoot
 	}
 
 	/// <summary>The element tree annotated with <c>DesiredSize</c>/<c>LayoutRect</c> after a layout pass — the
-	/// layout-test snapshot (PlanningUI.md §D8.1).</summary>
+	/// layout-test snapshot.</summary>
 	public string DumpLayout()
 	{
 		var sb = new StringBuilder();

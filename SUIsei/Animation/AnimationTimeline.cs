@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// A <see cref="Timeline"/> that drives one target property (PlanningUI.md §D5.7). The <see cref="AnimationClock"/>
+/// A <see cref="Timeline"/> that drives one target property. The <see cref="AnimationClock"/>
 /// only needs to push the current value and to release the target on stop, so the non-generic base exposes just
 /// those two seams; the typed value + apply/release closures live on <see cref="AnimationTimeline{T}"/>. The closures
 /// are resolved (by the generator, or by hand) to a typed write — no reflection.

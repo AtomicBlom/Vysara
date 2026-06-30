@@ -6,7 +6,7 @@ using SUIsei.Input;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="Slider"/> (PlanningUI.md §D5.7): <see cref="Slider.Value"/> is coerced into range; a track press maps
+/// <see cref="Slider"/>: <see cref="Slider.Value"/> is coerced into range; a track press maps
 /// the pointer position to a snapped value and enters the <c>Pressed</c> visual state; dragging tracks the captured
 /// pointer; the keyboard nudges the value; and releasing leaves the pressed state.
 /// </summary>

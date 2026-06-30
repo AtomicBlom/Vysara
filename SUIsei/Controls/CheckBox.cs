@@ -1,11 +1,11 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A <see cref="ToggleButton"/> with a check-box look (PlanningUI.md MU6): a square box hosting an inner fill glyph,
+/// A <see cref="ToggleButton"/> with a check-box look: a square box hosting an inner fill glyph,
 /// beside a <see cref="ContentControl.Content"/> label. The glyph is hidden when unchecked, the accent fill when
 /// checked, and a dimmer fill when indeterminate, and the box border picks up the accent while (in)determinate. The
 /// box itself reacts to the pointer through a <c>CommonStates</c> group (hover lightens it, press darkens it).
-/// (A drawn check mark awaits a glyph in the font atlas; the filled box is the current representation.)
+/// (A drawn check mark awaits a glyph in the font atlas; the filled box is the representation used.)
 /// </summary>
 public sealed class CheckBox : ToggleButton
 {

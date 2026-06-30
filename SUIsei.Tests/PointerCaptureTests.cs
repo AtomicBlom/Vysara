@@ -5,7 +5,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU3 explicit pointer capture: <see cref="UIElement.CapturePointer"/> routes move/release events to the
+/// Explicit pointer capture: <see cref="UIElement.CapturePointer"/> routes move/release events to the
 /// captee regardless of where the pointer actually is; <see cref="UIElement.ReleasePointerCapture"/> raises
 /// <see cref="UIElement.PointerCaptureLostEvent"/> and returns routing to the hit element.
 /// </summary>

@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Stacks children end-to-end along <see cref="Orientation"/> (PlanningUI.md §D2.3): the stacking axis is measured
+/// Stacks children end-to-end along <see cref="Orientation"/>: the stacking axis is measured
 /// unconstrained (∞), desired = sum along it and max across it; arrange lays children out one after another, each
 /// stretched on the cross axis.
 /// </summary>

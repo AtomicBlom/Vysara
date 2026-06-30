@@ -4,7 +4,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// Items-control coverage (PlanningUI.md §D1.6): one container realized per item (through a data template or the
+/// Items-control coverage: one container realized per item (through a data template or the
 /// default wrap), incremental updates from an <c>ObservableCollection</c> (add/remove/replace/reset), and ListView
 /// single selection driving the item's selection visual. Headless — no GPU.
 /// </summary>

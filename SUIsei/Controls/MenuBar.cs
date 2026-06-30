@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A horizontal bar of <see cref="MenuBarItem"/>s (PlanningUI.md MU6) — the classic application menu (File, Edit, …).
+/// A horizontal bar of <see cref="MenuBarItem"/>s — the classic application menu (File, Edit, …).
 /// Items lay out left to right over a solid bar <see cref="Panel.Background"/>; the bar keeps at most one item's
 /// drop-down open at a time, closing the previous one when another opens.
 /// </summary>

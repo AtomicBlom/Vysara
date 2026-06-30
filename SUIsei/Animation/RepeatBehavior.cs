@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// How many times a <see cref="Timeline"/> repeats (PlanningUI.md §D5.7): a finite iteration <see cref="Count"/>
+/// How many times a <see cref="Timeline"/> repeats: a finite iteration <see cref="Count"/>
 /// or <see cref="Forever"/>. The default (<c>default(RepeatBehavior)</c>) is a single iteration.
 /// </summary>
 public readonly record struct RepeatBehavior

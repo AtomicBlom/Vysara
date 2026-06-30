@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// The container a <see cref="ListView"/> wraps each item in (PlanningUI.md §D1.6). A <c>SelectionStates</c>
+/// The container a <see cref="ListView"/> wraps each item in. A <c>SelectionStates</c>
 /// <see cref="VisualStateManager"/> group animates a selection highlight behind the content; the owning list calls
 /// <see cref="SetSelected"/> when the selection changes.
 /// </summary>

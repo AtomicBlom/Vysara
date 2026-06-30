@@ -5,7 +5,7 @@ using SUIsei.Input;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// The clickable-control base (PlanningUI.md §D2.1): the bubbling <see cref="Click"/> routed event synthesized from
+/// The clickable-control base: the bubbling <see cref="Click"/> routed event synthesized from
 /// a pointer press+release over the control (or Enter/Space when focused), the common pointer visual states
 /// (<c>Normal</c>/<c>PointerOver</c>/<c>Pressed</c>), and WinUI <see cref="Command"/>/<see cref="CommandParameter"/>
 /// support. A concrete button supplies its look via a <see cref="Control.Template"/>; <see cref="OnClick"/> is the

@@ -1,6 +1,6 @@
 namespace SUIsei;
 
-/// <summary>What an animation does to its target when it finishes (PlanningUI.md §D5.7).</summary>
+/// <summary>What an animation does to its target when it finishes.</summary>
 public enum FillBehavior
 {
 	/// <summary>Hold the final animated value after the animation ends (the animation rung stays set).</summary>

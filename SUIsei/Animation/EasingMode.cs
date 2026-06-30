@@ -1,6 +1,6 @@
 namespace SUIsei;
 
-/// <summary>Which end of an easing function is shaped (PlanningUI.md §D5.7).</summary>
+/// <summary>Which end of an easing function is shaped.</summary>
 public enum EasingMode
 {
 	/// <summary>Apply the easing curve at the start.</summary>

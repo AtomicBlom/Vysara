@@ -3,8 +3,8 @@ using System.Numerics;
 namespace SUIsei;
 
 /// <summary>
-/// Payload for the pointer routed events (PlanningUI.md §D5.3): the <see cref="PointerPoint"/> and the originating
-/// <see cref="Device"/>. Pooled by the input pipeline. Key modifiers arrive with keyboard input in MU3.
+/// Payload for the pointer routed events: the <see cref="PointerPoint"/> and the originating
+/// <see cref="Device"/>. Pooled by the input pipeline.
 /// </summary>
 public sealed class PointerRoutedEventArgs : RoutedEventArgs
 {

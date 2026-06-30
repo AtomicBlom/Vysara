@@ -1,8 +1,8 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Builds the <see cref="Panel"/> an <see cref="ItemsControl"/> lays its item containers out in (PlanningUI.md
-/// §D1.6). The default is a vertical <see cref="StackPanel"/>; a virtualizing list supplies a
+/// Builds the <see cref="Panel"/> an <see cref="ItemsControl"/> lays its item containers out in.
+/// The default is a vertical <see cref="StackPanel"/>; a virtualizing list supplies a
 /// <see cref="VirtualizingStackPanel"/> instead.
 /// </summary>
 public sealed class ItemsPanelTemplate

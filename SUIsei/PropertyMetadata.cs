@@ -4,7 +4,7 @@ namespace SUIsei;
 /// The typed metadata for a <see cref="DependencyProperty{TOwner, TValue}"/>: default value, a typed
 /// change callback (old, new — no boxing on the typed path), an optional coerce, and what it invalidates.
 /// Callbacks are <c>static</c> by convention (captured once at registration — no per-instance delegate, no
-/// reflection; PlanningUI.md §D1.1).
+/// reflection).
 /// </summary>
 public sealed class PropertyMetadata<TOwner, TValue> where TOwner : DependencyObject
 {

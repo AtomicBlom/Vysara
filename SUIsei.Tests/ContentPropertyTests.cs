@@ -4,7 +4,7 @@ using SUIsei.Tests.Generated;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <c>[ContentProperty]</c> (PlanningUI.md MU6): child elements route into the property the control declares,
+/// <c>[ContentProperty]</c>: child elements route into the property the control declares,
 /// appended for a collection (Panel.Children) and assigned for a scalar (ScrollViewer.Content, Border.Child) —
 /// driven by the attribute, not a hardcoded name. <c>ContentModelView.xaml</c> nests all three.
 /// </summary>

@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// A group of timelines begun and stopped as a unit (PlanningUI.md §D5.7) — the thing
+/// A group of timelines begun and stopped as a unit — the thing
 /// <see cref="AnimationClock.Begin"/> runs and <see cref="VisualStateManager"/> swaps per state. Children are the
 /// per-property <see cref="AnimationTimeline"/>s; the clock advances each by the storyboard's elapsed time.
 /// </summary>

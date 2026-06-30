@@ -4,9 +4,9 @@ using System.Numerics;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A single-child decorator with a background, a border, padding, and rounded corners (PlanningUI.md §D2.3):
+/// A single-child decorator with a background, a border, padding, and rounded corners:
 /// measure deflates by border + padding around the child; arrange insets the child by the same; the visual draws a
-/// (rounded) fill + border. Phase B treats <see cref="BorderThickness"/> as uniform for the drawn stroke.
+/// (rounded) fill + border. <see cref="BorderThickness"/> is treated as uniform for the drawn stroke.
 /// </summary>
 [ContentProperty(Name = nameof(Child))]
 public sealed class Border : FrameworkElement

@@ -1,6 +1,6 @@
 namespace SUIsei;
 
-/// <summary>The set of pointer buttons currently held (PlanningUI.md §D5.2).</summary>
+/// <summary>The set of pointer buttons currently held.</summary>
 [Flags]
 public enum PointerButtons : byte
 {

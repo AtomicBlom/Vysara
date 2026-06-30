@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// Advances active storyboards by the per-frame delta (PlanningUI.md §D5.7). Held by the <see cref="UIHost"/> and
+/// Advances active storyboards by the per-frame delta. Held by the <see cref="UIHost"/> and
 /// stepped once per <see cref="UIHost.Tick"/> from its <c>deltaSeconds</c>, so output is fully deterministic: tests
 /// tick synthetic deltas and assert the resolved value over time — no frame loop, no GPU.
 ///

@@ -2,7 +2,7 @@
 namespace SUIsei.Tests;
 
 /// <summary>
-/// Decode coverage for the baked MTSDF <see cref="FontAtlas"/> (PlanningUI.md §D3 / §D8.3). Runs against the
+/// Decode coverage for the baked MTSDF <see cref="FontAtlas"/>. Runs against the
 /// engine's embedded default atlas (Cascadia Code) — a committed, hermetic fixture that ships inside SUIsei, so
 /// the test needs no backend and no loose files. Pins the page format (linear/UNORM, no mips), the glyph-table
 /// lookup, and the EM-unit metrics the compositor lays out against.

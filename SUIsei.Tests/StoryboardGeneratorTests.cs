@@ -1,8 +1,8 @@
 namespace SUIsei.Tests;
 
 /// <summary>
-/// Generator coverage for <c>&lt;VisualStateManager.VisualStateGroups&gt;</c> + <c>&lt;Storyboard&gt;</c> markup
-/// (PlanningUI.md §D5.7): the generator emits the VSM groups, their state storyboards, and each animation with the
+/// Generator coverage for <c>&lt;VisualStateManager.VisualStateGroups&gt;</c> + <c>&lt;Storyboard&gt;</c> markup:
+/// the generator emits the VSM groups, their state storyboards, and each animation with the
 /// declarative Target/TargetProperty the runtime resolves — no reflection. Asserted on the generated source text.
 /// </summary>
 public sealed class StoryboardGeneratorTests

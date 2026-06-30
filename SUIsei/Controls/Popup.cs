@@ -3,7 +3,7 @@ using System.Numerics;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A transient overlay (PlanningUI.md MU6): when <see cref="IsOpen"/> is set, its <see cref="Child"/> is composited
+/// A transient overlay: when <see cref="IsOpen"/> is set, its <see cref="Child"/> is composited
 /// above the root's content at (<see cref="HorizontalOffset"/>, <see cref="VerticalOffset"/>) and hit-tested on top.
 /// The popup element itself occupies no layout space. With <see cref="IsLightDismissEnabled"/> a full-surface layer
 /// behind the child closes the popup on an outside press. The popup must be attached to a live root (in the element

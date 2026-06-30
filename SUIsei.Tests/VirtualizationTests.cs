@@ -5,7 +5,7 @@ using SUIsei.Drawing;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// UI virtualization coverage (PlanningUI.md §D1.6): a <see cref="VirtualizingStackPanel"/> realizes only the
+/// UI virtualization coverage: a <see cref="VirtualizingStackPanel"/> realizes only the
 /// containers intersecting its viewport and recycles the rest as the offset changes, so a large list never
 /// materializes all its containers. Fixed row height; offset set directly. Headless — realize/recycle counters.
 /// </summary>

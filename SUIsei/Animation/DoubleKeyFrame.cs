@@ -1,7 +1,7 @@
 namespace SUIsei;
 
 /// <summary>
-/// One key of a <see cref="DoubleAnimationUsingKeyFrames"/> (PlanningUI.md §D5.7): the scalar <see cref="Value"/> the
+/// One key of a <see cref="DoubleAnimationUsingKeyFrames"/>: the scalar <see cref="Value"/> the
 /// animation reaches at <see cref="KeyTime"/> (measured from the start of the animation), with an optional
 /// <see cref="EasingFunction"/> shaping the segment that ends at this key.
 /// </summary>

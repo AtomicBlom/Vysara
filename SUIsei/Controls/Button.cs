@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A clickable <see cref="ButtonBase"/> with a default look (PlanningUI.md §D2.1/§D5.3/§D5.7): a rounded
+/// A clickable <see cref="ButtonBase"/> with a default look: a rounded
 /// <see cref="Border"/> hosting a <see cref="ContentPresenter"/> (<c>{TemplateBinding Content}</c>) with a
 /// <c>CommonStates</c> <see cref="VisualStateManager"/> group that animates the background on hover/press. Click
 /// synthesis, <see cref="ButtonBase.Click"/>, and <see cref="ButtonBase.Command"/> all come from the base.

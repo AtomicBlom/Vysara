@@ -16,18 +16,18 @@ public sealed class DrawListCompositor : IUICompositor
 	private readonly FontAtlas _font;
 
 	/// <param name="font">
-	/// The atlas glyph runs lay out against; defaults to <see cref="FontAtlas.Default"/> (the embedded MU1 font).
+	/// The atlas glyph runs lay out against; defaults to <see cref="FontAtlas.Default"/> (the embedded default font).
 	/// Must be the same atlas the renderer uploaded via <c>EnableUI(font.Texture)</c> so UVs line up.
 	/// </param>
 	public DrawListCompositor(FontAtlas? font = null) => _font = font ?? FontAtlas.Default;
 
 	/// <summary>How many full recomposites have run (a clean frame's no-op does not increment it) — instrumentation
-	/// for the incremental-recomposition tests (PlanningUI.md §D8.2).</summary>
+	/// for the incremental-recomposition tests.</summary>
 	public int CompositeCount { get; private set; }
 
 	public void Composite(RootVisual root, DrawListId surface)
 	{
-		// Frame-level no-op (PlanningUI.md §D2.4/§D2.5): once a surface has been composited, a fully-clean visual
+		// Frame-level no-op: once a surface has been composited, a fully-clean visual
 		// tree re-submits the cached draw data with the same Revision — a static frame does zero compositing work
 		// (and the backend can skip re-upload). A visual-only change marks its subtree dirty and forces a rebuild.
 		if (_surfaces.ContainsKey(surface.Value) && !AnyDirty(root))

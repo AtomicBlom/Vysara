@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A <see cref="ButtonBase"/> that holds a checked state (PlanningUI.md MU6) — the base for <see cref="CheckBox"/>.
+/// A <see cref="ButtonBase"/> that holds a checked state — the base for <see cref="CheckBox"/>.
 /// A click cycles <see cref="IsChecked"/> (two-state, or three-state through <c>null</c> when
 /// <see cref="IsThreeState"/> is set), raising <see cref="Checked"/>/<see cref="Unchecked"/>/<see cref="Indeterminate"/>
 /// and driving the <c>CheckStates</c> visual-state group. Subclasses reflect the state in template parts via

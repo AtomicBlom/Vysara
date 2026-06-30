@@ -4,8 +4,8 @@ using SUIsei.Drawing;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// Group-opacity coverage at the draw-list (description) level — the headless proof of the double-blend fix
-/// (PlanningUI.md §D2.5). A container with sub-1 opacity (or a group effect) must composite its subtree as one
+/// Group-opacity coverage at the draw-list (description) level — the headless proof of the double-blend fix.
+/// A container with sub-1 opacity (or a group effect) must composite its subtree as one
 /// render-to-texture layer rather than folding the fade into each child's vertex alpha (which double-blends
 /// overlapping children). The compositor expresses that as a <c>BeginLayer</c>/<c>EndLayer</c> marker pair around the
 /// subtree, emitted at <b>full</b> alpha. Asserted on CPU via <see cref="DrawListData.Dump"/> — no backend.

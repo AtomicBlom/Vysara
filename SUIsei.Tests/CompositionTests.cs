@@ -59,7 +59,7 @@ public sealed class CompositionTests
 	[Test]
 	public void Render_revision_is_stable_across_a_no_op_and_advances_on_change()
 	{
-		// MU2 frame-level no-op (PlanningUI.md §D2.4/§D2.5): a clean re-render re-submits the cached draw data with
+		// Frame-level no-op: a clean re-render re-submits the cached draw data with
 		// the SAME Revision (so the host/backend can skip work); a real visual change bumps it.
 		var border = new Border { Background = HdrColor.FromRgb(1, 2, 3), Width = 10, Height = 10 };
 		var root = Root(border, 10, 10);

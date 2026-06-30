@@ -39,7 +39,7 @@ public sealed class UIHost
 	/// <summary>Keyboard focus state machine.</summary>
 	public FocusManager Focus { get; } = new();
 
-	/// <summary>The animation clock advancing this host's storyboards (PlanningUI.md §D5.7), stepped each <see cref="Tick"/>.</summary>
+	/// <summary>The animation clock advancing this host's storyboards, stepped each <see cref="Tick"/>.</summary>
 	public AnimationClock Clock { get; } = new();
 
 	/// <summary>The roots this host owns.</summary>
@@ -89,7 +89,7 @@ public sealed class UIHost
 
 		// Advance animations FIRST: a clock write to a layout-affecting DP invalidates measure/arrange so the new
 		// value is reflected in this frame's LayoutPass; a visual-channel write (transform/opacity/brush) only marks
-		// the subtree dirty for the composite, with no relayout (PlanningUI.md §D5.7).
+		// the subtree dirty for the composite, with no relayout.
 		Clock.Advance(deltaSeconds);
 
 		_framebufferSize = new Size(framebufferSize.X, framebufferSize.Y);

@@ -1,9 +1,9 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Shared content-hosting policy (PlanningUI.md §D2.1): a <see cref="UIElement"/> is hosted as-is; a string (or any
+/// Shared content-hosting policy: a <see cref="UIElement"/> is hosted as-is; a string (or any
 /// other object) is wrapped in a <see cref="TextBlock"/>. Used by both <see cref="ContentControl"/> and
-/// <see cref="ContentPresenter"/> so the rule lives in one place. (Data templates replace this in MU4.)
+/// <see cref="ContentPresenter"/> so the rule lives in one place.
 /// </summary>
 internal static class ContentHelper
 {

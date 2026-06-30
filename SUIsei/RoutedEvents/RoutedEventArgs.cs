@@ -1,9 +1,9 @@
 namespace SUIsei;
 
 /// <summary>
-/// The base routed-event payload (PlanningUI.md §D5.3). <see cref="OriginalSource"/> is the element the event was
+/// The base routed-event payload. <see cref="OriginalSource"/> is the element the event was
 /// raised on; <see cref="Source"/> is the current element as the route advances; <see cref="Handled"/> short-circuits
-/// the remaining route (a handler that registered <c>handledEventsToo</c> still runs — MU3). Mutable + reusable so
+/// the remaining route (a handler that registered <c>handledEventsToo</c> still runs). Mutable + reusable so
 /// the input pipeline can pool one instance per dispatch (honouring the "0 GC in the render loop" rule).
 /// </summary>
 public class RoutedEventArgs

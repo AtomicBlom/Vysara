@@ -12,7 +12,7 @@ public sealed class Row
 public partial class TemplatedView;
 
 /// <summary>
-/// End-to-end proof that the generated template factories build real, working trees (PlanningUI.md §D1.6): the
+/// End-to-end proof that the generated template factories build real, working trees: the
 /// fixture's compilation already proves the emitted C# is valid; these tests prove the runtime behaviour — a
 /// ControlTemplate's <c>{TemplateBinding Content}</c> flows the control's content into its
 /// <see cref="ContentPresenter"/>, and an <see cref="ItemsControl"/>'s <c>DataTemplate</c> realizes one bound

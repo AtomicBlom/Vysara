@@ -4,8 +4,8 @@ using System.Collections.Specialized;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Lays out one container per item of <see cref="ItemsSource"/> in an <see cref="ItemsPanel"/> (PlanningUI.md
-/// §D1.6). Each container is realized through <see cref="ItemTemplate"/> (a <see cref="DataTemplate"/>) or, with no
+/// Lays out one container per item of <see cref="ItemsSource"/> in an <see cref="ItemsPanel"/>.
+/// Each container is realized through <see cref="ItemTemplate"/> (a <see cref="DataTemplate"/>) or, with no
 /// template, by wrapping the item. When the source implements <see cref="INotifyCollectionChanged"/> the realized
 /// containers are updated incrementally (add/remove/replace/move/reset) rather than rebuilt.
 /// </summary>

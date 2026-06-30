@@ -1,7 +1,7 @@
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU3 generator snapshot: <c>Mode=TwoWay</c> in <c>{x:Bind}</c> emits a reentrancy guard and a control→VM
+/// Generator snapshot: <c>Mode=TwoWay</c> in <c>{x:Bind}</c> emits a reentrancy guard and a control→VM
 /// reverse-wire event handler; <c>FallbackValue</c> / <c>TargetNullValue</c> emit null-coalescing chains;
 /// <c>{StaticResource key}</c> emits a <c>FindResource</c> runtime lookup.
 /// </summary>

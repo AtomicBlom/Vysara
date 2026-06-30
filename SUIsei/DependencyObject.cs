@@ -1,19 +1,19 @@
 namespace SUIsei;
 
 /// <summary>
-/// The base of everything that carries dependency properties (PlanningUI.md §D1.2). Holds a sparse, int-keyed
+/// The base of everything that carries dependency properties. Holds a sparse, int-keyed
 /// effective-value store and resolves the WinUI value-precedence ladder:
 /// <para><c>Animation &gt; Local &gt; Style &gt; Inherited &gt; Default</c></para>
 /// A set recomputes the top of the ladder, coerces it, fires the typed change callback only when the
 /// <em>coerced resolved</em> value changes, and ORs the property's <see cref="InvalidationFlags"/> into the element (via
 /// <see cref="OnPropertyInvalidated"/>). Reflection-free: dispatch goes through the typed delegates on
-/// <see cref="DependencyProperty{TOwner, TValue}"/>. The animation rung exists from day one (a hard prerequisite
-/// for storyboards, MU4) even though nothing drives it until then.
+/// <see cref="DependencyProperty{TOwner, TValue}"/>. The animation rung exists as a hard prerequisite
+/// for storyboards.
 /// </summary>
 public abstract class DependencyObject
 {
 	// One precedence rung's slot. We box value types here (the general store); the typed get/set API keeps the
-	// public surface boxing-free, and a boxing-free value-type fast path is a later optimization (PlanningUI.md §D1.1).
+	// public surface boxing-free, and a boxing-free value-type fast path is a later optimization.
 	private enum Rung { Animation = 0, Local = 1, Style = 2, Inherited = 3 }
 
 	private struct ValueSlot
@@ -67,23 +67,23 @@ public abstract class DependencyObject
 	}
 
 	/// <summary>Write the <b>Local</b> rung (the public set). Never clobbers an active Animation value — animation
-	/// still wins until cleared (MU4 correctness, PlanningUI.md §D1.2).</summary>
+	/// still wins until cleared.</summary>
 	public void SetValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, TValue value) where TOwner : DependencyObject =>
 		SetRung(dp, Rung.Local, value, hasValue: true);
 
-	/// <summary>Push the <b>Animation</b> rung (the top of the ladder) — the storyboard/independent-animation path (MU4).</summary>
+	/// <summary>Push the <b>Animation</b> rung (the top of the ladder) — the storyboard/independent-animation path.</summary>
 	internal void SetAnimatedValue(DependencyProperty dp, object? value) => SetRung(dp, Rung.Animation, value, hasValue: true);
 
 	/// <summary>Clear the animation rung (FillBehavior.Stop / storyboard end) — reverts to Local/Style/Inherited/Default.</summary>
 	internal void ClearAnimatedValue(DependencyProperty dp) => SetRung(dp, Rung.Animation, null, hasValue: false);
 
-	/// <summary>Push the <b>Style</b> rung (applied by a Style; below Local) — MU3.</summary>
+	/// <summary>Push the <b>Style</b> rung (applied by a Style; below Local).</summary>
 	internal void SetStyleValue(DependencyProperty dp, object? value) => SetRung(dp, Rung.Style, value, hasValue: true);
 
 	/// <summary>Clear the <b>Style</b> rung (called when a new style replaces an old one so stale setters are removed).</summary>
 	internal void ClearStyleValue(DependencyProperty dp) => SetRung(dp, Rung.Style, null, hasValue: false);
 
-	/// <summary>Push the <b>Inherited</b> rung (property-value inheritance; below Style) — MU2+.</summary>
+	/// <summary>Push the <b>Inherited</b> rung (property-value inheritance; below Style).</summary>
 	internal void SetInheritedValue(DependencyProperty dp, object? value) => SetRung(dp, Rung.Inherited, value, hasValue: true);
 
 	/// <summary>True if a Local value is currently set (independent of the resolved value).</summary>
@@ -111,7 +111,7 @@ public abstract class DependencyObject
 	}
 
 	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> from <paramref name="source"/> on this object to a child setter
-	/// (PlanningUI.md §D1.6). The child is updated immediately with the current value and on every later change.
+	/// The child is updated immediately with the current value and on every later change.
 	/// Public so a generated (or hand-written) template factory can wire its template bindings without reflection.</summary>
 	public void RegisterTemplateBinding(DependencyProperty source, Action<object?> push)
 	{

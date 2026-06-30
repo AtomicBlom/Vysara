@@ -3,7 +3,7 @@ using SUIsei.Input;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A single-line editable text field (PlanningUI.md MU6). Consumes the host's <see cref="UIElement.CharacterReceived"/>
+/// A single-line editable text field. Consumes the host's <see cref="UIElement.CharacterReceived"/>
 /// and <see cref="UIElement.KeyDown"/> events (the input pipeline already routes them to the focused element) to
 /// drive a caret + selection over <see cref="Text"/>: insert/overtype, Backspace/Delete, arrow/Home/End motion
 /// (Shift extends the selection), Select-All, and cut/copy/paste through a process-wide clipboard (an OS clipboard is

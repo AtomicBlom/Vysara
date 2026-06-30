@@ -3,7 +3,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="ToggleButton"/> / <see cref="CheckBox"/> (PlanningUI.md MU6): click cycles the checked state
+/// <see cref="ToggleButton"/> / <see cref="CheckBox"/>: click cycles the checked state
 /// (two- and three-state), raises the matching routed events, and the check-box template realizes and renders.
 /// </summary>
 public sealed class ToggleButtonTests

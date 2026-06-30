@@ -1,9 +1,9 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// An <see cref="ItemsControl"/> that wraps each item in a selectable <see cref="ListViewItem"/> (PlanningUI.md
-/// §D1.6). Clicking an item selects it (driving the item's <c>SelectionStates</c> visual); MU4 implements single
-/// selection (full multi-select is a later refinement).
+/// An <see cref="ItemsControl"/> that wraps each item in a selectable <see cref="ListViewItem"/>.
+/// Clicking an item selects it (driving the item's <c>SelectionStates</c> visual); single selection is supported
+/// (full multi-select is a later refinement).
 /// </summary>
 public class ListView : ItemsControl
 {

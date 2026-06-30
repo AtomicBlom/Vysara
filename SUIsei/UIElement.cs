@@ -3,7 +3,7 @@ using System.Numerics;
 namespace SUIsei;
 
 /// <summary>
-/// The base of every visual element (PlanningUI.md §D2.1): two-pass measure/arrange, layout invalidation, the
+/// The base of every visual element: two-pass measure/arrange, layout invalidation, the
 /// owned composition <see cref="Visual"/>, render-affecting DPs, routed events (pointer + keyboard + focus),
 /// hit-testing, and focus/capture queries. The WinUI <c>MeasureCore</c>/<c>ArrangeCore</c> seam lets
 /// <see cref="FrameworkElement"/> layer Margin/Min/Max/alignment on top of the element's intrinsic sizing.
@@ -62,7 +62,7 @@ public abstract class UIElement : DependencyObject
 	public bool IsEnabled { get => GetValue(IsEnabledProperty); set => SetValue(IsEnabledProperty, value); }
 	public int  TabIndex  { get => GetValue(TabIndexProperty);  set => SetValue(TabIndexProperty,  value); }
 
-	// --- Pointer routed events (PlanningUI.md §D5.3) ---
+	// --- Pointer routed events ---
 	// Preview events tunnel root→target; the paired bubble events fire after if Preview is unhandled.
 
 	public static readonly RoutedEvent PreviewPointerPressedEvent  = RoutedEvent.Register(nameof(PreviewPointerPressed),  RoutingStrategy.Tunnel);
@@ -146,7 +146,7 @@ public abstract class UIElement : DependencyObject
 			child.SetAttachedRoot(root);
 	}
 
-	/// <summary>The composition node this element owns (PlanningUI.md §D2.1). Layout writes its transform/size;
+	/// <summary>The composition node this element owns. Layout writes its transform/size;
 	/// property setters write its opacity/brush. The retained visual tree mirrors the element tree.</summary>
 	internal SpriteVisual Visual { get; } = new();
 
@@ -226,7 +226,7 @@ public abstract class UIElement : DependencyObject
 		Visual.MarkDirty();
 	}
 
-	// --- Independent (no-relayout) animation channels (PlanningUI.md §D5.7) ---
+	// --- Independent (no-relayout) animation channels ---
 	// The animation clock writes these directly and marks the visual dirty; because they are composed back into the
 	// visual in SyncVisual, a later relayout cannot clobber them. RenderTransform is not a dependency property, so a
 	// translate animation rides this override rather than the DP rung (Opacity, a DP, goes through SetAnimatedValue).
@@ -320,7 +320,7 @@ public abstract class UIElement : DependencyObject
 	public void ReleasePointerCapture(uint pointerId) =>
 		AttachedRoot?.InputManager?.RequestRelease(pointerId, this);
 
-	// --- Routed-event handler store + dispatch (PlanningUI.md §D5.3) ---
+	// --- Routed-event handler store + dispatch ---
 
 	private struct HandlerSlot
 	{
@@ -358,7 +358,7 @@ public abstract class UIElement : DependencyObject
 	}
 
 	/// <summary>
-	/// Raise <paramref name="evt"/> on this element as the original source and route it (PlanningUI.md §D5.3):
+	/// Raise <paramref name="evt"/> on this element as the original source and route it:
 	/// tunnel root→target, bubble target→root, or direct. <see cref="RoutedEventArgs.Handled"/> prevents
 	/// <c>Normal</c> handlers from firing at subsequent positions, but <c>handledEventsToo</c> handlers always fire.
 	/// The ancestor chain is built into a pooled, re-entrancy-safe buffer (a handler may raise another event).
@@ -401,13 +401,13 @@ public abstract class UIElement : DependencyObject
 		slot.HandledToo?.Invoke(this, args);
 	}
 
-	// --- 2D hit-testing (PlanningUI.md §D5.4): reverse-z, respects IsHitTestVisible/Visibility/RenderTransform ---
+	// --- 2D hit-testing: reverse-z, respects IsHitTestVisible/Visibility/RenderTransform ---
 
 	/// <summary>
 	/// Return the top-most descendant (or this element) hit by <paramref name="point"/>, expressed in this element's
 	/// local space (origin at this element's top-left, pre-<see cref="RenderTransform"/>). Children are tested
 	/// front-to-back; an element is a hit only where it actually draws (its visual has content), so transparent
-	/// panels let clicks fall through. Pure + side-effect-free — asserted directly in tests (§D8).
+	/// panels let clicks fall through. Pure + side-effect-free — asserted directly in tests.
 	/// </summary>
 	internal UIElement? HitTest(Vector2 point)
 	{

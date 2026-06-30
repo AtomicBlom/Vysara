@@ -5,7 +5,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// <see cref="Popup"/> (PlanningUI.md MU6): opening hosts the child (and a light-dismiss layer) in the root overlay,
+/// <see cref="Popup"/>: opening hosts the child (and a light-dismiss layer) in the root overlay,
 /// closing removes them, and an outside press light-dismisses while a press on the child does not.
 /// </summary>
 public sealed class PopupTests

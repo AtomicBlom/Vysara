@@ -1,7 +1,7 @@
 namespace SUIsei.Controls;
 
 /// <summary>
-/// The contract a virtualizing panel pulls item containers from (PlanningUI.md §D1.6) — implemented by
+/// The contract a virtualizing panel pulls item containers from — implemented by
 /// <see cref="ItemsControl"/>. The panel realizes only the containers in its viewport and recycles the rest, so a
 /// large list never materializes all its containers at once.
 /// </summary>

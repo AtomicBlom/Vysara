@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// Generator coverage for templates + styles (PlanningUI.md §D1.6): <c>&lt;ControlTemplate&gt;</c> /
+/// Generator coverage for templates + styles: <c>&lt;ControlTemplate&gt;</c> /
 /// <c>&lt;DataTemplate&gt;</c> emit a static factory whose elements are locals and whose bindings resolve against a
 /// scoped data root (the templated control / the data item) — never the page's fields; <c>{TemplateBinding}</c> and
 /// item-scoped <c>{x:Bind}</c> wire inside that factory; <c>&lt;X.Resources&gt;</c> + <c>&lt;Style&gt;</c> resolve a

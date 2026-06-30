@@ -3,7 +3,7 @@ using SUIsei.Tests.Generated;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU2 x:Bind + event generator proof (PlanningUI.md §D1.5/§D1.7 / §D8): <c>BindingView.xaml</c> compiles to a typed
+/// x:Bind + event generator proof: <c>BindingView.xaml</c> compiles to a typed
 /// tree plus a <c>BindingView_Bindings</c> helper. A OneWay bind pushes the initial value and tracks
 /// <see cref="System.ComponentModel.INotifyPropertyChanged"/>; an event bind wires the handler.
 /// </summary>

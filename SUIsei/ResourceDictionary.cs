@@ -2,7 +2,7 @@ namespace SUIsei;
 
 /// <summary>
 /// A keyed resource store used by <see cref="FrameworkElement.Resources"/> and resolved at compile time by the
-/// XAML source generator for <c>{StaticResource key}</c> references (PlanningUI.md §D1.6). Runtime lookup walks
+/// XAML source generator for <c>{StaticResource key}</c> references. Runtime lookup walks
 /// <see cref="MergedDictionaries"/> in reverse-index order (later entries take priority).
 /// </summary>
 public sealed class ResourceDictionary

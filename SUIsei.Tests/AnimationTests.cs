@@ -5,7 +5,7 @@ using SUIsei.Drawing;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// Animation coverage (PlanningUI.md §D5.7): normalized-time math, per-type interpolation + easing, and the two
+/// Animation coverage: normalized-time math, per-type interpolation + easing, and the two
 /// apply paths — the DP animation rung (Opacity) vs the no-relayout visual channels (RenderTransform translate,
 /// brush). All deterministic from synthetic <c>deltaSeconds</c>, asserted on CPU with no GPU.
 /// </summary>

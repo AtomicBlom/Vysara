@@ -73,7 +73,7 @@ public sealed class FontAtlas : IGlyphSource
 	/// </summary>
 	public float ScreenPxRange(float fontSizePx) => DistanceRange * fontSizePx / BakeSize;
 
-	/// <summary>The shaper that turns text into positioned glyphs for this atlas (PlanningUI.md §D3 / MU5). Defaults
+	/// <summary>The shaper that turns text into positioned glyphs for this atlas. Defaults
 	/// to the advance-based <see cref="SimpleTextShaper"/>; swap it (e.g. for a HarfBuzz shaper) to enable ligatures,
 	/// contextual forms, and kerning across measurement, the compositor, and caret math at once.</summary>
 	public ITextShaper Shaper { get; set; } = new SimpleTextShaper();

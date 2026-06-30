@@ -5,7 +5,7 @@ using SUIsei.Controls;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// MU3 routed event depth: tunnel (Preview) fires root→target before the bubble target→root,
+/// Routed event depth: tunnel (Preview) fires root→target before the bubble target→root,
 /// setting <c>Handled</c> in the tunnel phase skips the bubble entirely, and a handler registered
 /// with <c>handledEventsToo=true</c> still fires even when an earlier handler marked the event handled.
 /// </summary>

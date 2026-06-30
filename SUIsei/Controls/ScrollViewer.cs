@@ -3,7 +3,7 @@ using SUIsei.Input;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A clipping viewport over a single oversized <see cref="Content"/> (PlanningUI.md MU6). Measures the content
+/// A clipping viewport over a single oversized <see cref="Content"/>. Measures the content
 /// unbounded in the scroll axis to learn its extent, arranges it offset by the scroll position, and clips to the
 /// viewport. Scrolls by mouse wheel, by keyboard (Page/Home/End/arrows when a descendant is focused), and
 /// programmatically; the offset is always clamped to <see cref="ScrollableHeight"/>/<see cref="ScrollableWidth"/>.
