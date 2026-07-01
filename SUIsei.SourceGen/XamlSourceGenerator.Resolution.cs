@@ -526,18 +526,36 @@ partial class XamlSourceGenerator
 	{
 		var li = (IXmlLineInfo)node;
 		return li.HasLineInfo()
-			? MakeDiagnostic(descriptor, path, text, li.LineNumber, li.LinePosition, args)
+			? MakeDiagnostic(descriptor, path, text, li.LineNumber, li.LinePosition, NodeLength(node), args)
 			: MakeDiagnostic(descriptor, path, text, 1, 1, args);
 	}
 
-	private static DiagnosticInfo MakeDiagnostic(DiagnosticDescriptor descriptor, string path, SourceText text, int line, int col, string[] args)
+	private static DiagnosticInfo MakeDiagnostic(DiagnosticDescriptor descriptor, string path, SourceText text, int line, int col, string[] args) =>
+		MakeDiagnostic(descriptor, path, text, line, col, 0, args);
+
+	// Build a diagnostic whose span covers <paramref name="length"/> characters of the offending token starting at
+	// (line, col). A length of 0 (a parse error, or a node with no line info) degenerates to a caret at the start.
+	private static DiagnosticInfo MakeDiagnostic(DiagnosticDescriptor descriptor, string path, SourceText text, int line, int col, int length, string[] args)
 	{
-		var lp = new LinePosition(Math.Max(0, line - 1), Math.Max(0, col - 1));
+		var startLp = new LinePosition(Math.Max(0, line - 1), Math.Max(0, col - 1));
 		var start = 0;
-		if (lp.Line < text.Lines.Count)
-			start = Math.Min(text.Lines[lp.Line].Start + lp.Character, text.Length);
-		return new DiagnosticInfo(descriptor, path, new TextSpan(start, 0), new LinePositionSpan(lp, lp), args);
+		if (startLp.Line < text.Lines.Count)
+			start = Math.Min(text.Lines[startLp.Line].Start + startLp.Character, text.Length);
+		var end = Math.Min(start + Math.Max(0, length), text.Length);
+		var span = TextSpan.FromBounds(start, end);
+		return new DiagnosticInfo(descriptor, path, span, text.Lines.GetLinePositionSpan(span), args);
 	}
+
+	// The character width of a node's offending token, so the squiggle covers it rather than collapsing to a caret:
+	// an attribute spans its whole `name="value"` form, a text run its content, and an element its (possibly prefixed)
+	// tag name — the token the line info points at.
+	private static int NodeLength(XObject node) => node switch
+	{
+		XAttribute attr => attr.ToString().Length,
+		XText t => t.Value.Length,
+		XElement el => el.Name.LocalName.Length + (el.GetPrefixOfNamespace(el.Name.Namespace) is { Length: > 0 } p ? p.Length + 1 : 0),
+		_ => 0,
+	};
 
 	// Fingerprint of the public type surface the generator depends on. Excludes method bodies,
 	// private members, and non-SUIsei external types, so only structural changes (new property,

@@ -156,4 +156,26 @@ public sealed class XamlGeneratorDriverTests
 		XamlGeneratorHarness.Run(Wrap("<TextBlock>Hello</TextBlock>"))
 			.DiagnosticIds().ShouldContain("SUISEI013");
 	}
+
+	[Test]
+	public void Diagnostic_span_covers_the_offending_attribute_token_not_a_zero_length_caret()
+	{
+		const string xaml = """
+			<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+						xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						x:Class="Demo.V">
+				<TextBlock x:Name="event" Text="hi" />
+			</StackPanel>
+			""";
+
+		var diag = XamlGeneratorHarness.Run(xaml).Diagnostics.Single(d => d.Id == "SUISEI011");
+
+		// The squiggle must span the whole `x:Name="event"` attribute, not collapse to a zero-width caret. The
+		// diagnostic points at an external file (the XAML), so assert the character range rather than a syntax tree.
+		const string token = """x:Name="event" """;
+		var line = diag.Location.GetLineSpan();
+		diag.Location.SourceSpan.Length.ShouldBe(token.TrimEnd().Length);
+		(line.EndLinePosition.Character - line.StartLinePosition.Character).ShouldBe(token.TrimEnd().Length);
+		line.StartLinePosition.Line.ShouldBe(3); // fourth line (zero-based): the <TextBlock … /> row
+	}
 }
