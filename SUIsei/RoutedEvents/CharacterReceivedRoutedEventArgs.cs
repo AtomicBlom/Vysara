@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>Event args for <see cref="UIElement.CharacterReceivedEvent"/>.</summary>
 public sealed class CharacterReceivedRoutedEventArgs : RoutedEventArgs

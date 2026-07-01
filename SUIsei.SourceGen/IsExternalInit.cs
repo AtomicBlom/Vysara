@@ -1,3 +1,5 @@
+// ReSharper disable once CheckNamespace
+// This needs to be in this namespace to be picked up by the compiler, but it is internal so it never escapes the analyzer assembly.
 namespace System.Runtime.CompilerServices;
 
 /// <summary>

@@ -1,6 +1,4 @@
-using SUIsei.Controls;
-
-namespace SUIsei.Tests.Generated;
+namespace SUIsei.Tests.Sample;
 
 /// <summary>
 /// Code-behind for <c>NestedBindingView.xaml</c> — the deep (more-than-two-segment) <c>{x:Bind}</c> proof. The

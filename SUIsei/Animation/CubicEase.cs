@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>Cubic easing: <c>f(t) = t³</c>.</summary>
 public sealed class CubicEase : EasingFunctionBase

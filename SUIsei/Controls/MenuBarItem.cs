@@ -1,3 +1,5 @@
+using SUIsei.Animation;
+
 namespace SUIsei.Controls;
 
 /// <summary>

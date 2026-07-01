@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>
 /// The single routed-event delegate shape — typed, so invocation is a direct call with no

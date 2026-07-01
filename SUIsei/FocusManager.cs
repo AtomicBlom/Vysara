@@ -1,5 +1,6 @@
 using System.Text;
 using SUIsei.Input;
+using SUIsei.RoutedEvents;
 
 namespace SUIsei;
 

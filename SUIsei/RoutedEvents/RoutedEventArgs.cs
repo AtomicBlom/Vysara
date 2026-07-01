@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>
 /// The base routed-event payload. <see cref="OriginalSource"/> is the element the event was

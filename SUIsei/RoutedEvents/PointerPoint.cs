@@ -1,6 +1,7 @@
 using System.Numerics;
+using SUIsei.Input;
 
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>
 /// A snapshot of a pointer at the moment of a routed pointer event — the WinUI

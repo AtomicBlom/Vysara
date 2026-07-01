@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// Animates an <see cref="HdrColor"/> from <see cref="From"/> to <see cref="To"/> over the duration.

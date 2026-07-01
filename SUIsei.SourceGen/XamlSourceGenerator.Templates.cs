@@ -52,31 +52,31 @@ partial class XamlSourceGenerator
 	private static void EmitVisualStateGroups(Gen gen, Scope scope, string ownerVar, XElement propEl)
 	{
 		var groupsVar = NewName(gen, "__vsg");
-		scope.Emit($"var {groupsVar} = new global::System.Collections.Generic.List<global::SUIsei.VisualStateGroup>();");
+		scope.Emit($"var {groupsVar} = new global::System.Collections.Generic.List<global::SUIsei.Animation.VisualStateGroup>();");
 		foreach (var groupEl in propEl.Elements())
 		{
 			if (groupEl.Name.LocalName != "VisualStateGroup") { gen.Report(BadPropertyElement, groupEl, groupEl.Name.LocalName); continue; }
 			var groupVar = NewName(gen, "__vsgrp");
 			var groupName = groupEl.Attribute("Name")?.Value ?? "";
-			scope.Emit($"var {groupVar} = new global::SUIsei.VisualStateGroup {{ Name = {Quote(groupName)} }};");
+			scope.Emit($"var {groupVar} = new global::SUIsei.Animation.VisualStateGroup {{ Name = {Quote(groupName)} }};");
 			foreach (var stateEl in groupEl.Elements())
 			{
 				if (stateEl.Name.LocalName != "VisualState") { gen.Report(BadPropertyElement, stateEl, stateEl.Name.LocalName); continue; }
 				var stateName = stateEl.Attribute("Name")?.Value ?? "";
 				var sbEl = stateEl.Elements().FirstOrDefault(e => e.Name.LocalName == "Storyboard");
 				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, scope, sbEl);
-				scope.Emit($"{groupVar}.States.Add(new global::SUIsei.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
+				scope.Emit($"{groupVar}.States.Add(new global::SUIsei.Animation.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
 			}
 			scope.Emit($"{groupsVar}.Add({groupVar});");
 		}
-		scope.Emit($"global::SUIsei.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
+		scope.Emit($"global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
 	}
 
 	// Build a Storyboard local and return its variable name.
 	private static string EmitStoryboard(Gen gen, Scope scope, XElement sbEl)
 	{
 		var sbVar = NewName(gen, "__sb");
-		scope.Emit($"var {sbVar} = new global::SUIsei.Storyboard();");
+		scope.Emit($"var {sbVar} = new global::SUIsei.Animation.Storyboard();");
 		foreach (var animEl in sbEl.Elements())
 			EmitAnimation(gen, scope, sbVar, animEl);
 		return sbVar;
@@ -87,8 +87,8 @@ partial class XamlSourceGenerator
 		var kind = animEl.Name.LocalName;
 		var typeName = kind switch
 		{
-			"ColorAnimation" => "global::SUIsei.ColorAnimation",
-			"DoubleAnimation" => "global::SUIsei.DoubleAnimation",
+			"ColorAnimation" => "global::SUIsei.Animation.ColorAnimation",
+			"DoubleAnimation" => "global::SUIsei.Animation.DoubleAnimation",
 			_ => null,
 		};
 		if (typeName is null) { gen.Report(BadPropertyElement, animEl, kind); return; }
@@ -120,7 +120,7 @@ partial class XamlSourceGenerator
 					scope.Emit($"{animVar}.AutoReverse = {(string.Equals(attr.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")};");
 					break;
 				case "FillBehavior":
-					scope.Emit($"{animVar}.FillBehavior = global::SUIsei.FillBehavior.{(attr.Value.Trim() == "Stop" ? "Stop" : "HoldEnd")};");
+					scope.Emit($"{animVar}.FillBehavior = global::SUIsei.Animation.FillBehavior.{(attr.Value.Trim() == "Stop" ? "Stop" : "HoldEnd")};");
 					break;
 				case "RepeatBehavior":
 					scope.Emit($"{animVar}.RepeatBehavior = {RepeatBehaviorExpr(attr.Value)};");

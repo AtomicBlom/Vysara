@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei;
 using SUIsei.Gallery;
+using SUIsei.Input;
 using SUIsei.Rasterizer;
 
 // Headless capture: render the gallery offscreen with the same renderer the window uses and write a BMP, then exit.

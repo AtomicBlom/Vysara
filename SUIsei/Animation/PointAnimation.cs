@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>Animates a <see cref="Point"/> from <see cref="From"/> to <see cref="To"/> over the duration.</summary>
 public sealed class PointAnimation : AnimationTimeline<Point>

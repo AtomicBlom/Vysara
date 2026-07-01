@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace SUIsei.Tests.Generated;
+namespace SUIsei.Tests.Sample;
 
 /// <summary>A tiny INPC view model for the x:Bind generator proof (<c>BindingView.xaml</c>).</summary>
 internal sealed class BindingViewModel : INotifyPropertyChanged

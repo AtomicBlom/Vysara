@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// The base of everything an <see cref="AnimationClock"/> advances: a span of animated time

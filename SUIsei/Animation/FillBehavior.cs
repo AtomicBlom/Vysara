@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>What an animation does to its target when it finishes.</summary>
 public enum FillBehavior

@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// Animates a scalar through a sequence of <see cref="DoubleKeyFrame"/>s. Each key's

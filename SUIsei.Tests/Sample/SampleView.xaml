@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 	MU0 Phase C end-to-end fixture (PlanningUI.md §D1.4). SUIsei.SourceGen turns this into a partial
-	SUIsei.Tests.Generated.SampleView with typed x:Name fields + InitializeComponent(). It deliberately
+	SUIsei.Tests.Sample.SampleView with typed x:Name fields + InitializeComponent(). It deliberately
 	exercises: element resolution (Controls.*), x:Name fields, the Children container model (StackPanel),
 	the Content container model (Button), and string / float / enum literal properties.
 -->
 <StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
 			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-			x:Class="SUIsei.Tests.Generated.SampleView"
+			x:Class="SUIsei.Tests.Sample.SampleView"
 			Orientation="Vertical">
 	<TextBlock x:Name="Title" Text="Hello, SUIsei" FontSize="24" />
 	<Button x:Name="Ok">

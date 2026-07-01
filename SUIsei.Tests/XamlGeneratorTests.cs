@@ -1,5 +1,5 @@
 using SUIsei.Controls;
-using SUIsei.Tests.Generated;
+using SampleView = SUIsei.Tests.Sample.SampleView;
 
 namespace SUIsei.Tests;
 

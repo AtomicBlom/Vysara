@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace SUIsei.Tests.Generated;
+namespace SUIsei.Tests.Sample;
 
 /// <summary>
 /// A multi-level INPC model graph for the deep-<c>{x:Bind}</c> generator proof. Each level raises

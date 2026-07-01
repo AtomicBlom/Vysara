@@ -1,6 +1,6 @@
 <StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            x:Class="SUIsei.Tests.Generated.BindingView">
+            x:Class="SUIsei.Tests.Sample.BindingView">
 	<TextBlock x:Name="Label" Text="{x:Bind ViewModel.Caption, Mode=OneWay}" />
 	<Button x:Name="Action" Content="Go" Click="{x:Bind OnAction}" />
 </StackPanel>

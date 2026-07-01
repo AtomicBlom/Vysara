@@ -1,4 +1,4 @@
-using SUIsei.Tests.Generated;
+using BindingView = SUIsei.Tests.Sample.BindingView;
 
 namespace SUIsei.Tests;
 

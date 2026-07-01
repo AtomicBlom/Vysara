@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// Advances active storyboards by the per-frame delta. Held by the <see cref="UIHost"/> and

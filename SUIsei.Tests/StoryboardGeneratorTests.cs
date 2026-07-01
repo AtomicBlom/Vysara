@@ -32,15 +32,15 @@ public sealed class StoryboardGeneratorTests
 		var code = result.AllGeneratedText();
 
 		result.DiagnosticIds().ShouldBeEmpty();
-		code.ShouldContain("new global::SUIsei.VisualStateGroup { Name = \"CommonStates\" }");
-		code.ShouldContain("new global::SUIsei.VisualState { Name = \"Normal\", Storyboard = null }");
-		code.ShouldContain("new global::SUIsei.ColorAnimation()");
+		code.ShouldContain("new global::SUIsei.Animation.VisualStateGroup { Name = \"CommonStates\" }");
+		code.ShouldContain("new global::SUIsei.Animation.VisualState { Name = \"Normal\", Storyboard = null }");
+		code.ShouldContain("new global::SUIsei.Animation.ColorAnimation()");
 		code.ShouldContain(".To = global::SUIsei.HdrColor.FromRgb(80, 96, 160);");
 		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(0.12);");
-		code.ShouldContain(".FillBehavior = global::SUIsei.FillBehavior.HoldEnd;");
+		code.ShouldContain(".FillBehavior = global::SUIsei.Animation.FillBehavior.HoldEnd;");
 		code.ShouldContain(".Target = Bg;");
 		code.ShouldContain(".TargetProperty = \"Background\";");
-		code.ShouldContain("global::SUIsei.VisualStateManager.SetVisualStateGroups(Bg,");
+		code.ShouldContain("global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups(Bg,");
 	}
 
 	[Test]

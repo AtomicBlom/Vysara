@@ -6,7 +6,7 @@
 -->
 <ScrollViewer xmlns="https://github.com/AtomicBlom/SUIsei/ui"
               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-              x:Class="SUIsei.Tests.Generated.ContentModelView">
+              x:Class="SUIsei.Tests.Sample.ContentModelView">
 	<StackPanel x:Name="Stack" Orientation="Vertical">
 		<Border x:Name="Box">
 			<TextBlock x:Name="Label" Text="hi" />

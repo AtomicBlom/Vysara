@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// One key of a <see cref="DoubleAnimationUsingKeyFrames"/>: the scalar <see cref="Value"/> the

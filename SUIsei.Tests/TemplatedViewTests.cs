@@ -1,6 +1,6 @@
 using SUIsei.Controls;
 
-namespace SUIsei.Tests.Generated;
+namespace SUIsei.Tests;
 
 /// <summary>The data item the templated list binds against (resolved by <c>x:DataType</c> at generate time).</summary>
 public sealed class Row
@@ -33,7 +33,7 @@ public sealed class TemplatedViewTests
 		var view = Built();
 		var root = view.Card.GetTemplateRoot();
 
-		root.ShouldBeOfType<Border>();
+		ShouldBeTestExtensions.ShouldBeOfType<Border>(root);
 		((Border)root!).Child.ShouldBeOfType<ContentPresenter>();
 	}
 
@@ -53,7 +53,7 @@ public sealed class TemplatedViewTests
 		var view = Built();
 		view.List.ItemsSource = new[] { new Row { Label = "Alpha" }, new Row { Label = "Beta" } };
 
-		var host = view.List.ItemsHost.ShouldNotBeNull();
+		var host = ShouldBeNullExtensions.ShouldNotBeNull<Panel>(view.List.ItemsHost);
 		host.Children.Count.ShouldBe(2);
 		((TextBlock)host.Children[0]).Text.ShouldBe("Alpha"); // {x:Bind Label} resolved against the item
 		((TextBlock)host.Children[1]).Text.ShouldBe("Beta");

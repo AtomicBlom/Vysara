@@ -1,6 +1,7 @@
 using System.Numerics;
+using SUIsei.Input;
 
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>
 /// Payload for the pointer routed events: the <see cref="PointerPoint"/> and the originating

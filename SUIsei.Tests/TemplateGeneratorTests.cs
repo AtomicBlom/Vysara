@@ -98,7 +98,7 @@ public sealed class TemplateGeneratorTests
 
 		result.DiagnosticIds().ShouldBeEmpty();
 		code.ShouldContain(".Target = Bg;");
-		code.ShouldContain("global::SUIsei.VisualStateManager.SetVisualStateGroups(Bg,");
+		code.ShouldContain("global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups(Bg,");
 		XamlGeneratorHarness.CompileErrors(xaml, Vm).ShouldBeEmpty();
 	}
 

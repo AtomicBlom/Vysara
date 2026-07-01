@@ -1,6 +1,4 @@
-using System.Threading;
-
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>
 /// A routed-event identity: a dense <see cref="Id"/> assigned at registration, a diagnostic

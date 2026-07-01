@@ -1,3 +1,5 @@
+using SUIsei.Animation;
+
 namespace SUIsei.Controls;
 
 /// <summary>The base of templatable controls. Sets <see cref="UIElement.IsTabStop"/> to

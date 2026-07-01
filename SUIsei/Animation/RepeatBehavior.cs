@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// How many times a <see cref="Timeline"/> repeats: a finite iteration <see cref="Count"/>

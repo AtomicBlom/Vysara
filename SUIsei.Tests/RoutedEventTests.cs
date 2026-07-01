@@ -1,4 +1,5 @@
 using SUIsei.Controls;
+using SUIsei.RoutedEvents;
 
 namespace SUIsei.Tests;
 

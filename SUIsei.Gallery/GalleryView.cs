@@ -3,6 +3,7 @@ using System.Windows.Input;
 
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.RoutedEvents;
 
 namespace SUIsei.Gallery;
 

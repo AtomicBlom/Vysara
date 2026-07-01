@@ -1,4 +1,6 @@
-namespace SUIsei.Tests.Generated;
+using SUIsei.RoutedEvents;
+
+namespace SUIsei.Tests.Sample;
 
 /// <summary>
 /// Code-behind for <c>BindingView.xaml</c> — the generator proof. The generator emits the partial half (typed

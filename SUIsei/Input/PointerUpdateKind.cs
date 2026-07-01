@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Input;
 
 /// <summary>
 /// What changed in a <see cref="PointerInput"/> — the WinUI <c>PointerUpdateKind</c>. A plain

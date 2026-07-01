@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace SUIsei;
+namespace SUIsei.Input;
 
 /// <summary>
 /// One device-neutral pointer event the host queues into a <see cref="UIHost"/> between frames.

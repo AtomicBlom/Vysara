@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using SUIsei.Animation;
 using SUIsei.Drawing;
 
 namespace SUIsei;

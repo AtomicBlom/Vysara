@@ -1,3 +1,4 @@
+using SUIsei.Animation;
 using SUIsei.Controls;
 
 namespace SUIsei.Tests;

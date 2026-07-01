@@ -1,3 +1,6 @@
+using SUIsei.Animation;
+using SUIsei.RoutedEvents;
+
 namespace SUIsei.Controls;
 
 /// <summary>

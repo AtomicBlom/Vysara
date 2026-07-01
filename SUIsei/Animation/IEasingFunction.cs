@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>Maps linear progress <c>t</c> in <c>[0,1]</c> to an eased progress.</summary>
 public interface IEasingFunction

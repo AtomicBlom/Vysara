@@ -1,5 +1,5 @@
 using System.Numerics;
-
+using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Input;
 

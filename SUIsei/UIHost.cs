@@ -1,7 +1,9 @@
 using System.Numerics;
 using System.Text;
+using SUIsei.Animation;
 using SUIsei.Drawing;
 using SUIsei.Input;
+using SUIsei.RoutedEvents;
 
 namespace SUIsei;
 

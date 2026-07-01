@@ -1,6 +1,7 @@
 using System.Numerics;
 
-using SUIsei.Tests.Generated;
+using BindingView = SUIsei.Tests.Sample.BindingView;
+using SampleView = SUIsei.Tests.Sample.SampleView;
 
 namespace SUIsei.Tests;
 

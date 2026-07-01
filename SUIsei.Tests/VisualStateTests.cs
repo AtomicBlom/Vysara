@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Animation;
 using SUIsei.Controls;
 
 namespace SUIsei.Tests;

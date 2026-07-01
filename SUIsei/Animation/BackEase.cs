@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// Back easing: overshoots slightly before settling. <c>f(t) = t³ − t·A·sin(πt)</c>, where

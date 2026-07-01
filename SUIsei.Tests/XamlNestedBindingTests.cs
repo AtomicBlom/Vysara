@@ -1,4 +1,5 @@
-using SUIsei.Tests.Generated;
+using SUIsei.Tests.Sample;
+using NestedBindingView = SUIsei.Tests.Sample.NestedBindingView;
 
 namespace SUIsei.Tests;
 

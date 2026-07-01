@@ -1,6 +1,6 @@
 using SUIsei.Controls;
 
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// Drives a control between named visual states. The <see cref="VisualStateGroupsProperty"/>

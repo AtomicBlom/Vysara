@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Input;
 
 /// <summary>The set of pointer buttons currently held.</summary>
 [Flags]

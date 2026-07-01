@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// One named look a control can be in — e.g. <c>Normal</c>, <c>PointerOver</c>, <c>Pressed</c>.

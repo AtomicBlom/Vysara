@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>
 /// How a <see cref="RoutedEvent"/> travels the element tree. <see cref="Tunnel"/> goes

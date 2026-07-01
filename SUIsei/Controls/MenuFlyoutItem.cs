@@ -1,3 +1,5 @@
+using SUIsei.Animation;
+
 namespace SUIsei.Controls;
 
 /// <summary>A single command row in a <see cref="MenuFlyout"/>: a <see cref="ButtonBase"/> with

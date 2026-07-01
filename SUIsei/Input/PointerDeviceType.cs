@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Input;
 
 /// <summary>
 /// The kind of device that produced a <see cref="PointerInput"/> — WinUI-shaped and device-neutral so no host

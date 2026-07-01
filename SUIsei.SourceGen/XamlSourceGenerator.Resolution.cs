@@ -210,11 +210,11 @@ partial class XamlSourceGenerator
 	{
 		var s = raw.Trim();
 		if (string.Equals(s, "Forever", StringComparison.OrdinalIgnoreCase))
-			return "global::SUIsei.RepeatBehavior.Forever";
+			return "global::SUIsei.Animation.RepeatBehavior.Forever";
 		var n = s.EndsWith("x", StringComparison.OrdinalIgnoreCase) ? s.Substring(0, s.Length - 1) : s;
 		return double.TryParse(n, NumberStyles.Float, CultureInfo.InvariantCulture, out var count)
-			? $"global::SUIsei.RepeatBehavior.Times({Fmt(count)})"
-			: "global::SUIsei.RepeatBehavior.Once";
+			? $"global::SUIsei.Animation.RepeatBehavior.Times({Fmt(count)})"
+			: "global::SUIsei.Animation.RepeatBehavior.Once";
 	}
 
 	// "#RRGGBB" / "#AARRGGBB" → HdrColor.FromRgb(...). Returns false for anything else.

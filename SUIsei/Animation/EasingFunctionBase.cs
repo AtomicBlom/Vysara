@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// The base of the built-in easing functions. A subclass defines the raw ease-in shape in

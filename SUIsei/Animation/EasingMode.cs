@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>Which end of an easing function is shaped.</summary>
 public enum EasingMode

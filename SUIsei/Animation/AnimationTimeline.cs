@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// A <see cref="Timeline"/> that drives one target property. The <see cref="AnimationClock"/>

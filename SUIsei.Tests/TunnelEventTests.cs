@@ -1,6 +1,8 @@
 using System.Numerics;
 
 using SUIsei.Controls;
+using SUIsei.Input;
+using SUIsei.RoutedEvents;
 
 namespace SUIsei.Tests;
 

@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>
 /// Event args for <see cref="UIElement.GettingFocusEvent"/> and <see cref="UIElement.LosingFocusEvent"/> (both

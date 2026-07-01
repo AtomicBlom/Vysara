@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Animation;
 
 /// <summary>
 /// A set of mutually exclusive <see cref="VisualState"/>s — e.g. the <c>CommonStates</c> group

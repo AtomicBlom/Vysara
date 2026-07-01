@@ -1,6 +1,6 @@
 using SUIsei.Input;
 
-namespace SUIsei;
+namespace SUIsei.RoutedEvents;
 
 /// <summary>Event args for <see cref="UIElement.KeyDownEvent"/>, <see cref="UIElement.KeyUpEvent"/>, and their
 /// Preview counterparts.</summary>
