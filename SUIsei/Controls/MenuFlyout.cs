@@ -10,6 +10,12 @@ namespace SUIsei.Controls;
 /// </summary>
 public sealed class MenuFlyout
 {
+	// Leaves this much room off the bottom edge so a full-height flyout doesn't touch the surface boundary, and
+	// never shrinks a flyout below this even when the anchor sits close to the bottom — a sliver-height scroll
+	// area is unusable, so it's better to let a few items peek past the edge than collapse to nothing.
+	private const float BottomMargin = 8f;
+	private const float MinMenuHeight = 48f;
+
 	private UIRoot? _root;
 	private Border? _menu;
 	private Border? _dismissLayer;
@@ -30,12 +36,14 @@ public sealed class MenuFlyout
 		Hide();
 
 		var position = AbsolutePosition(target);
+		var menuTop = position.Y + target.LayoutRect.Height;
 		var panel = new StackPanel { Orientation = Orientation.Vertical };
 		foreach (var item in Items)
 		{
 			item.Click += OnItemClick;
 			panel.Children.Add(item);
 		}
+		var scroll = new ScrollViewer { Content = panel, MaxHeight = MaxMenuHeight(root, menuTop) };
 		_menu = new Border
 		{
 			Background = HdrColor.FromRgb(45, 45, 55),
@@ -43,15 +51,27 @@ public sealed class MenuFlyout
 			BorderThickness = new Thickness(1f),
 			CornerRadius = 4f,
 			Padding = new Thickness(4f),
-			Child = panel,
+			Child = scroll,
 		};
 
 		_dismissLayer = new Border { Background = HdrColor.Transparent };
 		_dismissLayer.AddHandler(UIElement.PointerPressedEvent, OnDismissPressed);
 
 		root.AddOverlay(_dismissLayer, Vector2.Zero, fullSurface: true);
-		root.AddOverlay(_menu, new Vector2(position.X, position.Y + target.LayoutRect.Height));
+		root.AddOverlay(_menu, new Vector2(position.X, menuTop));
 		_root = root;
+	}
+
+	// The vertical room below the anchor, in DIPs — a menu taller than this scrolls (via the ScrollViewer wrapping
+	// its items) rather than spilling past the surface edge. Unbounded until the first layout pass has run (no
+	// known surface size yet), matching the previous unclamped behaviour for that brief window.
+	private static float MaxMenuHeight(UIRoot root, float menuTop)
+	{
+		var surfaceHeight = root.Visual.SurfaceSize.Y;
+		if (surfaceHeight <= 0f)
+			return float.PositiveInfinity;
+		var scale = root.LayoutScale > 0f ? root.LayoutScale : 1f;
+		return MathF.Max(surfaceHeight / scale - menuTop - BottomMargin, MinMenuHeight);
 	}
 
 	public void Hide()

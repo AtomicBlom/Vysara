@@ -36,4 +36,26 @@ public sealed class MenuFlyoutTests
 		flyout.IsOpen.ShouldBeFalse();
 		view.Root.Overlays.Count.ShouldBe(0);
 	}
+
+	[Test]
+	public void ShowAt_clamps_and_scrolls_when_items_dont_fit_below_the_anchor()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		var anchor = new Button { Width = 80f, Height = 24f };
+		view.Root.Content = anchor;
+		host.Tick(0.016, 0f, new Vector2(200f, 120f)); // a short surface: 20 items won't fit below the anchor
+
+		var flyout = new MenuFlyout();
+		for (var i = 0; i < 20; i++)
+			flyout.Items.Add(new MenuFlyoutItem { Text = $"Item {i}" });
+
+		flyout.ShowAt(anchor);
+		host.Tick(0.016, 0f, new Vector2(200f, 120f));
+
+		var menu = (Border)view.Root.Overlays[1].Element;
+		var scroll = (ScrollViewer)menu.Child!;
+		scroll.LayoutRect.Height.ShouldBeLessThan(scroll.ExtentHeight);
+		scroll.ScrollableHeight.ShouldBeGreaterThan(0f);
+	}
 }
