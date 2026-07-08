@@ -299,8 +299,13 @@ public abstract class UIElement : DependencyObject
 		Visual.Clip = ClipToBounds ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
 		Visual.Content = BuildContent();
 		Visual.Clear();
-		foreach (var child in VisualChildren)
-			Visual.Add(child.Visual);
+		// A collapsed element's children were never re-arranged this pass (Arrange short-circuits ArrangeCore above),
+		// so their LayoutRect/transform are stale leftovers from when the element was last visible. Detaching them
+		// from the visual tree here (rather than only zeroing this element's own size) keeps "Collapsed contributes
+		// zero to layout" true for rendering too — otherwise stale descendants would still draw at their old position.
+		if (Visibility != Visibility.Collapsed)
+			foreach (var child in VisualChildren)
+				Visual.Add(child.Visual);
 		Visual.MarkDirty();
 	}
 

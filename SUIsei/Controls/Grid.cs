@@ -43,10 +43,13 @@ public sealed class Grid : Panel
 	private float[] _colSizes = [];
 	private float[] _rowSizes = [];
 
+	private GridLength[] Cols => ColumnDefinitions.Count > 0 ? [.. ColumnDefinitions] : [GridLength.Star];
+	private GridLength[] Rows => RowDefinitions.Count > 0 ? [.. RowDefinitions] : [GridLength.Star];
+
 	protected override Size MeasureOverride(Size available)
 	{
-		var cols = ColumnDefinitions.Count > 0 ? [.. ColumnDefinitions] : new[] { GridLength.Star };
-		var rows = RowDefinitions.Count > 0 ? [.. RowDefinitions] : new[] { GridLength.Star };
+		var cols = Cols;
+		var rows = Rows;
 
 		// Measure each child exactly once, against a cell constraint derived from the track types it spans: a Pixel
 		// track contributes its fixed extent; an Auto or Star track is left unconstrained, so the child reports its
@@ -69,6 +72,13 @@ public sealed class Grid : Panel
 
 	protected override Size ArrangeOverride(Size finalSize)
 	{
+		// Re-resolve against the size we're actually arranged into, not the (often infinite, when this grid sits in
+		// an unconstrained ancestor cell) size Measure saw — otherwise a Star track that measured content-sized under
+		// an infinite constraint never claims the real leftover space it's entitled to at arrange time. Auto/Pixel
+		// tracks are unaffected (ResolveTracks only reads children's already-computed DesiredSize; it never remeasures).
+		_colSizes = ResolveTracks(Cols, finalSize.Width, horizontal: true);
+		_rowSizes = ResolveTracks(Rows, finalSize.Height, horizontal: false);
+
 		var xs = Offsets(_colSizes);
 		var ys = Offsets(_rowSizes);
 		foreach (var child in Children.Items)
