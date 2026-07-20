@@ -18,6 +18,14 @@ public sealed class FocusManager
 	/// <summary>The element that currently holds keyboard focus, or null.</summary>
 	public UIElement? FocusedElement { get; private set; }
 
+	/// <summary>
+	/// True when keyboard focus rests on an element that would consume keys this frame — an enabled, focusable,
+	/// visible element (a text box or control) — as opposed to no focus (or a non-focusable root). The keyboard
+	/// half of the coarse capture report.
+	/// </summary>
+	internal bool WantsKeyboard =>
+		FocusedElement is { IsEnabled: true, IsTabStop: true, Visibility: Visibility.Visible };
+
 	/// <summary>How focus was last acquired.</summary>
 	public FocusState FocusState { get; private set; }
 

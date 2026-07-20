@@ -44,6 +44,22 @@ public sealed class UIHost
 	/// <summary>The animation clock advancing this host's storyboards, stepped each <see cref="Tick"/>.</summary>
 	public AnimationClock Clock { get; } = new();
 
+	/// <summary>
+	/// True when this host would consume pointer input — a pointer is over interactive UI content or a pointer
+	/// capture is active. A coarse, per-window capture report in the shape of WinUI/ImGui's <c>WantCaptureMouse</c>:
+	/// an input-arbitration layer reads it to decide whether to withhold pointer input from lower (game) layers.
+	/// Recomputed each <see cref="Tick"/> from this frame's routed state, so a consumer that reads it between ticks
+	/// sees the last tick's result (one frame of coarse latency).
+	/// </summary>
+	public bool WantsPointer { get; private set; }
+
+	/// <summary>
+	/// True when this host would consume keyboard input — an enabled, focusable element holds keyboard focus (a text
+	/// box or control), as opposed to no focus. The keyboard twin of <see cref="WantsPointer"/>, shaped like
+	/// WinUI/ImGui's <c>WantCaptureKeyboard</c>. Recomputed each <see cref="Tick"/>.
+	/// </summary>
+	public bool WantsKeyboard { get; private set; }
+
 	/// <summary>The roots this host owns.</summary>
 	public IReadOnlyList<UIView> Views => _views;
 
@@ -99,6 +115,10 @@ public sealed class UIHost
 			view.Root.LayoutPass(_framebufferSize);
 		DrainPointers();
 		DrainKeyboard();
+
+		// Resolve the coarse capture report after routing/focus settle, so it is O(1) reads of this frame's state.
+		WantsPointer  = Input.WantsPointer;
+		WantsKeyboard = Focus.WantsKeyboard;
 	}
 
 	/// <summary>Composite each view's visual tree → <see cref="DrawLists"/>.</summary>
