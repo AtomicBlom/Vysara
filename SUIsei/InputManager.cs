@@ -72,11 +72,14 @@ public sealed class InputManager
 		_explicitCapture.GetValueOrDefault(pointerId) ?? _implicitCapture.GetValueOrDefault(pointerId);
 
 	/// <summary>
-	/// True when the host would route pointer input to UI content this frame: a pointer sits over an interactive
-	/// element (a non-empty over-chain) or a capture is active — explicit drag-capture, or implicit press-capture
-	/// that landed on an element. The pointer half of the coarse capture report: it stays true through a drag that
-	/// leaves the pressed element, exactly as press-capture keeps routing the release back to that element, and it
-	/// is false for a press that landed on empty space (a null implicit captee).
+	/// True when the host would route pointer input to UI content this frame: a pointer sits over drawn UI content
+	/// (a non-empty over-chain — hit-testing lands only where an element actually draws, so transparent panels fall
+	/// through) or a capture is active — explicit drag-capture, or implicit press-capture that landed on an element.
+	/// The pointer half of the coarse capture report: it stays true through a drag that leaves the pressed element,
+	/// exactly as press-capture keeps routing the release back to that element, and it is false for a press that
+	/// landed on empty space (a null implicit captee). The over-chain reflects the last pointer event's position and
+	/// is not cleared on release, so a pointer that stops sending events (a touch/pen after lift, or a mouse that left
+	/// the window without a final move) keeps this true until a later event lands the pointer off the content.
 	/// </summary>
 	internal bool WantsPointer
 	{

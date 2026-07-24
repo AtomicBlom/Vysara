@@ -61,6 +61,24 @@ public sealed class CaptureReportTests
 	}
 
 	[Test]
+	public void Explicit_capture_wants_the_pointer_even_over_empty_space()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		var button = new Button { Width = 100f, Height = 40f };
+		view.Root.Content = button;
+		host.Tick(0.016, 0f, Surface);
+
+		// Grab explicit (drag) capture, then move to an empty corner: the over-chain is empty and no press
+		// happened, so only the explicit capture keeps the pointer wanted.
+		button.CapturePointer(0).ShouldBeTrue();
+		host.QueuePointer(PointerInput.Move(new Vector2(5f, 5f)));
+		host.Tick(0.016, 0f, Surface);
+
+		host.WantsPointer.ShouldBeTrue();
+	}
+
+	[Test]
 	public void Focus_on_a_text_control_wants_the_keyboard()
 	{
 		var host = new UIHost();

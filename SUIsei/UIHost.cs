@@ -45,18 +45,19 @@ public sealed class UIHost
 	public AnimationClock Clock { get; } = new();
 
 	/// <summary>
-	/// True when this host would consume pointer input — a pointer is over interactive UI content or a pointer
+	/// True when this host would consume pointer input — a pointer is over drawn (opaque) UI content or a pointer
 	/// capture is active. A coarse, per-window capture report in the shape of WinUI/ImGui's <c>WantCaptureMouse</c>:
 	/// an input-arbitration layer reads it to decide whether to withhold pointer input from lower (game) layers.
 	/// Recomputed each <see cref="Tick"/> from this frame's routed state, so a consumer that reads it between ticks
-	/// sees the last tick's result (one frame of coarse latency).
+	/// sees the last tick's result (one frame of coarse latency). It reflects the pointer's last known position, so
+	/// the host must feed a move-off (or window-leave) event for it to fall back to false when the pointer leaves.
 	/// </summary>
 	public bool WantsPointer { get; private set; }
 
 	/// <summary>
-	/// True when this host would consume keyboard input — an enabled, focusable element holds keyboard focus (a text
-	/// box or control), as opposed to no focus. The keyboard twin of <see cref="WantsPointer"/>, shaped like
-	/// WinUI/ImGui's <c>WantCaptureKeyboard</c>. Recomputed each <see cref="Tick"/>.
+	/// True when this host would consume keyboard input — an element holds keyboard focus, so this frame's keys route
+	/// into the UI rather than past it. The keyboard twin of <see cref="WantsPointer"/>, shaped like WinUI/ImGui's
+	/// <c>WantCaptureKeyboard</c>. Recomputed each <see cref="Tick"/>.
 	/// </summary>
 	public bool WantsKeyboard { get; private set; }
 
