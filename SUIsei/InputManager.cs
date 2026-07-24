@@ -71,6 +71,36 @@ public sealed class InputManager
 	public UIElement? GetCapture(uint pointerId) =>
 		_explicitCapture.GetValueOrDefault(pointerId) ?? _implicitCapture.GetValueOrDefault(pointerId);
 
+	/// <summary>
+	/// True when the host would route pointer input to UI content this frame: a pointer sits over an interactive
+	/// element (a non-empty over-chain) or a capture is active — explicit drag-capture, or implicit press-capture
+	/// that landed on an element. The pointer half of the coarse capture report: it stays true through a drag that
+	/// leaves the pressed element, exactly as press-capture keeps routing the release back to that element, and it
+	/// is false for a press that landed on empty space (a null implicit captee).
+	/// </summary>
+	internal bool WantsPointer
+	{
+		get
+		{
+			foreach (var chain in _overChains.Values)
+			{
+				if (chain.Count > 0)
+					return true;
+			}
+
+			if (_explicitCapture.Count > 0)
+				return true;
+
+			foreach (var captee in _implicitCapture.Values)
+			{
+				if (captee is not null)
+					return true;
+			}
+
+			return false;
+		}
+	}
+
 	/// <summary>Grant explicit capture of <paramref name="pointerId"/> to <paramref name="element"/>. If another
 	/// element already holds explicit capture for this pointer, <see cref="UIElement.PointerCaptureLostEvent"/> is
 	/// raised on it first. Returns true always (the element is now the captee).</summary>
