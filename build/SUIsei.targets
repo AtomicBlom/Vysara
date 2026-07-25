@@ -36,7 +36,11 @@
        Sdk.targets): reference it only when the file is present, so the flag can be on without breaking a build
        that lacks the generator. -->
   <ItemGroup Condition="'$(SUIseiXamlEnable)' == 'true' And Exists('$(_SUIseiUISourceGen)')">
-    <ProjectReference Include="$(_SUIseiUISourceGen)" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- UndefineProperties strips a consuming project's publish/runtime properties from this reference: the
+         generator is a build-time analyzer (netstandard2.0), so an AOT-published consumer must not try to
+         AOT-compile it (NETSDK1207) — nor build it for the consumer's RID / self-contained mode. -->
+    <ProjectReference Include="$(_SUIseiUISourceGen)" OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      UndefineProperties="PublishAot;RuntimeIdentifier;SelfContained" />
   </ItemGroup>
 
   <Target Name="_SUIseiWarnMissingXamlGen"
