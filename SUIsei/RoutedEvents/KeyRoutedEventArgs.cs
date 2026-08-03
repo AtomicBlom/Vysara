@@ -18,8 +18,8 @@ public sealed class KeyRoutedEventArgs : RoutedEventArgs
 	internal void Reset(RoutedEvent evt, object originalSource, in KeyInput input)
 	{
 		base.Reset(evt, originalSource);
-		Key            = input.Key;
+		Key = input.Key;
 		KeyStatusRepeat = input.Repeat;
-		Modifiers      = input.Modifiers;
+		Modifiers = input.Modifiers;
 	}
 }

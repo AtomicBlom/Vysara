@@ -42,25 +42,25 @@ internal static class GsubHarvest
 		switch (lookupType)
 		{
 			case 1: // Single substitution
-			{
-				int format = r.ReadUInt16();
-				int coverageOffset = offset + r.ReadUInt16();
-				if (format == 1)
 				{
-					int delta = r.ReadInt16();
-					var covered = new List<int>();
-					ReadCoverage(file, coverageOffset, covered);
-					foreach (var g in covered)
-						into.Add((g + delta) & 0xFFFF); // per spec the sum wraps within the 16-bit glyph space
+					int format = r.ReadUInt16();
+					int coverageOffset = offset + r.ReadUInt16();
+					if (format == 1)
+					{
+						int delta = r.ReadInt16();
+						var covered = new List<int>();
+						ReadCoverage(file, coverageOffset, covered);
+						foreach (var g in covered)
+							into.Add((g + delta) & 0xFFFF); // per spec the sum wraps within the 16-bit glyph space
+					}
+					else // format 2: explicit substitute list
+					{
+						int count = r.ReadUInt16();
+						for (var i = 0; i < count; i++)
+							into.Add(r.ReadUInt16());
+					}
+					break;
 				}
-				else // format 2: explicit substitute list
-				{
-					int count = r.ReadUInt16();
-					for (var i = 0; i < count; i++)
-						into.Add(r.ReadUInt16());
-				}
-				break;
-			}
 			case 2: // Multiple substitution: one glyph -> a sequence
 				CollectFromSetsOfGlyphLists(file, r, offset, into);
 				break;
@@ -68,48 +68,48 @@ internal static class GsubHarvest
 				CollectFromSetsOfGlyphLists(file, r, offset, into);
 				break;
 			case 4: // Ligature substitution: a sequence -> one ligature glyph
-			{
-				r.ReadUInt16(); // substFormat
-				r.ReadUInt16(); // coverageOffset (unused — outputs are explicit)
-				int ligSetCount = r.ReadUInt16();
-				var ligSetOffsets = new int[ligSetCount];
-				for (var i = 0; i < ligSetCount; i++)
-					ligSetOffsets[i] = offset + r.ReadUInt16();
-				foreach (var ligSetOffset in ligSetOffsets)
 				{
-					var lsr = file.At(ligSetOffset);
-					int ligCount = lsr.ReadUInt16();
-					var ligOffsets = new int[ligCount];
-					for (var i = 0; i < ligCount; i++)
-						ligOffsets[i] = ligSetOffset + lsr.ReadUInt16();
-					foreach (var ligOffset in ligOffsets)
-						into.Add(file.At(ligOffset).ReadUInt16()); // ligatureGlyph is the first field
+					r.ReadUInt16(); // substFormat
+					r.ReadUInt16(); // coverageOffset (unused — outputs are explicit)
+					int ligSetCount = r.ReadUInt16();
+					var ligSetOffsets = new int[ligSetCount];
+					for (var i = 0; i < ligSetCount; i++)
+						ligSetOffsets[i] = offset + r.ReadUInt16();
+					foreach (var ligSetOffset in ligSetOffsets)
+					{
+						var lsr = file.At(ligSetOffset);
+						int ligCount = lsr.ReadUInt16();
+						var ligOffsets = new int[ligCount];
+						for (var i = 0; i < ligCount; i++)
+							ligOffsets[i] = ligSetOffset + lsr.ReadUInt16();
+						foreach (var ligOffset in ligOffsets)
+							into.Add(file.At(ligOffset).ReadUInt16()); // ligatureGlyph is the first field
+					}
+					break;
 				}
-				break;
-			}
 			case 7: // Extension: a wrapper pointing at a real subtable of extensionLookupType
-			{
-				r.ReadUInt16(); // substFormat (1)
-				int extensionLookupType = r.ReadUInt16();
-				long extensionOffset = r.ReadUInt32();
-				ParseSubtable(file, (int)(offset + extensionOffset), extensionLookupType, into);
-				break;
-			}
+				{
+					r.ReadUInt16(); // substFormat (1)
+					int extensionLookupType = r.ReadUInt16();
+					long extensionOffset = r.ReadUInt32();
+					ParseSubtable(file, (int)(offset + extensionOffset), extensionLookupType, into);
+					break;
+				}
 			case 8: // Reverse chaining single substitution
-			{
-				r.ReadUInt16(); // substFormat
-				r.ReadUInt16(); // coverageOffset
-				int backtrackCount = r.ReadUInt16();
-				r.Skip(backtrackCount * 2);
-				int lookaheadCount = r.ReadUInt16();
-				r.Skip(lookaheadCount * 2);
-				int glyphCount = r.ReadUInt16();
-				for (var i = 0; i < glyphCount; i++)
-					into.Add(r.ReadUInt16());
-				break;
-			}
-			// 5 (Contextual) / 6 (Chaining contextual): no direct outputs — they sequence calls to other lookups,
-			// which are in the LookupList and harvested on their own.
+				{
+					r.ReadUInt16(); // substFormat
+					r.ReadUInt16(); // coverageOffset
+					int backtrackCount = r.ReadUInt16();
+					r.Skip(backtrackCount * 2);
+					int lookaheadCount = r.ReadUInt16();
+					r.Skip(lookaheadCount * 2);
+					int glyphCount = r.ReadUInt16();
+					for (var i = 0; i < glyphCount; i++)
+						into.Add(r.ReadUInt16());
+					break;
+				}
+				// 5 (Contextual) / 6 (Chaining contextual): no direct outputs — they sequence calls to other lookups,
+				// which are in the LookupList and harvested on their own.
 		}
 	}
 

@@ -21,6 +21,5 @@ public sealed class PointAnimation : AnimationTimeline<Point>
 	}
 
 	// A point has no built-in animatable channel; a target must supply an explicit apply closure.
-	protected override (Action<Point> Apply, Action Release) ResolveChannel(UIElement target, string property) =>
-		(static _ => { }, static () => { });
+	protected override (Action<Point> Apply, Action Release) ResolveChannel(UIElement target, string property) => (static _ => { }, static () => { });
 }

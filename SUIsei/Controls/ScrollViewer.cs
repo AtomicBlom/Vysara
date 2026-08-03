@@ -43,8 +43,10 @@ public sealed class ScrollViewer : FrameworkElement
 
 		_thumbFade = new ColorAnimation
 		{
-			Duration = TimeSpan.FromMilliseconds(120), FillBehavior = FillBehavior.HoldEnd,
-			Apply = _vThumb.SetAnimatedFill, Release = _vThumb.ClearAnimatedFill,
+			Duration = TimeSpan.FromMilliseconds(120),
+			FillBehavior = FillBehavior.HoldEnd,
+			Apply = _vThumb.SetAnimatedFill,
+			Release = _vThumb.ClearAnimatedFill,
 		};
 		_thumbFadeStory = new Storyboard { Children = { _thumbFade } };
 

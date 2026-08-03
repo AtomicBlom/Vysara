@@ -46,7 +46,7 @@ public sealed class VirtualizationTests
 		ic.RecycleCount.ShouldBe(1);
 		ic.RealizeCount.ShouldBe(7);
 		panel.VisualChildren.Count.ShouldBe(6); // window size unchanged
-		// The window is now items [1..6]; the recycled container was rebound to the newly-visible item.
+												// The window is now items [1..6]; the recycled container was rebound to the newly-visible item.
 		((TextBlock)panel.VisualChildren[5]).Text.ShouldBe("item6");
 	}
 

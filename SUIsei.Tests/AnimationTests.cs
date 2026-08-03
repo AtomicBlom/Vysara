@@ -26,7 +26,9 @@ public sealed class AnimationTests
 		var applied = 0.0;
 		var anim = new DoubleAnimation
 		{
-			From = 0, To = 10, Duration = TimeSpan.FromSeconds(1),
+			From = 0,
+			To = 10,
+			Duration = TimeSpan.FromSeconds(1),
 			Apply = v => applied = v,
 		};
 		var clock = new AnimationClock();
@@ -46,7 +48,9 @@ public sealed class AnimationTests
 		var applied = 0.0;
 		var anim = new DoubleAnimation
 		{
-			From = 0, To = 1, Duration = TimeSpan.FromSeconds(1),
+			From = 0,
+			To = 1,
+			Duration = TimeSpan.FromSeconds(1),
 			EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
 			Apply = v => applied = v,
 		};
@@ -95,7 +99,10 @@ public sealed class AnimationTests
 		var applied = 0.0;
 		var anim = new DoubleAnimation
 		{
-			From = 0, To = 100, Duration = TimeSpan.FromSeconds(1), AutoReverse = true,
+			From = 0,
+			To = 100,
+			Duration = TimeSpan.FromSeconds(1),
+			AutoReverse = true,
 			Apply = v => applied = v,
 		};
 		var clock = new AnimationClock();
@@ -115,7 +122,10 @@ public sealed class AnimationTests
 		var applied = 0.0;
 		var anim = new DoubleAnimation
 		{
-			From = 0, To = 1, Duration = TimeSpan.FromSeconds(1), RepeatBehavior = RepeatBehavior.Forever,
+			From = 0,
+			To = 1,
+			Duration = TimeSpan.FromSeconds(1),
+			RepeatBehavior = RepeatBehavior.Forever,
 			Apply = v => applied = v,
 		};
 		var clock = new AnimationClock();
@@ -145,7 +155,9 @@ public sealed class AnimationTests
 		var clock = new AnimationClock();
 		clock.Begin(StoryboardOf(new DoubleAnimation
 		{
-			From = 1, To = 0, Duration = TimeSpan.FromSeconds(1),
+			From = 1,
+			To = 0,
+			Duration = TimeSpan.FromSeconds(1),
 			Apply = v => border.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
 			Release = () => border.ClearAnimatedValue(UIElement.OpacityProperty),
 		}));
@@ -163,7 +175,10 @@ public sealed class AnimationTests
 		var clock = new AnimationClock();
 		var stopAnim = new DoubleAnimation
 		{
-			From = 1, To = 0, Duration = TimeSpan.FromSeconds(1), FillBehavior = FillBehavior.Stop,
+			From = 1,
+			To = 0,
+			Duration = TimeSpan.FromSeconds(1),
+			FillBehavior = FillBehavior.Stop,
 			Apply = v => border.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
 			Release = () => border.ClearAnimatedValue(UIElement.OpacityProperty),
 		};
@@ -173,7 +188,10 @@ public sealed class AnimationTests
 
 		var holdAnim = new DoubleAnimation
 		{
-			From = 1, To = 0, Duration = TimeSpan.FromSeconds(1), FillBehavior = FillBehavior.HoldEnd,
+			From = 1,
+			To = 0,
+			Duration = TimeSpan.FromSeconds(1),
+			FillBehavior = FillBehavior.HoldEnd,
 			Apply = v => border.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
 			Release = () => border.ClearAnimatedValue(UIElement.OpacityProperty),
 		};
@@ -191,7 +209,9 @@ public sealed class AnimationTests
 		var clock = new AnimationClock();
 		clock.Begin(StoryboardOf(new DoubleAnimation
 		{
-			From = 0, To = 100, Duration = TimeSpan.FromSeconds(1),
+			From = 0,
+			To = 100,
+			Duration = TimeSpan.FromSeconds(1),
 			Apply = v => border.SetAnimatedTranslateX((float)v),
 			Release = border.ClearAnimatedTranslate,
 		}));
@@ -208,7 +228,9 @@ public sealed class AnimationTests
 		var clock = new AnimationClock();
 		clock.Begin(StoryboardOf(new ColorAnimation
 		{
-			From = new HdrColor(0, 0, 0, 1), To = new HdrColor(1, 1, 1, 1), Duration = TimeSpan.FromSeconds(1),
+			From = new HdrColor(0, 0, 0, 1),
+			To = new HdrColor(1, 1, 1, 1),
+			Duration = TimeSpan.FromSeconds(1),
 			Apply = v => border.SetAnimatedFill(v),
 			Release = border.ClearAnimatedFill,
 		}));
@@ -227,8 +249,11 @@ public sealed class AnimationTests
 		var clock = new AnimationClock();
 		clock.Begin(StoryboardOf(new ColorAnimation
 		{
-			From = new HdrColor(0, 0, 0, 1), To = new HdrColor(1, 1, 1, 1), Duration = TimeSpan.FromSeconds(1),
-			Target = border, TargetProperty = "Background",
+			From = new HdrColor(0, 0, 0, 1),
+			To = new HdrColor(1, 1, 1, 1),
+			Duration = TimeSpan.FromSeconds(1),
+			Target = border,
+			TargetProperty = "Background",
 		}));
 
 		clock.Advance(0.5);
@@ -245,7 +270,9 @@ public sealed class AnimationTests
 
 		host.Clock.Begin(StoryboardOf(new DoubleAnimation
 		{
-			From = 1, To = 0, Duration = TimeSpan.FromSeconds(1),
+			From = 1,
+			To = 0,
+			Duration = TimeSpan.FromSeconds(1),
 			Apply = v => border.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
 		}));
 

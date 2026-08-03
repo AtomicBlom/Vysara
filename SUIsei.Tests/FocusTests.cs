@@ -31,11 +31,11 @@ public sealed class FocusTests
 		panel.Children.Add(b);
 		view.Root.Content = panel;
 
-		var gotFocusOn  = new List<string>();
+		var gotFocusOn = new List<string>();
 		var lostFocusOn = new List<string>();
-		a.GotFocus  += (_, _) => gotFocusOn.Add("A");
+		a.GotFocus += (_, _) => gotFocusOn.Add("A");
 		a.LostFocus += (_, _) => lostFocusOn.Add("A");
-		b.GotFocus  += (_, _) => gotFocusOn.Add("B");
+		b.GotFocus += (_, _) => gotFocusOn.Add("B");
 		b.LostFocus += (_, _) => lostFocusOn.Add("B");
 
 		host.Focus.TrySetFocus(a, FocusState.Programmatic);
@@ -158,10 +158,10 @@ public sealed class FocusTests
 	public void TabIndex_controls_order_before_document_order()
 	{
 		var host = MakeHost(out var view);
-		var first  = new Button { Width = 40f, Height = 30f, TabIndex = 1 };
+		var first = new Button { Width = 40f, Height = 30f, TabIndex = 1 };
 		var second = new Button { Width = 40f, Height = 30f, TabIndex = 2 };
-		var third  = new Button { Width = 40f, Height = 30f, TabIndex = 3 };
-		var panel  = new StackPanel { Orientation = Orientation.Horizontal };
+		var third = new Button { Width = 40f, Height = 30f, TabIndex = 3 };
+		var panel = new StackPanel { Orientation = Orientation.Horizontal };
 		// Add in reverse tab-index order to verify sorting beats document order.
 		panel.Children.Add(third);
 		panel.Children.Add(first);

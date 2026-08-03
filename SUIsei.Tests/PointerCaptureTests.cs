@@ -24,7 +24,7 @@ public sealed class PointerCaptureTests
 	{
 		var host = MakeHost(out var view);
 		// Two buttons side by side in a 200×100 surface.
-		var left  = new Button { Width = 80f, Height = 40f };
+		var left = new Button { Width = 80f, Height = 40f };
 		var right = new Button { Width = 80f, Height = 40f };
 		var panel = new StackPanel { Orientation = Orientation.Horizontal };
 		panel.Children.Add(left);
@@ -33,9 +33,9 @@ public sealed class PointerCaptureTests
 		host.Tick(0.016, 0f, new Vector2(200f, 100f));
 
 		// Press the left button and grab capture.
-		var movesOnLeft  = 0;
+		var movesOnLeft = 0;
 		var movesOnRight = 0;
-		left .AddHandler(UIElement.PointerMovedEvent, (_, _) => movesOnLeft++);
+		left.AddHandler(UIElement.PointerMovedEvent, (_, _) => movesOnLeft++);
 		right.AddHandler(UIElement.PointerMovedEvent, (_, _) => movesOnRight++);
 
 		host.QueuePointer(PointerInput.Press(new Vector2(40f, 50f)));

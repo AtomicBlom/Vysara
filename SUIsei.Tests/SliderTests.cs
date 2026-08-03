@@ -21,9 +21,14 @@ public sealed class SliderTests
 		var view = host.CreateRoot(UILayer.Default);
 		var slider = new Slider
 		{
-			Minimum = 0d, Maximum = 100d, Value = 0d, StepFrequency = 1d,
-			Width = 200f, Height = 20f,
-			HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+			Minimum = 0d,
+			Maximum = 100d,
+			Value = 0d,
+			StepFrequency = 1d,
+			Width = 200f,
+			Height = 20f,
+			HorizontalAlignment = HorizontalAlignment.Left,
+			VerticalAlignment = VerticalAlignment.Top,
 		};
 		view.Root.Content = slider;
 		host.Tick(0.016, 0f, Framebuffer); // lay out + apply template (wires handlers, realizes the track)

@@ -16,15 +16,15 @@ namespace SUIsei;
 /// </summary>
 public sealed class UIHost
 {
-	private readonly List<UIView>        _views        = [];
+	private readonly List<UIView> _views = [];
 	private readonly Queue<PointerInput> _pointerQueue = new();
-	private readonly Queue<KeyInput>     _keyQueue     = new();
-	private readonly Queue<string>       _textQueue    = new();
-	private readonly List<PointerInput>  _drain        = [];
-	private readonly KeyRoutedEventArgs               _keyArgs  = new();
+	private readonly Queue<KeyInput> _keyQueue = new();
+	private readonly Queue<string> _textQueue = new();
+	private readonly List<PointerInput> _drain = [];
+	private readonly KeyRoutedEventArgs _keyArgs = new();
 	private readonly CharacterReceivedRoutedEventArgs _charArgs = new();
 	private readonly List<(DrawListId Id, DrawListData Data)> _drawLists = [];
-	private int  _nextSurface;
+	private int _nextSurface;
 	private Size _framebufferSize = new(1f, 1f);
 
 	public UIHost()
@@ -74,9 +74,9 @@ public sealed class UIHost
 	{
 		var root = new UIRoot(new DrawListId(_nextSurface++), compositor)
 		{
-			LayoutScale  = layer.LayoutScale,
+			LayoutScale = layer.LayoutScale,
 			InputManager = Input,
-			Clock        = Clock
+			Clock = Clock
 		};
 		var view = new UIView(root, layer, interactive);
 		_views.Add(view);
@@ -118,7 +118,7 @@ public sealed class UIHost
 		DrainKeyboard();
 
 		// Resolve the coarse capture report after routing/focus settle, so it is O(1) reads of this frame's state.
-		WantsPointer  = Input.WantsPointer;
+		WantsPointer = Input.WantsPointer;
 		WantsKeyboard = Focus.WantsKeyboard;
 	}
 
@@ -182,7 +182,7 @@ public sealed class UIHost
 
 			// Tunnel Preview → if unhandled → bubble main event.
 			var previewEvt = e.Down ? UIElement.PreviewKeyDownEvent : UIElement.PreviewKeyUpEvent;
-			var mainEvt    = e.Down ? UIElement.KeyDownEvent        : UIElement.KeyUpEvent;
+			var mainEvt = e.Down ? UIElement.KeyDownEvent : UIElement.KeyUpEvent;
 
 			_keyArgs.Reset(previewEvt, focused, e);
 			focused.RaiseEvent(previewEvt, _keyArgs);

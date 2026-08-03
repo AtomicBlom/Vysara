@@ -4,9 +4,9 @@ namespace SUIsei.Input;
 [Flags]
 public enum ModifierKeys
 {
-	None    = 0,
+	None = 0,
 	Control = 1,
-	Alt     = 2,
-	Shift   = 4,
+	Alt = 2,
+	Shift = 4,
 	Windows = 8,
 }

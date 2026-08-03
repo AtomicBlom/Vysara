@@ -81,7 +81,8 @@ internal sealed class QuadraticSegment : EdgeSegment
 		b = new QuadraticSegment(
 			Point(1.0 / 3.0),
 			Vector2D.Mix(Vector2D.Mix(_p0, _p1, 5.0 / 9.0), Vector2D.Mix(_p1, _p2, 4.0 / 9.0), 0.5),
-			Point(2.0 / 3.0)) { Color = Color };
+			Point(2.0 / 3.0));
+		b.Color = Color;
 		c = new QuadraticSegment(Point(2.0 / 3.0), Vector2D.Mix(_p1, _p2, 2.0 / 3.0), _p2) { Color = Color };
 	}
 

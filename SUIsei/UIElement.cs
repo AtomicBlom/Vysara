@@ -61,60 +61,60 @@ public abstract class UIElement : DependencyObject
 
 	public bool IsTabStop { get => GetValue(IsTabStopProperty); set => SetValue(IsTabStopProperty, value); }
 	public bool IsEnabled { get => GetValue(IsEnabledProperty); set => SetValue(IsEnabledProperty, value); }
-	public int  TabIndex  { get => GetValue(TabIndexProperty);  set => SetValue(TabIndexProperty,  value); }
+	public int TabIndex { get => GetValue(TabIndexProperty); set => SetValue(TabIndexProperty, value); }
 
 	// --- Pointer routed events ---
 	// Preview events tunnel root→target; the paired bubble events fire after if Preview is unhandled.
 
-	public static readonly RoutedEvent PreviewPointerPressedEvent  = RoutedEvent.Register(nameof(PreviewPointerPressed),  RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PreviewPointerPressedEvent = RoutedEvent.Register(nameof(PreviewPointerPressed), RoutingStrategy.Tunnel);
 	public static readonly RoutedEvent PreviewPointerReleasedEvent = RoutedEvent.Register(nameof(PreviewPointerReleased), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PreviewPointerMovedEvent    = RoutedEvent.Register(nameof(PreviewPointerMoved),    RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PointerPressedEvent         = RoutedEvent.Register(nameof(PointerPressed),         RoutingStrategy.Bubble);
-	public static readonly RoutedEvent PointerReleasedEvent        = RoutedEvent.Register(nameof(PointerReleased),        RoutingStrategy.Bubble);
-	public static readonly RoutedEvent PointerMovedEvent           = RoutedEvent.Register(nameof(PointerMoved),           RoutingStrategy.Bubble);
-	public static readonly RoutedEvent PointerEnteredEvent         = RoutedEvent.Register(nameof(PointerEntered),         RoutingStrategy.Direct);
-	public static readonly RoutedEvent PointerExitedEvent          = RoutedEvent.Register(nameof(PointerExited),          RoutingStrategy.Direct);
-	public static readonly RoutedEvent PointerCaptureLostEvent     = RoutedEvent.Register(nameof(PointerCaptureLost),     RoutingStrategy.Direct);
+	public static readonly RoutedEvent PreviewPointerMovedEvent = RoutedEvent.Register(nameof(PreviewPointerMoved), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PointerPressedEvent = RoutedEvent.Register(nameof(PointerPressed), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PointerReleasedEvent = RoutedEvent.Register(nameof(PointerReleased), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PointerMovedEvent = RoutedEvent.Register(nameof(PointerMoved), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PointerEnteredEvent = RoutedEvent.Register(nameof(PointerEntered), RoutingStrategy.Direct);
+	public static readonly RoutedEvent PointerExitedEvent = RoutedEvent.Register(nameof(PointerExited), RoutingStrategy.Direct);
+	public static readonly RoutedEvent PointerCaptureLostEvent = RoutedEvent.Register(nameof(PointerCaptureLost), RoutingStrategy.Direct);
 	public static readonly RoutedEvent PreviewPointerWheelChangedEvent = RoutedEvent.Register(nameof(PreviewPointerWheelChanged), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PointerWheelChangedEvent        = RoutedEvent.Register(nameof(PointerWheelChanged),        RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PointerWheelChangedEvent = RoutedEvent.Register(nameof(PointerWheelChanged), RoutingStrategy.Bubble);
 
-	public event RoutedEventHandler PreviewPointerPressed  { add => AddHandler(PreviewPointerPressedEvent,  value); remove => RemoveHandler(PreviewPointerPressedEvent,  value); }
+	public event RoutedEventHandler PreviewPointerPressed { add => AddHandler(PreviewPointerPressedEvent, value); remove => RemoveHandler(PreviewPointerPressedEvent, value); }
 	public event RoutedEventHandler PreviewPointerReleased { add => AddHandler(PreviewPointerReleasedEvent, value); remove => RemoveHandler(PreviewPointerReleasedEvent, value); }
-	public event RoutedEventHandler PreviewPointerMoved    { add => AddHandler(PreviewPointerMovedEvent,    value); remove => RemoveHandler(PreviewPointerMovedEvent,    value); }
-	public event RoutedEventHandler PointerPressed         { add => AddHandler(PointerPressedEvent,         value); remove => RemoveHandler(PointerPressedEvent,         value); }
-	public event RoutedEventHandler PointerReleased        { add => AddHandler(PointerReleasedEvent,        value); remove => RemoveHandler(PointerReleasedEvent,        value); }
-	public event RoutedEventHandler PointerMoved           { add => AddHandler(PointerMovedEvent,           value); remove => RemoveHandler(PointerMovedEvent,           value); }
-	public event RoutedEventHandler PointerEntered         { add => AddHandler(PointerEnteredEvent,         value); remove => RemoveHandler(PointerEnteredEvent,         value); }
-	public event RoutedEventHandler PointerExited          { add => AddHandler(PointerExitedEvent,          value); remove => RemoveHandler(PointerExitedEvent,          value); }
-	public event RoutedEventHandler PointerCaptureLost     { add => AddHandler(PointerCaptureLostEvent,     value); remove => RemoveHandler(PointerCaptureLostEvent,     value); }
+	public event RoutedEventHandler PreviewPointerMoved { add => AddHandler(PreviewPointerMovedEvent, value); remove => RemoveHandler(PreviewPointerMovedEvent, value); }
+	public event RoutedEventHandler PointerPressed { add => AddHandler(PointerPressedEvent, value); remove => RemoveHandler(PointerPressedEvent, value); }
+	public event RoutedEventHandler PointerReleased { add => AddHandler(PointerReleasedEvent, value); remove => RemoveHandler(PointerReleasedEvent, value); }
+	public event RoutedEventHandler PointerMoved { add => AddHandler(PointerMovedEvent, value); remove => RemoveHandler(PointerMovedEvent, value); }
+	public event RoutedEventHandler PointerEntered { add => AddHandler(PointerEnteredEvent, value); remove => RemoveHandler(PointerEnteredEvent, value); }
+	public event RoutedEventHandler PointerExited { add => AddHandler(PointerExitedEvent, value); remove => RemoveHandler(PointerExitedEvent, value); }
+	public event RoutedEventHandler PointerCaptureLost { add => AddHandler(PointerCaptureLostEvent, value); remove => RemoveHandler(PointerCaptureLostEvent, value); }
 	public event RoutedEventHandler PreviewPointerWheelChanged { add => AddHandler(PreviewPointerWheelChangedEvent, value); remove => RemoveHandler(PreviewPointerWheelChangedEvent, value); }
-	public event RoutedEventHandler PointerWheelChanged        { add => AddHandler(PointerWheelChangedEvent,        value); remove => RemoveHandler(PointerWheelChangedEvent,        value); }
+	public event RoutedEventHandler PointerWheelChanged { add => AddHandler(PointerWheelChangedEvent, value); remove => RemoveHandler(PointerWheelChangedEvent, value); }
 
 	// --- Keyboard routed events ---
 
-	public static readonly RoutedEvent PreviewKeyDownEvent    = RoutedEvent.Register(nameof(PreviewKeyDown),    RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PreviewKeyUpEvent      = RoutedEvent.Register(nameof(PreviewKeyUp),      RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent KeyDownEvent           = RoutedEvent.Register(nameof(KeyDown),           RoutingStrategy.Bubble);
-	public static readonly RoutedEvent KeyUpEvent             = RoutedEvent.Register(nameof(KeyUp),             RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PreviewKeyDownEvent = RoutedEvent.Register(nameof(PreviewKeyDown), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PreviewKeyUpEvent = RoutedEvent.Register(nameof(PreviewKeyUp), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent KeyDownEvent = RoutedEvent.Register(nameof(KeyDown), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent KeyUpEvent = RoutedEvent.Register(nameof(KeyUp), RoutingStrategy.Bubble);
 	public static readonly RoutedEvent CharacterReceivedEvent = RoutedEvent.Register(nameof(CharacterReceived), RoutingStrategy.Bubble);
 
-	public event RoutedEventHandler PreviewKeyDown    { add => AddHandler(PreviewKeyDownEvent,    value); remove => RemoveHandler(PreviewKeyDownEvent,    value); }
-	public event RoutedEventHandler PreviewKeyUp      { add => AddHandler(PreviewKeyUpEvent,      value); remove => RemoveHandler(PreviewKeyUpEvent,      value); }
-	public event RoutedEventHandler KeyDown           { add => AddHandler(KeyDownEvent,           value); remove => RemoveHandler(KeyDownEvent,           value); }
-	public event RoutedEventHandler KeyUp             { add => AddHandler(KeyUpEvent,             value); remove => RemoveHandler(KeyUpEvent,             value); }
+	public event RoutedEventHandler PreviewKeyDown { add => AddHandler(PreviewKeyDownEvent, value); remove => RemoveHandler(PreviewKeyDownEvent, value); }
+	public event RoutedEventHandler PreviewKeyUp { add => AddHandler(PreviewKeyUpEvent, value); remove => RemoveHandler(PreviewKeyUpEvent, value); }
+	public event RoutedEventHandler KeyDown { add => AddHandler(KeyDownEvent, value); remove => RemoveHandler(KeyDownEvent, value); }
+	public event RoutedEventHandler KeyUp { add => AddHandler(KeyUpEvent, value); remove => RemoveHandler(KeyUpEvent, value); }
 	public event RoutedEventHandler CharacterReceived { add => AddHandler(CharacterReceivedEvent, value); remove => RemoveHandler(CharacterReceivedEvent, value); }
 
 	// --- Focus routed events ---
 
 	public static readonly RoutedEvent GettingFocusEvent = RoutedEvent.Register(nameof(GettingFocus), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent LosingFocusEvent  = RoutedEvent.Register(nameof(LosingFocus),  RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent GotFocusEvent     = RoutedEvent.Register(nameof(GotFocus),     RoutingStrategy.Bubble);
-	public static readonly RoutedEvent LostFocusEvent    = RoutedEvent.Register(nameof(LostFocus),    RoutingStrategy.Bubble);
+	public static readonly RoutedEvent LosingFocusEvent = RoutedEvent.Register(nameof(LosingFocus), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent GotFocusEvent = RoutedEvent.Register(nameof(GotFocus), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent LostFocusEvent = RoutedEvent.Register(nameof(LostFocus), RoutingStrategy.Bubble);
 
 	public event RoutedEventHandler GettingFocus { add => AddHandler(GettingFocusEvent, value); remove => RemoveHandler(GettingFocusEvent, value); }
-	public event RoutedEventHandler LosingFocus  { add => AddHandler(LosingFocusEvent,  value); remove => RemoveHandler(LosingFocusEvent,  value); }
-	public event RoutedEventHandler GotFocus     { add => AddHandler(GotFocusEvent,     value); remove => RemoveHandler(GotFocusEvent,     value); }
-	public event RoutedEventHandler LostFocus    { add => AddHandler(LostFocusEvent,    value); remove => RemoveHandler(LostFocusEvent,    value); }
+	public event RoutedEventHandler LosingFocus { add => AddHandler(LosingFocusEvent, value); remove => RemoveHandler(LosingFocusEvent, value); }
+	public event RoutedEventHandler GotFocus { add => AddHandler(GotFocusEvent, value); remove => RemoveHandler(GotFocusEvent, value); }
+	public event RoutedEventHandler LostFocus { add => AddHandler(LostFocusEvent, value); remove => RemoveHandler(LostFocusEvent, value); }
 
 	/// <summary>A local render transform, composed under layout placement (animatable later).</summary>
 	public Matrix3x2 RenderTransform { get; set; } = Matrix3x2.Identity;
@@ -355,7 +355,7 @@ public abstract class UIElement : DependencyObject
 	{
 		if (_handlers is null || !_handlers.TryGetValue(evt.Id, out var slot))
 			return;
-		slot.Normal     = (RoutedEventHandler?)Delegate.Remove(slot.Normal, handler);
+		slot.Normal = (RoutedEventHandler?)Delegate.Remove(slot.Normal, handler);
 		slot.HandledToo = (RoutedEventHandler?)Delegate.Remove(slot.HandledToo, handler);
 		if (slot.Normal is null && slot.HandledToo is null)
 			_handlers.Remove(evt.Id);

@@ -135,30 +135,30 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		string? fallbackValue,
 		string? targetNullValue)
 	{
-		public string TargetVar         { get; } = targetVar;
-		public string TargetProp        { get; } = targetProp;
-		public string[] Path            { get; } = path;
+		public string TargetVar { get; } = targetVar;
+		public string TargetProp { get; } = targetProp;
+		public string[] Path { get; } = path;
 		public ITypeSymbol[] ResultTypes { get; } = resultTypes;
-		public ITypeSymbol LeafType     { get; } = leafType;
-		public bool OneWay              { get; } = oneWay || twoWay;  // TwoWay also pushes VM→control
-		public bool TwoWay              { get; } = twoWay;
-		public string? FallbackValue    { get; } = fallbackValue;
-		public string? TargetNullValue  { get; } = targetNullValue;
+		public ITypeSymbol LeafType { get; } = leafType;
+		public bool OneWay { get; } = oneWay || twoWay;  // TwoWay also pushes VM→control
+		public bool TwoWay { get; } = twoWay;
+		public string? FallbackValue { get; } = fallbackValue;
+		public string? TargetNullValue { get; } = targetNullValue;
 	}
 
 	private sealed class Gen(Compilation compilation, string path, SourceText text, INamedTypeSymbol? pageType, CancellationToken ct)
 	{
 		public Compilation Compilation { get; } = compilation;
-		public string Path             { get; } = path;
-		public SourceText Text         { get; } = text;
+		public string Path { get; } = path;
+		public SourceText Text { get; } = text;
 		public INamedTypeSymbol? PageType { get; } = pageType;
-		public CancellationToken Ct    { get; } = ct;
-		public List<string> Fields     { get; } = [];
-		public StringBuilder Body      { get; } = new();
+		public CancellationToken Ct { get; } = ct;
+		public List<string> Fields { get; } = [];
+		public StringBuilder Body { get; } = new();
 		// Extra members appended to the partial class after InitializeComponent — the static template factories.
-		public StringBuilder Methods   { get; } = new();
+		public StringBuilder Methods { get; } = new();
 		public List<string> EventWires { get; } = [];
-		public List<Bind> Bindings     { get; } = [];
+		public List<Bind> Bindings { get; } = [];
 		public List<DiagnosticInfo> Diagnostics { get; } = [];
 		public HashSet<string> UsedNames { get; } = ["Root"];
 		public INamedTypeSymbol? RootType { get; set; }
@@ -227,8 +227,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 
 		// OneTime bindings (no Mode or Mode=OneTime) are emitted as direct assignments in InitializeComponent.
 		// OneWay/TwoWay bindings need a _Bindings tracking class for INPC subscriptions.
-		var oneTimeBindings   = gen.Bindings.Where(b => !b.OneWay).ToList();
-		var trackingBindings  = gen.Bindings.Where(b =>  b.OneWay).ToList();
+		var oneTimeBindings = gen.Bindings.Where(b => !b.OneWay).ToList();
+		var trackingBindings = gen.Bindings.Where(b => b.OneWay).ToList();
 		var hasBindings = trackingBindings.Count > 0;
 
 		var sb = new StringBuilder();
@@ -305,7 +305,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 
 		var typeName = type.ToDisplayString();
 		var nameAttr = el.Attribute(X + "Name");
-		var hasName  = TryValidateName(gen, scope, nameAttr);
+		var hasName = TryValidateName(gen, scope, nameAttr);
 
 		string var;
 		if (scope.IsTemplate)
@@ -359,7 +359,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				continue;
 			}
 
-			var name  = attr.Name.LocalName;
+			var name = attr.Name.LocalName;
 			var value = attr.Value;
 
 			// Event handler?
@@ -384,9 +384,9 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				if (prop2 is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
 				switch (TryAttributeValue(prop2.Type, value, out var code))
 				{
-					case LiteralStatus.Ok:          scope.Emit($"{var}.{prop2.Name} = {code};"); break;
-					case LiteralStatus.BadValue:    gen.Report(InvalidLiteral, attr, value.Trim(), name, prop2.Type.ToDisplayString()); break;
-					default:                        gen.Report(UnsupportedProperty, attr, name, prop2.Type.ToDisplayString()); break;
+					case LiteralStatus.Ok: scope.Emit($"{var}.{prop2.Name} = {code};"); break;
+					case LiteralStatus.BadValue: gen.Report(InvalidLiteral, attr, value.Trim(), name, prop2.Type.ToDisplayString()); break;
+					default: gen.Report(UnsupportedProperty, attr, name, prop2.Type.ToDisplayString()); break;
 				}
 				continue;
 			}

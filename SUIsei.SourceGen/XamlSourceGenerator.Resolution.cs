@@ -187,14 +187,14 @@ partial class XamlSourceGenerator
 			switch (key)
 			{
 				case "Mode":
-					if (val == "OneWay")        oneWay = true;
-					else if (val == "OneTime")  { /* default */ }
-					else if (val == "TwoWay")   { twoWay = true; oneWay = true; }
-					else                        return false;
+					if (val == "OneWay") oneWay = true;
+					else if (val == "OneTime") { /* default */ }
+					else if (val == "TwoWay") { twoWay = true; oneWay = true; }
+					else return false;
 					break;
-				case "FallbackValue":    fallbackValue   = val; break;
-				case "TargetNullValue":  targetNullValue = val; break;
-				default:                 return false; // Converter= and others are unsupported
+				case "FallbackValue": fallbackValue = val; break;
+				case "TargetNullValue": targetNullValue = val; break;
+				default: return false; // Converter= and others are unsupported
 			}
 		}
 		path = segs;
@@ -468,7 +468,7 @@ partial class XamlSourceGenerator
 				code = SyntaxFactory.Literal(raw).ToString();
 				return LiteralStatus.Ok;
 			case SpecialType.System_Boolean:
-				if (string.Equals(value, "true",  StringComparison.OrdinalIgnoreCase)) { code = "true";  return LiteralStatus.Ok; }
+				if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)) { code = "true"; return LiteralStatus.Ok; }
 				if (string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)) { code = "false"; return LiteralStatus.Ok; }
 				return LiteralStatus.BadValue;
 			case SpecialType.System_Single:

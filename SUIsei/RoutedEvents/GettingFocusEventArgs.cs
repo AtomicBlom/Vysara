@@ -24,7 +24,7 @@ public sealed class GettingFocusEventArgs : RoutedEventArgs
 		base.Reset(evt, originalSource);
 		OldFocusedElement = oldEl;
 		NewFocusedElement = newEl;
-		FocusState        = state;
-		Cancel            = false;
+		FocusState = state;
+		Cancel = false;
 	}
 }

@@ -143,17 +143,17 @@ internal sealed unsafe class Win32Window
 				return default;
 
 			case PInvoke.WM_DPICHANGED:
-			{
-				// LOWORD(wParam) is the new DPI; lParam points at the window rect Windows suggests to keep the same
-				// DIP size on the new monitor. Adopt both — the follow-up WM_SIZE updates the framebuffer dimensions.
-				_renderer.Scale = ((uint)wParam.Value & 0xFFFF) / 96f;
-				var suggested = (RECT*)lParam.Value;
-				PInvoke.SetWindowPos(hwnd, HWND.Null,
-					suggested->left, suggested->top,
-					suggested->right - suggested->left, suggested->bottom - suggested->top,
-					SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
-				return default;
-			}
+				{
+					// LOWORD(wParam) is the new DPI; lParam points at the window rect Windows suggests to keep the same
+					// DIP size on the new monitor. Adopt both — the follow-up WM_SIZE updates the framebuffer dimensions.
+					_renderer.Scale = ((uint)wParam.Value & 0xFFFF) / 96f;
+					var suggested = (RECT*)lParam.Value;
+					PInvoke.SetWindowPos(hwnd, HWND.Null,
+						suggested->left, suggested->top,
+						suggested->right - suggested->left, suggested->bottom - suggested->top,
+						SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
+					return default;
+				}
 
 			case PInvoke.WM_PAINT:
 				_forcePresent = true; // the client area was invalidated — present even if nothing changed
@@ -180,14 +180,14 @@ internal sealed unsafe class Win32Window
 				return default;
 
 			case PInvoke.WM_MOUSEWHEEL:
-			{
-				// WHEEL_DELTA notches in the signed high word of wParam (forward/up is positive). lParam carries screen
-				// coordinates here, not client; rather than convert, hit-test at the last cursor position (the wheel
-				// targets whatever the pointer is over). One notch is one wheel unit — the ScrollViewer scales it.
-				var notches = (short)((ulong)wParam.Value >> 16) / 120f;
-				_renderer.QueuePointer(PointerInput.Scroll(_lastMousePos, new Vector2(0f, notches)));
-				return default;
-			}
+				{
+					// WHEEL_DELTA notches in the signed high word of wParam (forward/up is positive). lParam carries screen
+					// coordinates here, not client; rather than convert, hit-test at the last cursor position (the wheel
+					// targets whatever the pointer is over). One notch is one wheel unit — the ScrollViewer scales it.
+					var notches = (short)((ulong)wParam.Value >> 16) / 120f;
+					_renderer.QueuePointer(PointerInput.Scroll(_lastMousePos, new Vector2(0f, notches)));
+					return default;
+				}
 
 			case PInvoke.WM_KEYDOWN:
 				_renderer.QueueKey(new KeyInput((VirtualKey)(uint)wParam.Value, Down: true, Repeat: false, Modifiers(), 0));

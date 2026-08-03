@@ -16,7 +16,7 @@ public sealed class InputManager
 {
 	private readonly Dictionary<uint, List<UIElement>> _overChains = [];
 	private readonly Dictionary<uint, UIElement?> _implicitCapture = [];
-	private readonly Dictionary<uint, UIElement>  _explicitCapture = [];
+	private readonly Dictionary<uint, UIElement> _explicitCapture = [];
 	private readonly PointerRoutedEventArgs _args = new();
 	private readonly RoutedEventArgs _captureArgs = new();
 	private List<UIElement> _scratch = [];
@@ -197,9 +197,9 @@ public sealed class InputManager
 
 	private static RoutedEvent? PreviewOf(RoutedEvent evt)
 	{
-		if (ReferenceEquals(evt, UIElement.PointerPressedEvent))  return UIElement.PreviewPointerPressedEvent;
+		if (ReferenceEquals(evt, UIElement.PointerPressedEvent)) return UIElement.PreviewPointerPressedEvent;
 		if (ReferenceEquals(evt, UIElement.PointerReleasedEvent)) return UIElement.PreviewPointerReleasedEvent;
-		if (ReferenceEquals(evt, UIElement.PointerMovedEvent))    return UIElement.PreviewPointerMovedEvent;
+		if (ReferenceEquals(evt, UIElement.PointerMovedEvent)) return UIElement.PreviewPointerMovedEvent;
 		return null;
 	}
 

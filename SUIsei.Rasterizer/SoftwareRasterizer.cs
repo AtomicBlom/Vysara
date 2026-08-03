@@ -419,39 +419,39 @@ public sealed class SoftwareRasterizer
 		switch (kind)
 		{
 			case UIPrimKind.Glyph:
-			{
-				// MTSDF text: median of the RGB distances, recentred at 0.5, then screenPxRange-scaled coverage.
-				// params.x (Custom.X) carries the per-run screenPxRange. The .a channel is a true SDF, unused here.
-				var s = tex!.Sample(uv);
-				var sd = Median3(s.X, s.Y, s.Z) - 0.5f;
-				return col * Saturate(sd * prm.X + 0.5f);
-			}
+				{
+					// MTSDF text: median of the RGB distances, recentred at 0.5, then screenPxRange-scaled coverage.
+					// params.x (Custom.X) carries the per-run screenPxRange. The .a channel is a true SDF, unused here.
+					var s = tex!.Sample(uv);
+					var sd = Median3(s.X, s.Y, s.Z) - 0.5f;
+					return col * Saturate(sd * prm.X + 0.5f);
+				}
 			case UIPrimKind.Image:
 				// Tinted blit: sample the source and multiply by the (premultiplied) vertex colour.
 				return col * tex!.Sample(uv);
 			case UIPrimKind.RoundedRect:
-			{
-				// params = (cornerRadius, _, sizeX, sizeY); uv is 0..1 across the rect, scaled to local pixels.
-				var size = new Vector2(prm.Z, prm.W);
-				var p = uv * size - size * 0.5f;
-				var dpdx = duvdx * size;
-				var dpdy = duvdy * size;
-				return col * Coverage(p, dpdx, dpdy, size * 0.5f, prm.X);
-			}
+				{
+					// params = (cornerRadius, _, sizeX, sizeY); uv is 0..1 across the rect, scaled to local pixels.
+					var size = new Vector2(prm.Z, prm.W);
+					var p = uv * size - size * 0.5f;
+					var dpdx = duvdx * size;
+					var dpdy = duvdy * size;
+					return col * Coverage(p, dpdx, dpdy, size * 0.5f, prm.X);
+				}
 			case UIPrimKind.Border:
-			{
-				// Outer rounded box minus the inner one inset by the (uniform) thickness → the ring.
-				var size = new Vector2(prm.Z, prm.W);
-				var p = uv * size - size * 0.5f;
-				var dpdx = duvdx * size;
-				var dpdy = duvdy * size;
-				var half = size * 0.5f;
-				var radius = prm.X;
-				var thick = prm.Y;
-				var outer = Coverage(p, dpdx, dpdy, half, radius);
-				var inner = Coverage(p, dpdx, dpdy, half - new Vector2(thick), MathF.Max(radius - thick, 0f));
-				return col * Saturate(outer - inner);
-			}
+				{
+					// Outer rounded box minus the inner one inset by the (uniform) thickness → the ring.
+					var size = new Vector2(prm.Z, prm.W);
+					var p = uv * size - size * 0.5f;
+					var dpdx = duvdx * size;
+					var dpdy = duvdy * size;
+					var half = size * 0.5f;
+					var radius = prm.X;
+					var thick = prm.Y;
+					var outer = Coverage(p, dpdx, dpdy, half, radius);
+					var inner = Coverage(p, dpdx, dpdy, half - new Vector2(thick), MathF.Max(radius - thick, 0f));
+					return col * Saturate(outer - inner);
+				}
 			default: // Fill — solid premultiplied quad, no SDF, no texture.
 				return col;
 		}

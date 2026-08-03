@@ -170,10 +170,14 @@ internal sealed class CffOutlineSource : IGlyphOutlineSource
 
 				switch (b0)
 				{
-					case 1: case 3: case 18: case 23: // h/v stem (hm)
+					case 1:
+					case 3:
+					case 18:
+					case 23: // h/v stem (hm)
 						CountStems();
 						break;
-					case 19: case 20: // hintmask / cntrmask
+					case 19:
+					case 20: // hintmask / cntrmask
 						CountStems();
 						i += (_nStems + 7) / 8;
 						break;

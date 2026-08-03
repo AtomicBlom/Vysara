@@ -94,7 +94,8 @@ internal sealed class CubicSegment(Vector2D p0, Vector2D p1, Vector2D p2, Vector
 			_p0,
 			(_p0.X == _p1.X && _p0.Y == _p1.Y) ? _p0 : Vector2D.Mix(_p0, _p1, 1.0 / 3.0),
 			Vector2D.Mix(Vector2D.Mix(_p0, _p1, 1.0 / 3.0), Vector2D.Mix(_p1, _p2, 1.0 / 3.0), 1.0 / 3.0),
-			Point(1.0 / 3.0)) { Color = Color };
+			Point(1.0 / 3.0));
+		a.Color = Color;
 		b = new CubicSegment(
 			Point(1.0 / 3.0),
 			Vector2D.Mix(
@@ -105,12 +106,14 @@ internal sealed class CubicSegment(Vector2D p0, Vector2D p1, Vector2D p2, Vector
 				Vector2D.Mix(Vector2D.Mix(_p0, _p1, 2.0 / 3.0), Vector2D.Mix(_p1, _p2, 2.0 / 3.0), 2.0 / 3.0),
 				Vector2D.Mix(Vector2D.Mix(_p1, _p2, 2.0 / 3.0), Vector2D.Mix(_p2, _p3, 2.0 / 3.0), 2.0 / 3.0),
 				1.0 / 3.0),
-			Point(2.0 / 3.0)) { Color = Color };
+			Point(2.0 / 3.0));
+		b.Color = Color;
 		c = new CubicSegment(
 			Point(2.0 / 3.0),
 			Vector2D.Mix(Vector2D.Mix(_p1, _p2, 2.0 / 3.0), Vector2D.Mix(_p2, _p3, 2.0 / 3.0), 2.0 / 3.0),
 			(_p2.X == _p3.X && _p2.Y == _p3.Y) ? _p3 : Vector2D.Mix(_p2, _p3, 2.0 / 3.0),
-			_p3) { Color = Color };
+			_p3);
+		c.Color = Color;
 	}
 
 	public override void ExtendBounds(ref double left, ref double bottom, ref double right, ref double top)

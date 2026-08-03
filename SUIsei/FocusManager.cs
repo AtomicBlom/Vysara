@@ -61,7 +61,7 @@ public sealed class FocusManager
 		}
 
 		FocusedElement = newEl;
-		FocusState     = newEl is null ? FocusState.Unfocused : state;
+		FocusState = newEl is null ? FocusState.Unfocused : state;
 
 		// GotFocus bubble on new element
 		if (newEl is not null)

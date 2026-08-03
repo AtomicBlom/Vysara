@@ -19,13 +19,13 @@ public sealed class Slider : Control
 	private const float RailThickness = 4f;
 	private const float DefaultLength = 132f;
 
-	private static readonly HdrColor RailColor      = HdrColor.FromRgb(70, 74, 86);
-	private static readonly HdrColor FillColor      = HdrColor.FromRgb(76, 140, 224);
-	private static readonly HdrColor ThumbBorder    = HdrColor.FromRgb(28, 32, 40);
-	private static readonly HdrColor ThumbNormal    = HdrColor.FromRgb(90, 150, 230);
-	private static readonly HdrColor ThumbOver      = HdrColor.FromRgb(120, 175, 245);
-	private static readonly HdrColor ThumbPressed   = HdrColor.FromRgb(150, 195, 255);
-	private static readonly HdrColor ThumbDisabled  = HdrColor.FromRgb(95, 98, 108);
+	private static readonly HdrColor RailColor = HdrColor.FromRgb(70, 74, 86);
+	private static readonly HdrColor FillColor = HdrColor.FromRgb(76, 140, 224);
+	private static readonly HdrColor ThumbBorder = HdrColor.FromRgb(28, 32, 40);
+	private static readonly HdrColor ThumbNormal = HdrColor.FromRgb(90, 150, 230);
+	private static readonly HdrColor ThumbOver = HdrColor.FromRgb(120, 175, 245);
+	private static readonly HdrColor ThumbPressed = HdrColor.FromRgb(150, 195, 255);
+	private static readonly HdrColor ThumbDisabled = HdrColor.FromRgb(95, 98, 108);
 
 	private SliderTrack? _track;
 	private bool _dragging;
@@ -206,12 +206,12 @@ public sealed class Slider : Control
 		var step = StepFrequency > 0d ? StepFrequency : 1d;
 		switch (key.Key)
 		{
-			case VirtualKey.Right or VirtualKey.Up:     Value = Snap(Value + step); e.Handled = true; break;
-			case VirtualKey.Left or VirtualKey.Down:    Value = Snap(Value - step); e.Handled = true; break;
-			case VirtualKey.PageUp:                     Value = Snap(Value + LargeChange); e.Handled = true; break;
-			case VirtualKey.PageDown:                   Value = Snap(Value - LargeChange); e.Handled = true; break;
-			case VirtualKey.Home:                       Value = Minimum; e.Handled = true; break;
-			case VirtualKey.End:                        Value = Maximum; e.Handled = true; break;
+			case VirtualKey.Right or VirtualKey.Up: Value = Snap(Value + step); e.Handled = true; break;
+			case VirtualKey.Left or VirtualKey.Down: Value = Snap(Value - step); e.Handled = true; break;
+			case VirtualKey.PageUp: Value = Snap(Value + LargeChange); e.Handled = true; break;
+			case VirtualKey.PageDown: Value = Snap(Value - LargeChange); e.Handled = true; break;
+			case VirtualKey.Home: Value = Minimum; e.Handled = true; break;
+			case VirtualKey.End: Value = Maximum; e.Handled = true; break;
 		}
 	}
 
@@ -250,10 +250,10 @@ public sealed class Slider : Control
 			slider._track = track;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal",      Storyboard = ThumbFillTo(thumb, ThumbOver, ThumbNormal) });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = ThumbFillTo(thumb, ThumbOver, ThumbNormal) });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = ThumbFillTo(thumb, ThumbNormal, ThumbOver) });
-			common.States.Add(new VisualState { Name = "Pressed",     Storyboard = ThumbFillTo(thumb, ThumbOver, ThumbPressed) });
-			common.States.Add(new VisualState { Name = "Disabled",    Storyboard = ThumbFillTo(thumb, ThumbNormal, ThumbDisabled) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = ThumbFillTo(thumb, ThumbOver, ThumbPressed) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = ThumbFillTo(thumb, ThumbNormal, ThumbDisabled) });
 			VisualStateManager.SetVisualStateGroups(track, [common]);
 
 			return track;

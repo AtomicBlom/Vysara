@@ -19,20 +19,20 @@ public sealed class TunnelEventTests
 		var order = new List<string>();
 
 		var root = new Border();
-		var mid  = new Border();
+		var mid = new Border();
 		var leaf = new Border();
 		root.Child = mid;
-		mid.Child  = leaf;
+		mid.Child = leaf;
 
 		var tunnel = RoutedEvent.Register("TestTunnel", RoutingStrategy.Tunnel);
 		var bubble = RoutedEvent.Register("TestBubble", RoutingStrategy.Bubble);
 
 		root.AddHandler(tunnel, (_, _) => order.Add("root-preview"));
-		mid .AddHandler(tunnel, (_, _) => order.Add("mid-preview"));
+		mid.AddHandler(tunnel, (_, _) => order.Add("mid-preview"));
 		leaf.AddHandler(tunnel, (_, _) => order.Add("leaf-preview"));
 
 		root.AddHandler(bubble, (_, _) => order.Add("root"));
-		mid .AddHandler(bubble, (_, _) => order.Add("mid"));
+		mid.AddHandler(bubble, (_, _) => order.Add("mid"));
 		leaf.AddHandler(bubble, (_, _) => order.Add("leaf"));
 
 		leaf.RaiseEvent(tunnel, new RoutedEventArgs());
@@ -47,14 +47,14 @@ public sealed class TunnelEventTests
 		var order = new List<string>();
 		var host = new UIHost();
 		var view = host.CreateRoot(UILayer.Default);
-		var mid  = new Border { Width = 200f, Height = 200f, Background = HdrColor.FromRgb(100, 100, 100) };
+		var mid = new Border { Width = 200f, Height = 200f, Background = HdrColor.FromRgb(100, 100, 100) };
 		var leaf = new Border { Width = 100f, Height = 100f, Background = HdrColor.FromRgb(200, 200, 200) };
-		mid.Child           = leaf;
-		view.Root.Content   = mid;
+		mid.Child = leaf;
+		view.Root.Content = mid;
 
 		// Mark handled in the Preview (tunnel) pass so the bubble should not fire.
 		mid.AddHandler(UIElement.PreviewPointerPressedEvent, (_, e) => { order.Add("tunnel"); e.Handled = true; });
-		leaf.AddHandler(UIElement.PointerPressedEvent,       (_, _) => order.Add("bubble"));
+		leaf.AddHandler(UIElement.PointerPressedEvent, (_, _) => order.Add("bubble"));
 
 		host.QueuePointer(PointerInput.Press(new Vector2(50f, 50f)));
 		host.Tick(0.016, 0f, new Vector2(200f, 200f));
@@ -90,15 +90,15 @@ public sealed class TunnelEventTests
 		var order = new List<string>();
 		var host = new UIHost();
 		var view = host.CreateRoot(UILayer.Default);
-		var mid  = new Border { Width = 200f, Height = 200f, Background = HdrColor.FromRgb(100, 100, 100) };
+		var mid = new Border { Width = 200f, Height = 200f, Background = HdrColor.FromRgb(100, 100, 100) };
 		var leaf = new Border { Width = 100f, Height = 100f, Background = HdrColor.FromRgb(200, 200, 200) };
-		mid.Child           = leaf;
-		view.Root.Content   = mid;
+		mid.Child = leaf;
+		view.Root.Content = mid;
 
-		mid .AddHandler(UIElement.PreviewPointerPressedEvent, (_, _) => order.Add("mid-preview"));
+		mid.AddHandler(UIElement.PreviewPointerPressedEvent, (_, _) => order.Add("mid-preview"));
 		leaf.AddHandler(UIElement.PreviewPointerPressedEvent, (_, _) => order.Add("leaf-preview"));
-		leaf.AddHandler(UIElement.PointerPressedEvent,        (_, _) => order.Add("leaf"));
-		mid .AddHandler(UIElement.PointerPressedEvent,        (_, _) => order.Add("mid"));
+		leaf.AddHandler(UIElement.PointerPressedEvent, (_, _) => order.Add("leaf"));
+		mid.AddHandler(UIElement.PointerPressedEvent, (_, _) => order.Add("mid"));
 
 		host.QueuePointer(PointerInput.Press(new Vector2(50f, 50f)));
 		host.Tick(0.016, 0f, new Vector2(200f, 200f));
