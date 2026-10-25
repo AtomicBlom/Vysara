@@ -102,7 +102,9 @@ public sealed class Slider : Control
 		AddHandler(PointerExitedEvent, OnPointerExited);
 		AddHandler(KeyDownEvent, OnKeyDown);
 
-		UpdateVisualState();
+		// Snap to the initial state: every state's storyboard fades in from a neighbouring state's colour, so a
+		// transition here would flash the thumb at that colour on first show.
+		UpdateVisualState(useTransitions: false);
 	}
 
 	private void OnValueChanged()
@@ -215,13 +217,13 @@ public sealed class Slider : Control
 		}
 	}
 
-	private void UpdateVisualState()
+	private void UpdateVisualState(bool useTransitions = true)
 	{
 		var state = !IsEnabled ? "Disabled"
 			: _dragging ? "Pressed"
 			: _pointerOver ? "PointerOver"
 			: "Normal";
-		VisualStateManager.GoToState(this, state, useTransitions: true);
+		VisualStateManager.GoToState(this, state, useTransitions);
 	}
 
 	// The default look: an unfilled rail, an accent fill up to the thumb, and a circular thumb whose colour the
