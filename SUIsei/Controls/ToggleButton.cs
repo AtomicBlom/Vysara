@@ -85,7 +85,9 @@ public class ToggleButton : ButtonBase
 	protected override void OnApplyTemplate()
 	{
 		base.OnApplyTemplate();
-		UpdateVisualState();
+		// Snap a freshly realized tree to the current check state: the accent fades up from hidden, so a transition
+		// here would fade a checked toggle's accent in each time its template is applied.
+		UpdateVisualState(useTransitions: false);
 	}
 
 	private void OnIsCheckedChanged()
@@ -94,11 +96,11 @@ public class ToggleButton : ButtonBase
 		UpdateVisualState();
 	}
 
-	private void UpdateVisualState()
+	private void UpdateVisualState(bool useTransitions = true)
 	{
 		// Best-effort for a VSM-driven template; harmless (returns false) for a template that reflects the state
 		// through parts instead. The part-based path is the OnToggleStateChanged hook.
-		VisualStateManager.GoToState(this, IsChecked switch { true => "Checked", null => "Indeterminate", _ => "Unchecked" }, useTransitions: true);
+		VisualStateManager.GoToState(this, IsChecked switch { true => "Checked", null => "Indeterminate", _ => "Unchecked" }, useTransitions);
 		OnToggleStateChanged();
 	}
 
