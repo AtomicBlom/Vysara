@@ -78,12 +78,16 @@ if (args.Contains("--selftest"))
 	var pixelW = (int)MathF.Round(dipW * scale);
 	var pixelH = (int)MathF.Round(dipH * scale);
 
+	// Compose once and rasterize that one frame all three ways. Each Compose advances the UI even at a fixed time — a
+	// visual state entered on the first frame starts its transition on the second — so separately composed frames can
+	// differ in content, and the diff would measure that instead of the rasterizers. The parallel raster runs first,
+	// onto the fresh (transparent) framebuffer, so a row it fails to cover can't inherit the serial pass's pixels.
 	var renderer = new GalleryRenderer(static () => { }) { Scale = scale };
-	var serial = renderer.Render(pixelW, pixelH, 0d);              // serial raster + exact resolve (RGBA)
-	var parallel = renderer.RenderParallelRgba(pixelW, pixelH, 0d); // parallel raster + exact resolve (RGBA)
 	renderer.Compose(pixelW, pixelH, 0d);
+	var parallel = renderer.RasterizeParallelRgba(); // parallel raster + exact resolve (RGBA)
+	var serial = renderer.RasterizeSerialRgba();     // serial raster + exact resolve (RGBA)
 	var bgra = new byte[pixelW * pixelH * 4];
-	renderer.PresentTo(bgra, forceFull: true);                    // parallel raster + LUT resolve (BGRA)
+	renderer.PresentTo(bgra, forceFull: true);       // parallel raster + LUT resolve (BGRA)
 
 	int rasterDiff = 0, lutDiff = 0;
 	for (long i = 0; i < (long)pixelW * pixelH; i++)

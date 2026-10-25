@@ -159,11 +159,19 @@ internal sealed class GalleryRenderer
 		return new PixelRect(x0, y0, x1, y1);
 	}
 
-	/// <summary>Serial reference render returning straight RGBA8 — used by the headless capture so its output exactly
-	/// matches the golden software-rasterizer path (the parallel raster is byte-identical to this).</summary>
+	/// <summary>Compose a frame at <paramref name="seconds"/> and return its serial reference render (see
+	/// <see cref="RasterizeSerialRgba"/>), so the headless capture's output exactly matches the golden
+	/// software-rasterizer path.</summary>
 	public byte[] Render(int width, int height, double seconds)
 	{
 		Compose(width, height, seconds);
+		return RasterizeSerialRgba();
+	}
+
+	/// <summary>Serial raster of the last <see cref="Compose"/>, resolved to straight RGBA8 through the exact sRGB
+	/// encode — the reference the parallel raster is byte-identical to.</summary>
+	public byte[] RasterizeSerialRgba()
+	{
 		var r = _rasterizer!;
 		BindImages(r);
 		r.Clear(_clear);
@@ -172,11 +180,11 @@ internal sealed class GalleryRenderer
 		return r.ResolveToRgba8();
 	}
 
-	/// <summary>For the self-test: the parallel raster resolved through the <em>exact</em> (non-LUT) encode, so a diff
-	/// against <see cref="Render"/> isolates raster correctness from the present path's resolve-LUT approximation.</summary>
-	public byte[] RenderParallelRgba(int width, int height, double seconds)
+	/// <summary>For the self-test: the parallel raster of the last <see cref="Compose"/>, resolved through the
+	/// <em>exact</em> (non-LUT) encode, so a diff against <see cref="RasterizeSerialRgba"/> of the same frame isolates
+	/// raster correctness from the present path's resolve-LUT approximation.</summary>
+	public byte[] RasterizeParallelRgba()
 	{
-		Compose(width, height, seconds);
 		var r = _rasterizer!;
 		BindImages(r);
 		var cleared = false;
