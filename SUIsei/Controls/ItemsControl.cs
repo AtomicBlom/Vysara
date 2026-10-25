@@ -12,6 +12,8 @@ namespace SUIsei.Controls;
 public class ItemsControl : Control, IItemContainerSource
 {
 	private Panel? _panel;
+	// VisualChildren, set once the panel is built, so reading it allocates nothing.
+	private UIElement[] _panelList = [];
 	private bool _virtualizing;
 	private readonly List<object?> _items = [];
 	private readonly Stack<UIElement> _recyclePool = new();
@@ -61,6 +63,7 @@ public class ItemsControl : Control, IItemContainerSource
 		if (_panel is null)
 		{
 			_panel = ItemsPanel.Build();
+			_panelList = [_panel];
 			AdoptChild(_panel);
 			if (_panel is IVirtualizingItemsHost host)
 			{
@@ -188,7 +191,7 @@ public class ItemsControl : Control, IItemContainerSource
 			text.Text = item?.ToString() ?? string.Empty;
 	}
 
-	internal override IReadOnlyList<UIElement> VisualChildren => _panel is null ? [] : [_panel];
+	internal override IReadOnlyList<UIElement> VisualChildren => _panelList;
 
 	protected override Size MeasureOverride(Size available)
 	{

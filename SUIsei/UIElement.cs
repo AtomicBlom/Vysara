@@ -236,7 +236,7 @@ public abstract class UIElement : DependencyObject
 	private bool _hasAnimatedTranslate;
 	private HdrColor? _animatedFill;
 
-	/// <summary>The animation-overridden brush, if any; a content-bearing control's <see cref="BuildContent"/> prefers
+	/// <summary>The animation-overridden brush, if any; a content-bearing control's <see cref="UpdateContent"/> prefers
 	/// it over its background so a colour animation drives the brush on the no-relayout visual path.</summary>
 	private protected HdrColor? AnimatedFill => _animatedFill;
 
@@ -272,11 +272,11 @@ public abstract class UIElement : DependencyObject
 	/// <summary>Clear the animated brush, reverting to the element's own background.</summary>
 	internal void ClearAnimatedFill() { _animatedFill = null; InvalidateContent(); }
 
-	/// <summary>Re-evaluate just this element's drawn content (a brush/background change) against the current
-	/// <see cref="LayoutRect"/> — no relayout. Marks the visual dirty for the next composite.</summary>
+	/// <summary>Bring just this element's drawn content up to date in place (a brush/background change) against the
+	/// current <see cref="LayoutRect"/> — no relayout. Marks the visual dirty for the next composite.</summary>
 	protected void InvalidateContent()
 	{
-		Visual.Content = BuildContent();
+		Visual.Content = UpdateContent();
 		Visual.MarkDirty();
 	}
 
@@ -297,19 +297,51 @@ public abstract class UIElement : DependencyObject
 		Visual.Transform = ComposeTransform();
 		Visual.Opacity = Opacity;
 		Visual.Clip = ClipToBounds ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
-		Visual.Content = BuildContent();
-		Visual.Clear();
+		Visual.Content = UpdateContent();
 		// A collapsed element's children were never re-arranged this pass (Arrange short-circuits ArrangeCore above),
 		// so their LayoutRect/transform are stale leftovers from when the element was last visible. Detaching them
 		// from the visual tree here (rather than only zeroing this element's own size) keeps "Collapsed contributes
 		// zero to layout" true for rendering too — otherwise stale descendants would still draw at their old position.
-		if (Visibility != Visibility.Collapsed)
-			foreach (var child in VisualChildren)
-				Visual.Add(child.Visual);
+		SyncVisualChildren(Visibility == Visibility.Collapsed ? [] : VisualChildren);
 		Visual.MarkDirty();
 	}
 
-	private protected virtual VisualContent? BuildContent() => null;
+	// Mirror the element children's visuals into this visual's child list. An arrange usually leaves the children as
+	// they were, so the list is compared first and relinked only when the set or its order changed.
+	private void SyncVisualChildren(IReadOnlyList<UIElement> children)
+	{
+		var visuals = Visual.Children;
+		if (visuals.Count == children.Count)
+		{
+			var same = true;
+			for (var i = 0; same && i < children.Count; i++)
+				same = ReferenceEquals(visuals[i], children[i].Visual);
+			if (same)
+				return;
+		}
+
+		Visual.Clear();
+		for (var i = 0; i < children.Count; i++)
+			Visual.Add(children[i].Visual);
+	}
+
+	/// <summary>
+	/// Bring this element's drawn content up to date with its properties and <see cref="LayoutRect"/>, and return it,
+	/// or null when the element draws nothing. An element keeps its content object and updates it in place, so this
+	/// allocates only the first time an element draws.
+	/// </summary>
+	private protected virtual VisualContent? UpdateContent() => null;
+
+	// The rect content of an element in the rect family (a background, a border), kept across updates.
+	private RectContent? _rectContent;
+
+	/// <summary>This element's retained <see cref="RectContent"/>, updated to its layout size and the given paint.</summary>
+	private protected RectContent RetainedRect(HdrColor? fill, float cornerRadius = 0f, HdrColor? borderBrush = null, float borderThickness = 0f)
+	{
+		var content = _rectContent ??= new RectContent();
+		content.Update(new Vector2(LayoutRect.Width, LayoutRect.Height), fill, cornerRadius, borderBrush, borderThickness);
+		return content;
+	}
 
 	// --- Explicit pointer capture ---
 

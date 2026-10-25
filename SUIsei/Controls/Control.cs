@@ -22,6 +22,9 @@ public abstract class Control : FrameworkElement
 
 	private FrameworkElement? _templateRoot;
 
+	// VisualChildren while a template is applied, rebuilt only when _templateRoot changes, so reading it allocates nothing.
+	private UIElement[] _templateRootList = [];
+
 	/// <summary>Controls how Tab navigation behaves within this control's subtree.</summary>
 	public TabFocusNavigation TabFocusNavigation
 	{
@@ -61,6 +64,7 @@ public abstract class Control : FrameworkElement
 		if (_templateRoot is not null || Template is not { } template)
 			return;
 		_templateRoot = template.Factory(this);
+		_templateRootList = [_templateRoot];
 		AdoptChild(_templateRoot);
 		OnApplyTemplate();
 	}
@@ -74,12 +78,12 @@ public abstract class Control : FrameworkElement
 		{
 			DropChild(_templateRoot);
 			_templateRoot = null;
+			_templateRootList = [];
 		}
 		InvalidateMeasure();
 	}
 
-	internal override IReadOnlyList<UIElement> VisualChildren =>
-		_templateRoot is { } root ? [root] : base.VisualChildren;
+	internal override IReadOnlyList<UIElement> VisualChildren => _templateRoot is not null ? _templateRootList : base.VisualChildren;
 
 	protected override Size MeasureOverride(Size available)
 	{

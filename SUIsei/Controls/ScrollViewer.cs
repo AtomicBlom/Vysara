@@ -24,6 +24,8 @@ public sealed class ScrollViewer : FrameworkElement
 	private const float ThumbMargin = 2f;
 
 	private readonly Border _vThumb = new() { Background = ThumbRest, CornerRadius = ThumbThickness / 2f };
+	// VisualChildren (the content, then the thumb), rebuilt only when Content changes, so reading it allocates nothing.
+	private UIElement[] _visualChildren;
 	private readonly ColorAnimation _thumbFade;
 	private readonly Storyboard _thumbFadeStory;
 	private HdrColor _thumbColor = ThumbRest; // the thumb's last target colour (the From of the next transition)
@@ -37,6 +39,7 @@ public sealed class ScrollViewer : FrameworkElement
 	public ScrollViewer()
 	{
 		ClipToBounds = true;
+		_visualChildren = [_vThumb];
 		AdoptChild(_vThumb);
 		AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged);
 		AddHandler(KeyDownEvent, OnKeyDown);
@@ -73,6 +76,7 @@ public sealed class ScrollViewer : FrameworkElement
 			if (field is not null)
 				DropChild(field);
 			field = value;
+			_visualChildren = value is null ? [_vThumb] : [value, _vThumb];
 			if (value is not null)
 				AdoptChild(value);
 			InvalidateMeasure();
@@ -117,7 +121,7 @@ public sealed class ScrollViewer : FrameworkElement
 		InvalidateArrange();
 	}
 
-	internal override IReadOnlyList<UIElement> VisualChildren => Content is null ? [_vThumb] : [Content, _vThumb];
+	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
 
 	protected override Size MeasureOverride(Size available)
 	{

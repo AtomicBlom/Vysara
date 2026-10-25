@@ -35,6 +35,8 @@ public sealed class TextBox : Control
 	private readonly TextBlock _textBlock = new();
 	private readonly Border _caretVisual = new() { Background = HdrColor.FromRgb(230, 230, 235) };
 	private readonly Border _selectionHighlight = new() { Background = HdrColor.FromRgb(60, 110, 200), Visibility = Visibility.Collapsed };
+	// VisualChildren: the three fixed parts, in draw order, made once.
+	private readonly UIElement[] _visualChildren;
 
 	private int _caret;
 	private int _anchor;
@@ -45,6 +47,7 @@ public sealed class TextBox : Control
 
 	public TextBox()
 	{
+		_visualChildren = [_selectionHighlight, _textBlock, _caretVisual];
 		AdoptChild(_selectionHighlight);
 		AdoptChild(_textBlock);
 		AdoptChild(_caretVisual);
@@ -96,7 +99,7 @@ public sealed class TextBox : Control
 		InvalidateArrange();
 	}
 
-	internal override IReadOnlyList<UIElement> VisualChildren => [_selectionHighlight, _textBlock, _caretVisual];
+	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
 
 	protected override Size MeasureOverride(Size available)
 	{
@@ -160,12 +163,12 @@ public sealed class TextBox : Control
 	/// <summary>The caret's arranged rect within the field (test seam).</summary>
 	internal Rect CaretRect => _caretVisual.LayoutRect;
 
-	private protected override VisualContent? BuildContent()
+	private protected override VisualContent? UpdateContent()
 	{
 		var brush = _focused ? FocusBorder : _pointerOver ? HoverBorder : BorderBrush;
 		var fill = _focused ? FocusBackground : Background;
 		var thickness = _focused ? 1.5f : 1f;
-		return new RectContent(new System.Numerics.Vector2(LayoutRect.Width, LayoutRect.Height), fill, 3f, brush, thickness);
+		return RetainedRect(fill, 3f, brush, thickness);
 	}
 
 	// A repeating square-wave on the caret's Opacity: hold solid through the first half-period, ramp off, hold hidden

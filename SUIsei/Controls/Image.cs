@@ -26,8 +26,20 @@ public sealed class Image : FrameworkElement
 
 	protected override Size ArrangeOverride(Size finalSize) => finalSize;
 
-	private protected override VisualContent? BuildContent() =>
-		Source is { } source ? new ImageContent(source, ComputeDest(source, LayoutRect.Width, LayoutRect.Height, Stretch)) : null;
+	// The image content this element draws, kept across updates so a re-arrange allocates nothing.
+	private ImageContent? _image;
+
+	private protected override VisualContent? UpdateContent()
+	{
+		if (Source is not { } source)
+			return null;
+		var dest = ComputeDest(source, LayoutRect.Width, LayoutRect.Height, Stretch);
+		if (_image is null)
+			_image = new ImageContent(source, dest);
+		else
+			_image.Update(source, dest);
+		return _image;
+	}
 
 	// The destination rect (element-local) the source is drawn into. Fill stretches to the bounds; None uses the
 	// natural size; Uniform fits preserving aspect (letterbox); UniformToFill covers preserving aspect (overflow,

@@ -11,6 +11,8 @@ namespace SUIsei.Controls;
 [ContentProperty(Name = nameof(Child))]
 public sealed class Border : FrameworkElement
 {
+	// VisualChildren, rebuilt only when Child changes, so layout and hit-testing read it without allocating.
+	private UIElement[] _visualChildren = [];
 	public UIElement? Child
 	{
 		get;
@@ -21,6 +23,7 @@ public sealed class Border : FrameworkElement
 			if (field is not null)
 				DropChild(field);
 			field = value;
+			_visualChildren = value is null ? [] : [value];
 			if (value is not null)
 				AdoptChild(value);
 			InvalidateMeasure();
@@ -33,7 +36,7 @@ public sealed class Border : FrameworkElement
 	public Thickness Padding { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
 	public float CornerRadius { get; set { if (field != value) { field = value; InvalidateContent(); } } }
 
-	internal override IReadOnlyList<UIElement> VisualChildren => Child is null ? [] : [Child];
+	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
 
 	private Thickness Inset => new(
 		BorderThickness.Left + Padding.Left, BorderThickness.Top + Padding.Top,
@@ -56,11 +59,11 @@ public sealed class Border : FrameworkElement
 		return finalSize;
 	}
 
-	private protected override VisualContent? BuildContent()
+	private protected override VisualContent? UpdateContent()
 	{
 		var fill = AnimatedFill ?? Background;
 		if (fill is null && (BorderBrush is null || BorderThickness.Horizontal + BorderThickness.Vertical <= 0f))
 			return null;
-		return new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), fill, CornerRadius, BorderBrush, BorderThickness.Left);
+		return RetainedRect(fill, CornerRadius, BorderBrush, BorderThickness.Left);
 	}
 }
