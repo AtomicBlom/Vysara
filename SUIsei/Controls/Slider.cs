@@ -122,20 +122,14 @@ public sealed class Slider : Control
 		return Minimum + steps * StepFrequency;
 	}
 
-	// The host DIP→pixel scale (pointer positions arrive in surface pixels; layout is in DIPs).
-	private float Scale => AttachedRoot?.LayoutScale is { } s and > 0f ? s : 1f;
-
-	// Map a pointer event to a value: convert its surface-pixel position to the track's local DIP space (summing
-	// layout offsets up the parent chain), then to a fraction of the usable travel, then to a snapped value.
+	// Map a pointer event to a value: take its position in the track's local space (through the composed transforms,
+	// so a scaled or rotated slider maps correctly), then a fraction of the usable travel, then a snapped value.
 	private void SetValueFromPointer(PointerRoutedEventArgs p)
 	{
 		if (_track is null)
 			return;
 
-		var origin = Vector2.Zero;
-		for (UIElement? e = _track; e is not null; e = e.Parent)
-			origin += new Vector2(e.LayoutRect.X, e.LayoutRect.Y);
-		var local = p.Pointer.Position / Scale - origin;
+		var local = p.GetCurrentPoint(_track).Position;
 
 		double fraction;
 		if (Orientation == Orientation.Horizontal)

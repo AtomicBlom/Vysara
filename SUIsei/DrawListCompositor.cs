@@ -114,7 +114,7 @@ public sealed class DrawListCompositor : IUICompositor
 		var matrix = v.Transform * parent;
 		var localClip = clip;
 		if (v.Clip is { } c)
-			localClip = clip.Intersect(TransformRect(c, matrix));
+			localClip = clip.Intersect(c.TransformBounds(matrix));
 
 		// Children are walked by index: a foreach over IReadOnlyList<Visual> would box an enumerator per visual per frame.
 		var children = v.Children;
@@ -173,25 +173,5 @@ public sealed class DrawListCompositor : IUICompositor
 				list.AddImage(ic.Dest, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, alpha), ic.Source, localClip);
 				break;
 		}
-	}
-
-	// Axis-aligned bound of a local rect under an affine transform (exact for the translate/scale transforms used
-	// by layout; a conservative AABB for rotation — fine for clipping).
-	private static Rect TransformRect(in Rect r, in Matrix3x2 m)
-	{
-		Span<Vector2> p =
-		[
-			Vector2.Transform(new Vector2(r.X, r.Y), m),
-			Vector2.Transform(new Vector2(r.Right, r.Y), m),
-			Vector2.Transform(new Vector2(r.Right, r.Bottom), m),
-			Vector2.Transform(new Vector2(r.X, r.Bottom), m),
-		];
-		float minX = p[0].X, minY = p[0].Y, maxX = p[0].X, maxY = p[0].Y;
-		for (var i = 1; i < 4; i++)
-		{
-			minX = MathF.Min(minX, p[i].X); minY = MathF.Min(minY, p[i].Y);
-			maxX = MathF.Max(maxX, p[i].X); maxY = MathF.Max(maxY, p[i].Y);
-		}
-		return new Rect(minX, minY, maxX - minX, maxY - minY);
 	}
 }

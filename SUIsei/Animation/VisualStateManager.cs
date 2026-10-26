@@ -44,15 +44,19 @@ public static class VisualStateManager
 		if (groups is null)
 			return false;
 
+		// Indexed loops: a state change runs on every hover, and a foreach over the IList would box an enumerator.
 		foreach (var group in groups)
 		{
 			VisualState? target = null;
-			foreach (var state in group.States)
-				if (state.Name == stateName)
+			var states = group.States;
+			for (var i = 0; i < states.Count; i++)
+			{
+				if (states[i].Name == stateName)
 				{
-					target = state;
+					target = states[i];
 					break;
 				}
+			}
 			if (target is null)
 				continue;
 
@@ -87,12 +91,15 @@ public static class VisualStateManager
 	// detached from a host, so a state change is still observable in headless tests.
 	private static void SnapToEnd(Storyboard storyboard)
 	{
-		foreach (var child in storyboard.Children)
-			if (child is AnimationTimeline anim)
+		var children = storyboard.Children;
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline anim)
 			{
 				anim.EnsureResolved();
 				anim.CaptureStart();
 				anim.ApplyAt(1.0);
 			}
+		}
 	}
 }

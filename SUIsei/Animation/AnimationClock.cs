@@ -15,12 +15,16 @@ public sealed class AnimationClock
 {
 	private sealed class Entry
 	{
-		public required Storyboard Storyboard;
+		public Storyboard Storyboard = null!;
 		public double Elapsed;
-		public required bool[] Done; // per-child completion latch
+		public bool[] Done = []; // per-child completion latch; the first Storyboard.Children.Count are in use
 	}
 
 	private readonly List<Entry> _active = [];
+
+	// Entries of finished or stopped storyboards, reused by the next Begin: a visual-state change begins a storyboard
+	// on every hover, so starting one allocates nothing once warm.
+	private readonly Stack<Entry> _freeEntries = [];
 
 	// Running tweens. A finished tween goes back to its type's pool, so a steady stream of tweens allocates nothing.
 	private readonly List<TweenEntry> _tweens = [];
@@ -35,14 +39,25 @@ public sealed class AnimationClock
 	{
 		Stop(storyboard);
 		// Resolve any declarative Target/TargetProperty (from generated XAML) into the typed apply now, then record
-		// where each run starts.
-		foreach (var child in storyboard.Children)
-			if (child is AnimationTimeline anim)
+		// where each run starts. Children are walked by index: a foreach over the IList would box an enumerator.
+		var children = storyboard.Children;
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline anim)
 			{
 				anim.EnsureResolved();
 				anim.CaptureStart();
 			}
-		_active.Add(new Entry { Storyboard = storyboard, Done = new bool[storyboard.Children.Count] });
+		}
+
+		var entry = _freeEntries.Count > 0 ? _freeEntries.Pop() : new Entry();
+		entry.Storyboard = storyboard;
+		entry.Elapsed = 0d;
+		if (entry.Done.Length < children.Count)
+			entry.Done = new bool[children.Count];
+		else
+			Array.Clear(entry.Done, 0, children.Count);
+		_active.Add(entry);
 	}
 
 	/// <summary>Stop <paramref name="storyboard"/> and release every target it animates.</summary>
@@ -53,8 +68,17 @@ public sealed class AnimationClock
 			if (!ReferenceEquals(_active[i].Storyboard, storyboard))
 				continue;
 			ReleaseAll(storyboard);
-			_active.RemoveAt(i);
+			RemoveEntry(i);
 		}
+	}
+
+	// Drop the active entry at index i and keep it for reuse, without holding on to its storyboard.
+	private void RemoveEntry(int i)
+	{
+		var entry = _active[i];
+		_active.RemoveAt(i);
+		entry.Storyboard = null!;
+		_freeEntries.Push(entry);
 	}
 
 	/// <summary>Advance every active storyboard by <paramref name="deltaSeconds"/> and push the current values.</summary>
@@ -97,7 +121,7 @@ public sealed class AnimationClock
 			}
 
 			if (allComplete)
-				_active.RemoveAt(i); // Stop children already released; HoldEnd values stay applied (sticky)
+				RemoveEntry(i); // Stop children already released; HoldEnd values stay applied (sticky)
 		}
 
 		for (var i = _tweens.Count - 1; i >= 0; i--)
@@ -269,9 +293,12 @@ public sealed class AnimationClock
 
 	private static void ReleaseAll(Storyboard storyboard)
 	{
-		foreach (var child in storyboard.Children)
-			if (child is AnimationTimeline anim)
+		var children = storyboard.Children;
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline anim)
 				anim.ReleaseTarget();
+		}
 	}
 
 	// Map a storyboard's elapsed seconds to (normalized progress in [0,1], has-begun, has-finished) for one timeline,

@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei.Controls;
 using SUIsei.Extensions;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei;
@@ -441,34 +442,84 @@ public abstract class UIElement : DependencyObject
 		slot.HandledToo?.Invoke(this, args);
 	}
 
-	// --- 2D hit-testing: reverse-z, respects IsHitTestVisible/Visibility/RenderTransform ---
-
 	/// <summary>
-	/// Return the top-most descendant (or this element) hit by <paramref name="point"/>, expressed in this element's
-	/// local space (origin at this element's top-left, pre-<see cref="RenderTransform"/>). Children are tested
-	/// front-to-back; an element is a hit only where it actually draws (its visual has content), so transparent
-	/// panels let clicks fall through. Pure + side-effect-free — asserted directly in tests.
+	/// Return the top-most element of this subtree drawn at <paramref name="surfacePoint"/> (surface pixels). The walk
+	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Visual.Transform"/>
+	/// is composed onto <paramref name="parentWorld"/>, so render transforms, animated translates and layout scale all
+	/// count, and each visual's clip is intersected into <paramref name="clip"/> as its surface-space bounds, the same
+	/// bound the compositor clips with, so a point is hittable exactly where something can be seen. Children are tested
+	/// front-to-back before the element's own content, and an element is a hit only where its content draws
+	/// (<see cref="ContentContains"/>), so transparent panels let the point through. Allocation-free.
 	/// </summary>
-	internal UIElement? HitTest(Vector2 point)
+	internal UIElement? HitTest(Vector2 surfacePoint, in Matrix3x2 parentWorld, Rect clip)
 	{
 		if (!IsHitTestVisible || Visibility != Visibility.Visible)
 			return null;
 
-		var local = point;
-		if (RenderTransform != Matrix3x2.Identity && Matrix3x2.Invert(RenderTransform, out var inv))
-			local = Vector2.Transform(point, inv);
+		var world = Visual.Transform * parentWorld;
+		if (Visual.Clip is { } localClip)
+			clip = clip.Intersect(localClip.TransformBounds(world));
+		if (!clip.Contains(surfacePoint))
+			return null;
 
 		var children = VisualChildren;
 		for (var i = children.Count - 1; i >= 0; i--)
 		{
-			var c = children[i];
-			var hit = c.HitTest(local - new Vector2(c.LayoutRect.X, c.LayoutRect.Y));
-			if (hit is not null)
+			if (children[i].HitTest(surfacePoint, world, clip) is { } hit)
 				return hit;
 		}
 
-		var bounds = new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height);
-		return bounds.Contains(local) && Visual.Content is not null ? this : null;
+		return Visual.Content is { } content && Matrix3x2.Invert(world, out var toLocal)
+			&& ContentContains(content, Vector2.Transform(surfacePoint, toLocal), LayoutRect)
+			? this
+			: null;
+	}
+
+	/// <summary>
+	/// Whether <paramref name="content"/>, drawn in an element's local space, covers <paramref name="local"/>: one case
+	/// per content kind, as the compositor draws one per kind. A rect covers its bounds, an image its destination rect
+	/// (not the letterbox around it), and text its element's layout bounds. Exact shape geometry is one more case here.
+	/// </summary>
+	private static bool ContentContains(VisualContent content, Vector2 local, in Rect layoutRect) => content switch
+	{
+		RectContent rect => new Rect(0f, 0f, rect.Size.X, rect.Size.Y).Contains(local),
+		ImageContent image => image.Dest.Contains(local),
+		_ => new Rect(0f, 0f, layoutRect.Width, layoutRect.Height).Contains(local),
+	};
+
+	/// <summary>The transform from this element's local space to its root's DIP space: the visual transforms composed up
+	/// the parent chain, as drawn. With the root, also the top element it reached, which identifies the tree.</summary>
+	internal Matrix3x2 TransformToRoot(out UIElement top)
+	{
+		var m = Matrix3x2.Identity;
+		top = this;
+		for (UIElement? e = this; e is not null; e = e.Parent)
+		{
+			m *= e.Visual.Transform;
+			top = e;
+		}
+		return m;
+	}
+
+	/// <summary>
+	/// A transform from this element's local space to <paramref name="visual"/>'s, or to the root's DIP space when it is
+	/// null, as WinUI's <c>UIElement.TransformToVisual</c>. It goes through the composed visual transforms, so render
+	/// transforms, animated translates and scroll offsets count. Valid until either element moves.
+	/// </summary>
+	/// <exception cref="ArgumentException"><paramref name="visual"/> is not in the same tree as this element.</exception>
+	public GeneralTransform TransformToVisual(UIElement? visual)
+	{
+		var toRoot = TransformToRoot(out var top);
+		if (visual is null)
+			return new MatrixGeneralTransform(toRoot);
+
+		var otherToRoot = visual.TransformToRoot(out var otherTop);
+		var sameTree = ReferenceEquals(top, otherTop) || (AttachedRoot is not null && ReferenceEquals(AttachedRoot, visual.AttachedRoot));
+		if (!sameTree)
+			throw new ArgumentException("The element is not in the same tree as this one.", nameof(visual));
+		return new MatrixGeneralTransform(Matrix3x2.Invert(otherToRoot, out var rootToOther)
+			? toRoot * rootToOther
+			: new Matrix3x2(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN));
 	}
 
 	internal void AdoptChild(UIElement child)

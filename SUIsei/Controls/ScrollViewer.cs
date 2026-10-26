@@ -64,9 +64,6 @@ public sealed class ScrollViewer : FrameworkElement
 		_vThumb.AddHandler(PointerCaptureLostEvent, OnThumbCaptureLost);
 	}
 
-	// The host's DIP→pixel scale: pointer positions arrive in surface pixels, but the scroll offsets are in DIPs.
-	private float Scale => AttachedRoot?.LayoutScale is { } s and > 0f ? s : 1f;
-
 	public UIElement? Content
 	{
 		get;
@@ -216,7 +213,7 @@ public sealed class ScrollViewer : FrameworkElement
 		if (e is not PointerRoutedEventArgs p || ScrollableHeight <= 0f)
 			return;
 		_draggingThumb = true;
-		_dragStartPointerY = p.Pointer.Position.Y / Scale;
+		_dragStartPointerY = p.GetCurrentPoint(this).Position.Y;
 		_dragStartOffset = VerticalOffset;
 		_vThumb.CapturePointer(0);
 		UpdateThumbVisual();
@@ -227,7 +224,7 @@ public sealed class ScrollViewer : FrameworkElement
 	{
 		if (!_draggingThumb || e is not PointerRoutedEventArgs p)
 			return;
-		var dy = p.Pointer.Position.Y / Scale - _dragStartPointerY;
+		var dy = p.GetCurrentPoint(this).Position.Y - _dragStartPointerY;
 		if (_thumbTravel > 0f)
 			SetVerticalOffset(_dragStartOffset + dy * ScrollableHeight / _thumbTravel);
 		e.Handled = true;
