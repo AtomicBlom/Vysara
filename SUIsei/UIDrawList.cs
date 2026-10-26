@@ -48,6 +48,19 @@ internal sealed class UIDrawList
 	// The first vertex of the current index window: every command emitted in it carries this as its VertexOffset.
 	private int _windowStart;
 
+	// Group layers opened and not yet closed, innermost last: each grows the bounds of what is drawn inside it, which
+	// becomes its rect when it closes.
+	private readonly RetainedBuffer<OpenLayer> _layers = new(4);
+
+	private struct OpenLayer
+	{
+		public int Command;     // its BeginLayer command
+		public int Marker;      // the first of its marker's four vertices
+		public Rect Clip;       // what the group is clipped to
+		public Vector2 Min, Max;
+		public bool Drawn;      // whether anything was drawn inside
+	}
+
 	// Open run state — extended while (kind, tex, clip) match; flushed into a command otherwise.
 	private bool _open;
 	private UIPrimKind _runKind;
@@ -79,6 +92,7 @@ internal sealed class UIDrawList
 		_surfaceSize = surfaceSize;
 		_windowStart = 0;
 		_open = false;
+		_layers.Clear();
 		_slotOf.Clear();
 		SlotFor(TextureSource.White); // slot 0, what untextured commands sample
 	}
@@ -237,36 +251,145 @@ internal sealed class UIDrawList
 	}
 
 	/// <summary>
-	/// Open a render-to-texture group layer covering <paramref name="layerRect"/> (surface pixels). The backend
-	/// redirects subsequent draws into a transient target until the matching <see cref="EndLayer"/>. A zero-geometry
-	/// marker command whose <c>ClipRect</c> is the layer bounds; its degenerate quad (4 vertices, no indices) carries
-	/// the premultiplied fade tint <c>(a,a,a,a)</c> the composite-back multiplies the layer by, plus the
-	/// <paramref name="effect"/> id+params, so a backend (and the software rasterizer) reads them off the first vertex.
-	/// The marker's <c>VertexOffset</c> is the absolute index of that vertex, not an index-window base.
+	/// Open a render-to-texture group layer whose content is clipped to <paramref name="clip"/> (surface pixels). The
+	/// backend redirects subsequent draws into a transient target until the matching <see cref="EndLayer"/>. A
+	/// zero-geometry marker command whose <c>ClipRect</c> is the layer's rect: when the layer closes, that becomes the
+	/// bounds of what was drawn inside it, rounded out to whole pixels and clipped, so a small group costs a small
+	/// target. Its degenerate quad (4 vertices, no indices) spans the same rect and carries the premultiplied fade tint
+	/// <c>(a,a,a,a)</c> the composite-back multiplies the layer by, plus the <paramref name="effect"/> id+params, so a
+	/// backend (and the software rasterizer) reads them off the first vertex. The marker's <c>VertexOffset</c> is the
+	/// absolute index of that vertex, not an index-window base.
 	/// </summary>
-	public void BeginLayer(in Rect layerRect, float groupAlpha, Vector4 effect)
+	public void BeginLayer(in Rect clip, float groupAlpha, Vector4 effect)
 	{
 		// A marker is its own command — flush the open run so it can't be merged into a preceding primitive run.
 		Flush();
 		var tint = PremultipliedHdrColor.FromStraight(1f, 1f, 1f, groupAlpha);
 		var marker = _set.Vertices.Count;
-		_set.Vertices.Add(new OverlayVertex(new Vector2(layerRect.X, layerRect.Y), new Vector2(0, 0), tint, effect));
-		_set.Vertices.Add(new OverlayVertex(new Vector2(layerRect.Right, layerRect.Y), new Vector2(1, 0), tint, effect));
-		_set.Vertices.Add(new OverlayVertex(new Vector2(layerRect.Right, layerRect.Bottom), new Vector2(1, 1), tint, effect));
-		_set.Vertices.Add(new OverlayVertex(new Vector2(layerRect.X, layerRect.Bottom), new Vector2(0, 1), tint, effect));
-		_set.Commands.Add(new DrawCommand(layerRect, 0, _set.Indices.Count, 0, marker, (uint)UIPrimKind.BeginLayer));
+		_set.Vertices.Add(new OverlayVertex(new Vector2(clip.X, clip.Y), new Vector2(0, 0), tint, effect));
+		_set.Vertices.Add(new OverlayVertex(new Vector2(clip.Right, clip.Y), new Vector2(1, 0), tint, effect));
+		_set.Vertices.Add(new OverlayVertex(new Vector2(clip.Right, clip.Bottom), new Vector2(1, 1), tint, effect));
+		_set.Vertices.Add(new OverlayVertex(new Vector2(clip.X, clip.Bottom), new Vector2(0, 1), tint, effect));
+		_layers.Add(new OpenLayer { Command = _set.Commands.Count, Marker = marker, Clip = clip });
+		_set.Commands.Add(new DrawCommand(clip, 0, _set.Indices.Count, 0, marker, (uint)UIPrimKind.BeginLayer));
 	}
 
-	/// <summary>Close the most-recently-opened layer; the backend composites it back into the parent at the group's
-	/// fade alpha. A zero-geometry marker scissored by <paramref name="clip"/> (the parent's clip).</summary>
+	/// <summary>
+	/// Close the most-recently-opened layer; the backend composites it back into the parent at the group's fade alpha.
+	/// A zero-geometry marker scissored by <paramref name="clip"/> (the parent's clip). The layer's rect shrinks to what
+	/// was drawn in it; a layer nothing was drawn in is removed, markers and all.
+	/// </summary>
 	public void EndLayer(in Rect clip)
 	{
 		Flush();
+		var layer = _layers[_layers.Count - 1];
+		_layers.Truncate(_layers.Count - 1);
+		if (!layer.Drawn)
+		{
+			// Only the BeginLayer marker and its quad were added since it opened.
+			_set.Commands.Truncate(layer.Command);
+			_set.Vertices.Truncate(layer.Marker);
+			return;
+		}
+
+		var x0 = MathF.Floor(layer.Min.X);
+		var y0 = MathF.Floor(layer.Min.Y);
+		var rect = layer.Clip.Intersect(new Rect(x0, y0, MathF.Ceiling(layer.Max.X) - x0, MathF.Ceiling(layer.Max.Y) - y0));
+		ref var begin = ref _set.Commands[layer.Command];
+		begin = begin with { ClipRect = rect };
+		var corners = (stackalloc Vector2[] { new(rect.X, rect.Y), new(rect.Right, rect.Y), new(rect.Right, rect.Bottom), new(rect.X, rect.Bottom) });
+		for (var i = 0; i < 4; i++)
+		{
+			ref var v = ref _set.Vertices[layer.Marker + i];
+			v = v with { Position = corners[i] };
+		}
+
+		// What the parent draws now includes this layer's composite.
+		if (_layers.Count > 0 && !rect.IsEmpty)
+		{
+			Track(new Vector2(rect.X, rect.Y));
+			Track(new Vector2(rect.Right, rect.Bottom));
+		}
 		_set.Commands.Add(new DrawCommand(clip, 0, _set.Indices.Count, 0, 0, (uint)UIPrimKind.EndLayer));
 	}
 
-	private void AddVertex(Vector2 local, Vector2 uv, in Matrix3x2 matrix, PremultipliedHdrColor color, Vector4 @params) =>
-		_set.Vertices.Add(new OverlayVertex(Vector2.Transform(local, matrix), uv, color, @params));
+	// Grow the innermost open layer's bounds to take in a vertex drawn inside it.
+	private void Track(Vector2 position)
+	{
+		if (_layers.Count == 0)
+			return;
+		ref var layer = ref _layers[_layers.Count - 1];
+		if (!layer.Drawn)
+		{
+			layer.Min = layer.Max = position;
+			layer.Drawn = true;
+			return;
+		}
+		layer.Min = Vector2.Min(layer.Min, position);
+		layer.Max = Vector2.Max(layer.Max, position);
+	}
+
+	/// <summary>
+	/// Append tessellated vector geometry, trimmed by <paramref name="trim"/> if it is a stroke, transformed by
+	/// <paramref name="matrix"/> into surface pixels and drawn as the <see cref="UIPrimKind.Vector"/> prim in
+	/// <paramref name="color"/>, multiplied by <paramref name="texture"/> (the white texel when null) sampled at
+	/// <paramref name="localToUv"/> of each local position. Large paths split across index windows at triangle
+	/// boundaries.
+	/// <para>
+	/// With <paramref name="groupOpacity"/> below 1 the path is drawn inside a group layer of its own, whose tint carries
+	/// that opacity, so its overlaps (a stroke's joins and self-crossings) blend once: drawn opaque inside it, a
+	/// translucent stroke's crossings look like the rest of it.
+	/// </para>
+	/// </summary>
+	public void AddVector(TessellatedPath path, PathTrim trim, in Matrix3x2 matrix, PremultipliedHdrColor color, in Rect clip,
+		float groupOpacity = 1f, TextureSource? texture = null, Matrix3x2 localToUv = default)
+	{
+		if (clip.IsEmpty || path.TriangleCount == 0 || groupOpacity <= 0f)
+			return;
+		var grouped = groupOpacity < 1f;
+		if (grouped)
+			BeginLayer(clip, groupOpacity, Vector4.Zero);
+		EnsureRun(UIPrimKind.Vector, texture is null ? 0 : SlotFor(texture), clip);
+		var sink = new VectorEmitter(this, matrix, color, localToUv);
+		path.Emit(ref sink, trim);
+		if (grouped)
+			EndLayer(clip);
+	}
+
+	// Append whole triangles of vector vertices to the open run, starting a new index window between triangles when the
+	// current one fills.
+	private void AddVectorTriangles(ReadOnlySpan<VectorVertex> vertices, in Matrix3x2 matrix, PremultipliedHdrColor color, in Matrix3x2 localToUv)
+	{
+		while (vertices.Length > 0)
+		{
+			var room = (MaxWindowVertices - (_set.Vertices.Count - _windowStart)) / 3 * 3;
+			var take = Math.Min(vertices.Length, room >= 3 ? room : MaxWindowVertices / 3 * 3);
+			var first = ReserveVertices(take);
+			for (var i = 0; i < take; i++)
+			{
+				ref readonly var v = ref vertices[i];
+				var position = Vector2.Transform(v.Position, matrix);
+				Track(position);
+				_set.Vertices.Add(new OverlayVertex(position, Vector2.Transform(v.Position, localToUv), color, v.Distances));
+				_set.Indices.Add((ushort)(first + i));
+			}
+			_runIdxCount += take;
+			vertices = vertices[take..];
+		}
+	}
+
+	/// <summary>Writes a tessellated path's triangles into the draw list, transformed and coloured.</summary>
+	private readonly struct VectorEmitter(UIDrawList list, Matrix3x2 matrix, PremultipliedHdrColor color, Matrix3x2 localToUv) : IVectorSink
+	{
+		public void AddTriangles(ReadOnlySpan<VectorVertex> vertices) => list.AddVectorTriangles(vertices, matrix, color, localToUv);
+	}
+
+	private void AddVertex(Vector2 local, Vector2 uv, in Matrix3x2 matrix, PremultipliedHdrColor color, Vector4 @params)
+	{
+		var position = Vector2.Transform(local, matrix);
+		Track(position);
+		_set.Vertices.Add(new OverlayVertex(position, uv, color, @params));
+	}
 
 	// The two triangles of a quad whose four vertices start at window index `first`.
 	private void AddQuadIndices(ushort first)

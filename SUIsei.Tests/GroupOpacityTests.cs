@@ -53,9 +53,10 @@ public sealed class GroupOpacityTests
 		dump.ShouldContain("col=(0,0,1,1)");  // blue, opaque
 		dump.ShouldNotContain("col=(0.5,0,0,0.5)"); // the pre-fix folded red would look like this
 
-		// BeginLayer carries the group's fade tint (a,a,a,a) and bounds (the full surface, no clip).
+		// BeginLayer carries the group's fade tint (a,a,a,a) and its bounds: what the group draws, 0..90 square, not the
+		// surface-wide clip it inherits.
 		dump.ShouldContain("col=(0.5,0.5,0.5,0.5)");
-		dump.ShouldContain("BeginLayer) tex=0 clip=(0,0 100x100)");
+		dump.ShouldContain("BeginLayer) tex=0 clip=(0,0 90x90)");
 	}
 
 	[Test]
