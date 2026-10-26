@@ -160,6 +160,62 @@ public sealed class VectorPrimTests
 	}
 
 	[Test]
+	[Arguments(13.3f, 13.7f, 29.5f, 29f)] // each triangle's own view of the edge rounds pixel (20, 20) outside it
+	[Arguments(28f, 29.5f, 14.5f, 13.3f)] // and here inside it
+	public void A_shared_edge_through_a_pixel_centre_draws_it_exactly_once(float ax, float ay, float bx, float by)
+	{
+		// A translucent quad split along a to b, a diagonal passing within rounding of pixel (20, 20)'s centre. Evaluated
+		// from each triangle's own end, the edge function rounds the same way in both rather than to opposite values, so
+		// the pixel would be dropped or blended twice; the fill rule evaluates it one way round, as a GPU's exact
+		// fixed-point arithmetic does, and gives it to one triangle.
+		var a = new Vector2(ax, ay);
+		var b = new Vector2(bx, by);
+		var across = 10f * Vector2.Normalize(new Vector2(a.Y - b.Y, b.X - a.X));
+		var half = PremultipliedHdrColor.FromStraight(1, 1, 1, 0.5f);
+		var draw = new DrawListData
+		{
+			Vertices = new OverlayVertex[]
+			{
+				new(a, Vector2.Zero, half, Vector4.Zero),
+				new((a + b) / 2 + across, Vector2.Zero, half, Vector4.Zero),
+				new(b, Vector2.Zero, half, Vector4.Zero),
+				new((a + b) / 2 - across, Vector2.Zero, half, Vector4.Zero),
+			},
+			Indices = new ushort[] { 0, 1, 2, 0, 2, 3 },
+			Commands = new DrawCommand[] { new(Surface, 0, 0, 6, 0, (uint)UIPrimKind.Fill) },
+			CoordinateSize = new Vector2(Size),
+		};
+
+		Alpha(Render(draw), 20, 20).ShouldBe(0.5f, 1f / 255f);
+	}
+
+	[Test]
+	public void Pixels_on_the_spokes_of_a_round_cap_are_drawn()
+	{
+		// Loom's GPU run found these two pixels inside a round start cap, on a spoke of its fan, left empty by the oracle:
+		// the wedges either side of the spoke each computed its rim point, and the copies rounded a hairline apart.
+		var path = new CompositionPath();
+		path.MoveTo(new Vector2(480, 190));
+		path.LineTo(new Vector2(560, 70));
+		path.LineTo(new Vector2(640, 190));
+		path.LineTo(new Vector2(720, 70));
+		path.LineTo(new Vector2(800, 190));
+		var style = new CompositionStrokeStyle { Thickness = 18, LineJoin = PenLineJoin.Bevel, StartCap = PenLineCap.Round, EndCap = PenLineCap.Triangle };
+		var stroke = new TessellatedPath();
+		new Tessellator().Stroke(path, style, TessellationScale.For(Matrix3x2.Identity), stroke);
+		var builder = new DrawListBuilder();
+		builder.Begin(new Vector2(1280, 720));
+		builder.AddVector(stroke, Matrix3x2.Identity, White, new Rect(0, 0, 1280, 720));
+		var raster = new SoftwareRasterizer(1280, 720);
+		raster.Clear(new Vector4(0, 0, 0, 1));
+		raster.Render(builder.End());
+		var px = raster.ResolveToRgba8();
+
+		foreach (var (x, y) in new[] { (477, 190), (472, 191) })
+			px[(y * 1280 + x) * 4].ShouldBe((byte)255, $"pixel ({x},{y})");
+	}
+
+	[Test]
 	public void A_translucent_stroke_drawn_as_a_group_has_equal_crossing_and_non_crossing_pixels()
 	{
 		var crossing = Stroke("M 10,50 L 90,50 M 50,10 L 50,90", 8);

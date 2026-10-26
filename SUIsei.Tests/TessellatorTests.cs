@@ -276,6 +276,20 @@ public sealed class TessellatorTests
 	}
 
 	[Test]
+	public void Neighbouring_wedges_of_a_round_fan_share_their_spoke_exactly()
+	{
+		// Each wedge's last rim point is the next wedge's first. Computed once per wedge, the two copies rounded apart and
+		// left a hairline gap along the spoke: Loom's GPU, snapping vertices to 1/256 pixel, drew over it; the oracle did not.
+		var path = Stroke("M 480,190 L 560,70", s => { s.Thickness = 18; s.StartCap = PenLineCap.Round; });
+		var v = path.Vertices.ToArray();
+		var wedges = Enumerable.Range(0, v.Length / 3).Where(t => v[3 * t].Position == new Vector2(480, 190)).ToArray();
+
+		wedges.Length.ShouldBeGreaterThan(2);
+		for (var i = 1; i < wedges.Length; i++)
+			v[3 * wedges[i] + 1].Position.ShouldBe(v[3 * wedges[i - 1] + 2].Position, $"spoke {i}");
+	}
+
+	[Test]
 	public void A_miter_past_its_limit_is_cut_off_there()
 	{
 		// A 10° turn back: uncut, the miter would reach about eleven half thicknesses past the corner, along its bisector.

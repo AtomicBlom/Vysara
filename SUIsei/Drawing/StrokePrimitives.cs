@@ -210,12 +210,15 @@ internal static class StrokePrimitives
 		var steps = Math.Clamp((int)MathF.Ceiling(MathF.Abs(sweep) / maxStep), 1, 512);
 		var step = sweep / steps;
 		var reach = (h + margin) / MathF.Cos(step / 2f);
+		// Each rim point is computed once and shared by the wedges either side of it: recomputed per wedge, the two
+		// copies round apart and leave a hairline gap along the spoke that a pixel centre can fall into.
+		var rim = center + reach * Dir(from);
 		for (var i = 0; i < steps; i++)
 		{
-			var a0 = from + i * step;
-			var a1 = a0 + step;
-			var mid = Dir(a0 + step / 2f);
-			Triangle(target, V(center), V(center + reach * Dir(a0)), V(center + reach * Dir(a1)));
+			var next = center + reach * Dir(from + (i + 1) * step);
+			var mid = Dir(from + (i + 0.5f) * step);
+			Triangle(target, V(center), V(rim), V(next));
+			rim = next;
 
 			VectorVertex V(Vector2 p) => new(p, new Vector4(h - Vector2.Dot(p - center, mid), Unused, Unused, Unused), arc);
 		}
