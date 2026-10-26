@@ -76,7 +76,9 @@ public sealed class DrawListData
 	/// The list's texture slot table: a command's <see cref="DrawCommand.TextureIndex"/> is an index into it. Slot 0
 	/// is always <see cref="TextureSource.White"/>, which untextured commands sample; the others are the sources the
 	/// list's glyph and image commands sample (glyph atlas pages, images), each once, numbered densely in the order the
-	/// list first uses them. The host uploads each source and binds them by slot; slots belong to this list only.
+	/// list first uses them. The host uploads each source and binds them by slot; slots belong to this list only. Every
+	/// command's <see cref="DrawCommand.TextureIndex"/> is below <c>TextureSlots.Count</c>, so a host can treat one
+	/// outside the table as a broken list.
 	/// </summary>
 	public IReadOnlyList<TextureSource> TextureSlots
 	{

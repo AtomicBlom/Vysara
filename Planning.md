@@ -37,6 +37,7 @@ SUIsei carries its own draw types in a `SUIsei.Drawing` namespace: `OverlayVerte
 - **What a slot holds:** a `TextureSource`, a neutral description the host resolves: RGBA8 texels, a size, and a `Version` that moves when the texels change.
 - **Slot 0** is always `TextureSource.White`, the white texel untextured commands sample.
 - **The other slots** hold every source the list's glyph and image commands sample, each once, numbered densely in the order the walk first uses them. Glyph atlas pages are ordinary sources there, so a host always binds the atlas the glyphs were laid out against.
+- **Every `TextureIndex` is in range:** each one the compositor emits is below its list's `TextureSlots.Count`. A host treats one outside it as a broken list and fails loud rather than sampling something else. Loom's painter refuses it, naming the command and surface; the CPU rasterizer skips and counts it.
 - **`TextureRevision`** moves when the table names different sources or slots, or a source in it changes its `Version`. It also moves on a clean frame that re-submits the same list. A geometry-only recomposite leaves it alone, so a host rebinds and re-uploads only when it moves.
 - **Cost:** slots are assigned with one reference-keyed lookup per primitive into retained storage, so a steady frame allocates nothing.
 

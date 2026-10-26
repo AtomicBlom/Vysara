@@ -89,6 +89,20 @@ public sealed class TextureSlotTests
 	}
 
 	[Test]
+	public void Every_commands_texture_index_is_within_its_lists_slot_table()
+	{
+		var scene = new Scene();
+		var faded = new Border { Opacity = 0.5f, Child = new Border { Width = 5f, Height = 5f, Background = HdrColor.FromRgb(9, 9, 9) } };
+		((Canvas)scene.Root.Content!).Children.Add(faded);   // a group-opacity layer: its markers carry slot 0
+
+		var draw = scene.Frame();
+		var commands = draw.Commands.ToArray();
+
+		commands.ShouldContain(c => (UIPrimKind)c.Tag == UIPrimKind.BeginLayer);
+		commands.ShouldAllBe(c => c.TextureIndex >= 0 && c.TextureIndex < draw.TextureSlots.Count);
+	}
+
+	[Test]
 	public void A_geometry_only_recomposite_keeps_the_slots_and_the_texture_revision()
 	{
 		var scene = new Scene();
