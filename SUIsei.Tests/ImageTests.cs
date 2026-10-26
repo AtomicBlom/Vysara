@@ -5,8 +5,8 @@ namespace SUIsei.Tests;
 
 /// <summary>
 /// <see cref="Image"/>: measures to the source's natural size, and the compositor emits a
-/// <see cref="UIPrimKind.Image"/> command bound to the source's texture index, with the source listed in the
-/// frame's <see cref="DrawListData.Images"/> table for the engine glue to upload.
+/// <see cref="UIPrimKind.Image"/> command sampling the source's slot in the frame's
+/// <see cref="DrawListData.TextureSlots"/>, which the host uploads and binds by slot.
 /// </summary>
 public sealed class ImageTests
 {

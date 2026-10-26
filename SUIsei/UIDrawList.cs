@@ -5,7 +5,7 @@ namespace SUIsei;
 
 /// <summary>
 /// A surface's retained draw-list builder — the analog of ImGui's <c>ImDrawList</c>. Bakes the composed transform
-/// into vertex positions and merges consecutive primitives that share <c>(kind, textureId, clip)</c> into one indexed
+/// into vertex positions and merges consecutive primitives that share <c>(kind, texture slot, clip)</c> into one indexed
 /// draw command (atlas-everything + state-run batching).
 /// <para>
 /// It keeps two <see cref="DrawListBuffers"/> sets and fills them in turn, so the list it built last stays readable
@@ -123,11 +123,11 @@ internal sealed class UIDrawList
 	}
 
 	/// <summary>Append a transformed quad (the corners are baked through <paramref name="matrix"/>).</summary>
-	public void AddRect(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int textureId = 0)
+	public void AddRect(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int slot = 0)
 	{
 		if (clip.IsEmpty)
 			return;
-		EnsureRun(kind, textureId, clip);
+		EnsureRun(kind, slot, clip);
 
 		var first = ReserveVertices(4);
 		AddVertex(new Vector2(local.X, local.Y), new Vector2(0, 0), matrix, color, @params);
