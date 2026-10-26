@@ -2,6 +2,7 @@ using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -140,7 +141,7 @@ public sealed class AnimationTests
 
 	private static (Border Border, UIRoot Root) LaidOutBorder()
 	{
-		var border = new Border { Background = HdrColor.FromRgb(0, 0, 0), Width = 50, Height = 50 };
+		var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(0, 0, 0)), Width = 50, Height = 50 };
 		var root = new UIRoot(new DrawListId(0)) { Content = border };
 		root.LayoutPass(new Size(100, 100));
 		return (border, root);
@@ -204,6 +205,8 @@ public sealed class AnimationTests
 	public void Translate_animates_on_the_visual_path_without_relayout()
 	{
 		var (border, _) = LaidOutBorder();
+		var translate = new TranslateTransform();
+		border.RenderTransform = translate;
 		var baseX = border.Visual.Transform.M31;
 
 		var clock = new AnimationClock();
@@ -212,40 +215,22 @@ public sealed class AnimationTests
 			From = 0,
 			To = 100,
 			Duration = TimeSpan.FromSeconds(1),
-			Apply = v => border.SetAnimatedTranslateX((float)v),
-			Release = border.ClearAnimatedTranslate,
+			Target = border,
+			TargetProperty = new PropertyPath(UIElement.RenderTransformProperty, TranslateTransform.XProperty),
 		}));
 
 		clock.Advance(0.5);
+		translate.X.ShouldBe(50f, 0.001f);
 		border.Visual.Transform.M31.ShouldBe(baseX + 50f, 0.001f);
 		border.MeasureDirty.ShouldBeFalse();
+		border.ArrangeDirty.ShouldBeFalse();
 	}
 
 	[Test]
 	public void Brush_animates_on_the_visual_path()
 	{
 		var (border, _) = LaidOutBorder();
-		var clock = new AnimationClock();
-		clock.Begin(StoryboardOf(new ColorAnimation
-		{
-			From = new HdrColor(0, 0, 0, 1),
-			To = new HdrColor(1, 1, 1, 1),
-			Duration = TimeSpan.FromSeconds(1),
-			Apply = v => border.SetAnimatedFill(v),
-			Release = border.ClearAnimatedFill,
-		}));
-
-		clock.Advance(0.5);
 		var content = border.Visual.Content.ShouldBeOfType<RectContent>();
-		content.Fill.ShouldBe(new HdrColor(0.5f, 0.5f, 0.5f, 1f));
-		border.MeasureDirty.ShouldBeFalse();
-	}
-
-	[Test]
-	public void Declarative_target_property_resolves_to_a_channel()
-	{
-		// The path a generated storyboard uses: Target + TargetProperty instead of an explicit closure.
-		var (border, _) = LaidOutBorder();
 		var clock = new AnimationClock();
 		clock.Begin(StoryboardOf(new ColorAnimation
 		{
@@ -253,11 +238,16 @@ public sealed class AnimationTests
 			To = new HdrColor(1, 1, 1, 1),
 			Duration = TimeSpan.FromSeconds(1),
 			Target = border,
-			TargetProperty = PropertyPath.Fill,
+			TargetProperty = new PropertyPath(Border.BackgroundProperty, SolidColorBrush.ColorProperty),
 		}));
 
+		border.Visual.IsDirty = false;
 		clock.Advance(0.5);
-		border.Visual.Content.ShouldBeOfType<RectContent>().Fill.ShouldBe(new HdrColor(0.5f, 0.5f, 0.5f, 1f));
+		border.Visual.Content.ShouldBeSameAs(content); // the same content, its paint recoloured in place
+		content.Fill.SolidColor().ShouldBe(new HdrColor(0.5f, 0.5f, 0.5f, 1f));
+		border.Visual.IsDirty.ShouldBeTrue();
+		border.MeasureDirty.ShouldBeFalse();
+		border.ArrangeDirty.ShouldBeFalse();
 	}
 
 	[Test]
@@ -265,7 +255,7 @@ public sealed class AnimationTests
 	{
 		var host = new UIHost();
 		var view = host.CreateRoot(UILayer.Default);
-		var border = new Border { Background = HdrColor.FromRgb(10, 10, 10), Width = 20, Height = 20 };
+		var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(10, 10, 10)), Width = 20, Height = 20 };
 		view.Root.Content = border;
 
 		host.Clock.Begin(StoryboardOf(new DoubleAnimation

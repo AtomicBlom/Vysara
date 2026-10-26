@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
@@ -15,6 +16,11 @@ public sealed class MenuFlyout
 	// area is unusable, so it's better to let a few items peek past the edge than collapse to nothing.
 	private const float BottomMargin = 8f;
 	private const float MinMenuHeight = 48f;
+
+	// The menu's look, and the light-dismiss layer's transparent (but hit) background. Shared and never changed.
+	private static readonly SolidColorBrush MenuBackground = Brush.Sealed(HdrColor.FromRgb(45, 45, 55));
+	private static readonly SolidColorBrush MenuBorder = Brush.Sealed(HdrColor.FromRgb(80, 80, 95));
+	private static readonly SolidColorBrush DismissBackground = Brush.Sealed(HdrColor.Transparent);
 
 	private UIRoot? _root;
 	private Border? _menu;
@@ -48,15 +54,15 @@ public sealed class MenuFlyout
 		var scroll = new ScrollViewer { Content = panel, MaxHeight = MaxMenuHeight(root, menuTop) };
 		_menu = new Border
 		{
-			Background = HdrColor.FromRgb(45, 45, 55),
-			BorderBrush = HdrColor.FromRgb(80, 80, 95),
+			Background = MenuBackground,
+			BorderBrush = MenuBorder,
 			BorderThickness = new Thickness(1f),
-			CornerRadius = 4f,
+			CornerRadius = new CornerRadius(4f),
 			Padding = new Thickness(4f),
 			Child = scroll,
 		};
 
-		_dismissLayer = new Border { Background = HdrColor.Transparent };
+		_dismissLayer = new Border { Background = DismissBackground };
 		_dismissLayer.AddHandler(UIElement.PointerPressedEvent, OnDismissPressed);
 
 		root.AddOverlay(_dismissLayer, Vector2.Zero, fullSurface: true);

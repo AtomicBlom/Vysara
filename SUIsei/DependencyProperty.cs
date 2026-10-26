@@ -58,6 +58,10 @@ public abstract class DependencyProperty
 	/// holds none (or holds a value type) — how a property path steps from one object to the next.</summary>
 	internal abstract DependencyObject? GetObjectValue(DependencyObject target);
 
+	/// <summary>Whether <paramref name="target"/> can hold this property: any object for an attached property, else an
+	/// instance of its owner type.</summary>
+	internal abstract bool AppliesTo(DependencyObject target);
+
 	public override string ToString() => $"{Name}#{GlobalIndex}";
 }
 
@@ -90,6 +94,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 
 	internal override DependencyObject? GetObjectValue(DependencyObject target) =>
 		typeof(TValue).IsValueType ? null : target.GetValue(this) as DependencyObject;
+
+	internal override bool AppliesTo(DependencyObject target) => Kind == DependencyPropertyKind.Attached || target is TOwner;
 
 	string IAnimationTarget.ValueTypeName => typeof(TValue).Name;
 

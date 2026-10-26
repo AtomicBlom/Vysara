@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Input;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
@@ -19,13 +20,14 @@ public sealed class Slider : Control
 	private const float RailThickness = 4f;
 	private const float DefaultLength = 132f;
 
-	private static readonly HdrColor RailColor = HdrColor.FromRgb(70, 74, 86);
-	private static readonly HdrColor FillColor = HdrColor.FromRgb(76, 140, 224);
-	private static readonly HdrColor ThumbBorder = HdrColor.FromRgb(28, 32, 40);
-	private static readonly HdrColor ThumbNormal = HdrColor.FromRgb(90, 150, 230);
-	private static readonly HdrColor ThumbOver = HdrColor.FromRgb(120, 175, 245);
-	private static readonly HdrColor ThumbPressed = HdrColor.FromRgb(150, 195, 255);
-	private static readonly HdrColor ThumbDisabled = HdrColor.FromRgb(95, 98, 108);
+	// The built-in look's brushes, shared by every slider and never changed.
+	private static readonly SolidColorBrush RailColor = Brush.Sealed(HdrColor.FromRgb(70, 74, 86));
+	private static readonly SolidColorBrush FillColor = Brush.Sealed(HdrColor.FromRgb(76, 140, 224));
+	private static readonly SolidColorBrush ThumbBorder = Brush.Sealed(HdrColor.FromRgb(28, 32, 40));
+	private static readonly SolidColorBrush ThumbNormal = Brush.Sealed(HdrColor.FromRgb(90, 150, 230));
+	private static readonly SolidColorBrush ThumbOver = Brush.Sealed(HdrColor.FromRgb(120, 175, 245));
+	private static readonly SolidColorBrush ThumbPressed = Brush.Sealed(HdrColor.FromRgb(150, 195, 255));
+	private static readonly SolidColorBrush ThumbDisabled = Brush.Sealed(HdrColor.FromRgb(95, 98, 108));
 
 	private SliderTrack? _track;
 	private bool _dragging;
@@ -226,21 +228,26 @@ public sealed class Slider : Control
 	}
 
 	// The default look: an unfilled rail, an accent fill up to the thumb, and a circular thumb whose colour the
-	// CommonStates group animates. The track panel positions the parts from the slider's Fraction on each arrange.
+	// CommonStates group sets, faded by the thumb's BrushTransition. As in WinUI's default template, the rail paints the
+	// slider's Background and the fill its Foreground, where they are set. The track panel positions the parts from the
+	// slider's Fraction on each arrange.
 	private static readonly ControlTemplate DefaultTemplate = new()
 	{
 		Factory = static control =>
 		{
 			var slider = (Slider)control;
 
-			var rail = new Border { Background = RailColor, CornerRadius = RailThickness / 2f };
-			var fill = new Border { Background = FillColor, CornerRadius = RailThickness / 2f };
+			var rail = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
+			var fill = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
+			slider.RegisterTemplateBinding(BackgroundProperty, value => rail.Background = value ?? RailColor);
+			slider.RegisterTemplateBinding(ForegroundProperty, value => fill.Background = value ?? FillColor);
 			var thumb = new Border
 			{
 				Background = ThumbNormal,
 				BorderBrush = ThumbBorder,
 				BorderThickness = new Thickness(1f),
-				CornerRadius = ThumbDiameter / 2f,
+				CornerRadius = new CornerRadius(ThumbDiameter / 2f),
+				BackgroundTransition = TemplateStates.Fade(120),
 			};
 
 			var track = new SliderTrack(slider);
@@ -251,25 +258,13 @@ public sealed class Slider : Control
 			slider._track = track;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = ThumbFillTo(thumb, ThumbOver, ThumbNormal) });
-			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = ThumbFillTo(thumb, ThumbNormal, ThumbOver) });
-			common.States.Add(new VisualState { Name = "Pressed", Storyboard = ThumbFillTo(thumb, ThumbOver, ThumbPressed) });
-			common.States.Add(new VisualState { Name = "Disabled", Storyboard = ThumbFillTo(thumb, ThumbNormal, ThumbDisabled) });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(thumb) });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(thumb, ThumbOver) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(thumb, ThumbPressed) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Background(thumb, ThumbDisabled) });
 			VisualStateManager.SetVisualStateGroups(track, [common]);
 
 			return track;
-		},
-	};
-
-	private static Storyboard ThumbFillTo(Border thumb, HdrColor from, HdrColor to) => new()
-	{
-		Children =
-		{
-			new ColorAnimation
-			{
-				From = from, To = to, Duration = TimeSpan.FromMilliseconds(120), FillBehavior = FillBehavior.HoldEnd,
-				Apply = thumb.SetAnimatedFill, Release = thumb.ClearAnimatedFill,
-			},
 		},
 	};
 

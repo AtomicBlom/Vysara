@@ -64,6 +64,8 @@
     <None Include="pkg\build\SUIsei.targets"
           Pack="true" PackagePath="build" />
     <None Include="..\README.md" Pack="true" PackagePath="README.md" />
+    <!-- The tessellators derive from libtess2 (SGI Free Software License B) and earcut (ISC); their notices ship too. -->
+    <None Include="..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="THIRD-PARTY-NOTICES.md" />
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,7 @@
 using System.Numerics;
-
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
 using SUIsei.Rasterizer;
 
 namespace SUIsei.Tests;
@@ -72,7 +72,7 @@ public sealed class TextureSlotTests
 		var scene = new Scene();
 		var canvas = (Canvas)scene.Root.Content!;
 		canvas.Children.Add(new Image { Source = scene.SourceA, Width = 10f, Height = 10f, Stretch = Stretch.Fill }); // source A again: no new slot
-		canvas.Children.Add(new Border { Width = 5f, Height = 5f, Background = HdrColor.FromRgb(9, 9, 9) });          // an untextured fill
+		canvas.Children.Add(new Border { Width = 5f, Height = 5f, Background = new SolidColorBrush(HdrColor.FromRgb(9, 9, 9)) });          // an untextured fill
 
 		var draw = scene.Frame();
 
@@ -92,7 +92,7 @@ public sealed class TextureSlotTests
 	public void Every_commands_texture_index_is_within_its_lists_slot_table()
 	{
 		var scene = new Scene();
-		var faded = new Border { Opacity = 0.5f, Child = new Border { Width = 5f, Height = 5f, Background = HdrColor.FromRgb(9, 9, 9) } };
+		var faded = new Border { Opacity = 0.5f, Child = new Border { Width = 5f, Height = 5f, Background = new SolidColorBrush(HdrColor.FromRgb(9, 9, 9)) } };
 		((Canvas)scene.Root.Content!).Children.Add(faded);   // a group-opacity layer: its markers carry slot 0
 
 		var draw = scene.Frame();

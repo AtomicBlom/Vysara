@@ -1,5 +1,6 @@
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -17,7 +18,7 @@ public sealed class RecompositionTests
 		var compositor = new DrawListCompositor();
 		var root = new UIRoot(new DrawListId(0), compositor)
 		{
-			Content = new Border { Width = 50f, Height = 50f, Background = HdrColor.FromRgb(255, 0, 0) },
+			Content = new Border { Width = 50f, Height = 50f, Background = new SolidColorBrush(HdrColor.FromRgb(255, 0, 0)) },
 		};
 
 		root.LayoutPass(new Size(100f, 100f));
@@ -36,14 +37,14 @@ public sealed class RecompositionTests
 	public void A_visual_change_triggers_exactly_one_recomposite()
 	{
 		var compositor = new DrawListCompositor();
-		var border = new Border { Width = 50f, Height = 50f, Background = HdrColor.FromRgb(255, 0, 0) };
+		var border = new Border { Width = 50f, Height = 50f, Background = new SolidColorBrush(HdrColor.FromRgb(255, 0, 0)) };
 		var root = new UIRoot(new DrawListId(0), compositor) { Content = border };
 
 		root.LayoutPass(new Size(100f, 100f));
 		root.Render();
 		compositor.CompositeCount.ShouldBe(1);
 
-		border.Background = HdrColor.FromRgb(0, 255, 0); // visual-only change
+		border.Background = new SolidColorBrush(HdrColor.FromRgb(0, 255, 0)); // visual-only change
 		root.LayoutPass(new Size(100f, 100f));
 		var after = root.Render();
 

@@ -1,5 +1,6 @@
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -20,7 +21,7 @@ public sealed class CompositionTests
 	[Test]
 	public void A_border_background_composites_to_one_fill_command()
 	{
-		var border = new Border { Background = HdrColor.FromRgb(200, 0, 0), Width = 100, Height = 50 };
+		var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(200, 0, 0)), Width = 100, Height = 50 };
 		var draw = Root(border, 100, 50).Render();
 
 		draw.Commands.Length.ShouldBe(1);
@@ -33,7 +34,7 @@ public sealed class CompositionTests
 	[Test]
 	public void The_element_tree_drives_a_matching_visual_tree()
 	{
-		var border = new Border { Background = HdrColor.FromRgb(0, 128, 255), Width = 64, Height = 32 };
+		var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(0, 128, 255)), Width = 64, Height = 32 };
 		var dump = Root(border, 64, 32).Visual.Dump();
 
 		dump.ShouldContain("RootVisual");
@@ -45,9 +46,9 @@ public sealed class CompositionTests
 	[Test]
 	public void Adjacent_fills_with_the_same_clip_batch_into_one_draw()
 	{
-		var sp = new StackPanel { Background = HdrColor.FromRgb(20, 20, 20) };
-		sp.Children.Add(new Border { Background = HdrColor.FromRgb(255, 0, 0), Width = 80, Height = 20 });
-		sp.Children.Add(new Border { Background = HdrColor.FromRgb(0, 255, 0), Width = 80, Height = 20 });
+		var sp = new StackPanel { Background = new SolidColorBrush(HdrColor.FromRgb(20, 20, 20)) };
+		sp.Children.Add(new Border { Background = new SolidColorBrush(HdrColor.FromRgb(255, 0, 0)), Width = 80, Height = 20 });
+		sp.Children.Add(new Border { Background = new SolidColorBrush(HdrColor.FromRgb(0, 255, 0)), Width = 80, Height = 20 });
 		var draw = Root(sp).Render();
 
 		// Panel background + two child backgrounds = three quads, but one batched indexed draw (state-run batching).
@@ -61,14 +62,14 @@ public sealed class CompositionTests
 	{
 		// Frame-level no-op: a clean re-render re-submits the cached draw data with
 		// the SAME Revision (so the host/backend can skip work); a real visual change bumps it.
-		var border = new Border { Background = HdrColor.FromRgb(1, 2, 3), Width = 10, Height = 10 };
+		var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(1, 2, 3)), Width = 10, Height = 10 };
 		var root = Root(border, 10, 10);
 
 		var r1 = root.Render().Revision;
 		var r2 = root.Render().Revision;   // nothing changed ⇒ no recomposite
 		r2.ShouldBe(r1);
 
-		border.Background = HdrColor.FromRgb(9, 9, 9);
+		border.Background = new SolidColorBrush(HdrColor.FromRgb(9, 9, 9));
 		var r3 = root.Render().Revision;   // a visual change recomposites
 		r3.ShouldBeGreaterThan(r2);
 	}

@@ -1,15 +1,19 @@
 using SUIsei.Animation;
+using SUIsei.Media;
 
 namespace SUIsei.Controls;
 
 /// <summary>A single command row in a <see cref="MenuFlyout"/>: a <see cref="ButtonBase"/> with
-/// a <see cref="Text"/> label and a flat full-width template that highlights on hover. Click invocation and
+/// a <see cref="Text"/> label and a flat full-width template that highlights on hover. As in WinUI's default template,
+/// the row paints the item's <see cref="Control.Background"/>, <see cref="Control.BorderBrush"/> and
+/// <see cref="Control.BorderThickness"/>, and the label its <see cref="Control.Foreground"/>. Click invocation and
 /// <see cref="ButtonBase.Command"/> come from the base; the flyout closes itself on invoke.</summary>
 public sealed class MenuFlyoutItem : ButtonBase
 {
-	private static readonly HdrColor NormalBackground = HdrColor.Transparent;
-	private static readonly HdrColor OverBackground = HdrColor.FromRgb(70, 70, 85);
-	private static readonly HdrColor PressedBackground = HdrColor.FromRgb(55, 55, 70);
+	// The built-in look's brushes, shared by every menu item and never changed.
+	private static readonly SolidColorBrush NormalBackground = Brush.Sealed(HdrColor.Transparent);
+	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(70, 70, 85));
+	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(55, 55, 70));
 
 	public MenuFlyoutItem()
 	{
@@ -31,34 +35,26 @@ public sealed class MenuFlyoutItem : ButtonBase
 			var host = (ContentControl)control;
 			var border = new Border
 			{
-				Background = NormalBackground,
-				CornerRadius = 2f,
+				CornerRadius = new CornerRadius(2f),
 				Padding = new Thickness(12f, 6f),
 				HorizontalAlignment = HorizontalAlignment.Stretch,
+				BackgroundTransition = TemplateStates.Fade(90),
 			};
 			var presenter = new ContentPresenter();
 			border.Child = presenter;
+			host.RegisterTemplateBinding(BackgroundProperty, value => border.Background = value ?? NormalBackground);
+			host.RegisterTemplateBinding(BorderBrushProperty, value => border.BorderBrush = value);
+			host.RegisterTemplateBinding(BorderThicknessProperty, value => border.BorderThickness = value);
+			host.RegisterTemplateBinding(ForegroundProperty, value => presenter.Foreground = value);
 			presenter.Content = host.Content;
 			host.ContentChanged += (_, _) => presenter.Content = host.Content;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = BackgroundTo(border, OverBackground, NormalBackground) });
-			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = BackgroundTo(border, NormalBackground, OverBackground) });
-			common.States.Add(new VisualState { Name = "Pressed", Storyboard = BackgroundTo(border, OverBackground, PressedBackground) });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(border) });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);
 			return border;
-		},
-	};
-
-	private static Storyboard BackgroundTo(Border target, HdrColor from, HdrColor to) => new()
-	{
-		Children =
-		{
-			new ColorAnimation
-			{
-				From = from, To = to, Duration = TimeSpan.FromMilliseconds(90), FillBehavior = FillBehavior.HoldEnd,
-				Apply = target.SetAnimatedFill, Release = target.ClearAnimatedFill,
-			},
 		},
 	};
 }

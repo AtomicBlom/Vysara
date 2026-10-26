@@ -1,10 +1,10 @@
 using System.Numerics;
-
 using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Extensions;
 using SUIsei.Input;
+using SUIsei.Media;
 using SUIsei.Rasterizer;
 using SUIsei.RoutedEvents;
 
@@ -27,7 +27,7 @@ public sealed class HitTestTests
 	}
 
 	private static Border Box(float w = 50f, float h = 50f) =>
-		new() { Width = w, Height = h, Background = HdrColor.FromRgb(255, 0, 0) };
+		new() { Width = w, Height = h, Background = new SolidColorBrush(HdrColor.FromRgb(255, 0, 0)) };
 
 	private static Canvas CanvasOf(params UIElement[] children)
 	{
@@ -81,7 +81,7 @@ public sealed class HitTestTests
 	public void A_translating_render_transform_moves_the_hit_region()
 	{
 		var b = Box();
-		b.RenderTransform = Matrix3x2.CreateTranslation(100f, 0f);
+		b.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateTranslation(100f, 0f) };
 		var root = Laid(CanvasOf(b));
 
 		root.HitTest(new Vector2(120f, 10f)).ShouldBe(b);   // shifted +100 in x
@@ -92,7 +92,7 @@ public sealed class HitTestTests
 	public void A_scaled_element_hits_over_the_area_it_is_drawn_at()
 	{
 		var b = Box();
-		b.RenderTransform = Matrix3x2.CreateScale(2f);
+		b.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateScale(2f) };
 		var root = Laid(CanvasOf(b));
 
 		root.HitTest(new Vector2(90f, 90f)).ShouldBe(b);    // inside the 100×100 it draws at, outside its 50×50 layout
@@ -104,7 +104,7 @@ public sealed class HitTestTests
 	{
 		// 100×20 rotated a quarter turn about its origin, laid out at (50, 50): drawn over x∈[30,50], y∈[50,150].
 		var b = Box(100f, 20f);
-		b.RenderTransform = Matrix3x2.CreateRotation(MathF.PI / 2f);
+		b.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateRotation(MathF.PI / 2f) };
 		Canvas.SetLeft(b, 50f);
 		Canvas.SetTop(b, 50f);
 		var root = Laid(CanvasOf(b));
@@ -114,9 +114,28 @@ public sealed class HitTestTests
 	}
 
 	[Test]
+	public void Translation_moves_the_hit_region_and_point_mapping_with_no_layout()
+	{
+		var b = Box();
+		var root = Laid(CanvasOf(b));
+
+		b.Translation = new Vector3(100f, 0f, 7f); // Z is kept but moves nothing in 2D
+		b.ArrangeDirty.ShouldBeFalse();
+		b.Visual.IsDirty.ShouldBeTrue();
+		root.HitTest(new Vector2(120f, 10f)).ShouldBe(b);
+		root.HitTest(new Vector2(10f, 10f)).ShouldBeNull();
+		b.TransformToVisual(null).TransformPoint(new Point(0f, 0f)).ShouldBe(new Point(100f, 0f));
+
+		// It composes after the render transform: a scale about the origin, then the offset.
+		b.RenderTransform = new ScaleTransform { ScaleX = 2f, ScaleY = 2f };
+		b.TransformToVisual(null).TransformPoint(new Point(10f, 10f)).ShouldBe(new Point(120f, 20f));
+	}
+
+	[Test]
 	public void A_storyboard_animated_translate_moves_the_hit_region()
 	{
 		var b = Box();
+		b.RenderTransform = new TranslateTransform();
 		var host = new UIHost();
 		var view = host.CreateRoot(UILayer.Default);
 		view.Root.Content = CanvasOf(b);
@@ -124,7 +143,7 @@ public sealed class HitTestTests
 
 		host.Clock.Begin(new Storyboard
 		{
-			Children = { new DoubleAnimation { To = 100.0, Duration = TimeSpan.FromSeconds(1), Target = b, TargetProperty = PropertyPath.TranslateX } },
+			Children = { new DoubleAnimation { To = 100.0, Duration = TimeSpan.FromSeconds(1), Target = b, TargetProperty = new PropertyPath(UIElement.RenderTransformProperty, TranslateTransform.XProperty) } },
 		});
 		host.Tick(1.0, 0f, new Vector2(200f, 100f));
 
@@ -186,13 +205,13 @@ public sealed class HitTestTests
 		// with the bounding box of the turned clip, so the child draws in the corners of that box outside the turned
 		// square; hit-testing uses the same bound, so the pointer hits exactly what the user sees.
 		const int W = 240, H = 200;
-		var child = new Border { Width = 400f, Height = 400f, Background = HdrColor.FromRgb(0, 0, 255) };
+		var child = new Border { Width = 400f, Height = 400f, Background = new SolidColorBrush(HdrColor.FromRgb(0, 0, 255)) };
 		Canvas.SetLeft(child, -150f);
 		Canvas.SetTop(child, -150f);
 		var container = CanvasOf(child);
 		container.Width = 100f;
 		container.Height = 100f;
-		container.RenderTransform = Matrix3x2.CreateRotation(MathF.PI / 4f);
+		container.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateRotation(MathF.PI / 4f) };
 		Clipping.SetClipToBounds(container, true);
 		Canvas.SetLeft(container, 100f);
 		Canvas.SetTop(container, 20f);
@@ -220,11 +239,11 @@ public sealed class HitTestTests
 	public void TransformToVisual_maps_through_the_composed_transforms_and_round_trips()
 	{
 		var inner = Box(20f, 20f);
-		inner.RenderTransform = Matrix3x2.CreateTranslation(5f, 0f);
+		inner.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateTranslation(5f, 0f) };
 		Canvas.SetLeft(inner, 10f);
 		Canvas.SetTop(inner, 5f);
 		var outer = CanvasOf(inner);
-		outer.RenderTransform = Matrix3x2.CreateScale(2f);
+		outer.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateScale(2f) };
 		var sibling = Box(10f, 10f);
 		Canvas.SetLeft(sibling, 100f);
 		Laid(CanvasOf(outer, sibling));
@@ -246,11 +265,11 @@ public sealed class HitTestTests
 		// Root at 2 pixels per DIP; a canvas scaled ×2; a border laid out at (10, 5) and translated +5 in x. Border-local
 		// (x, y) lands on surface pixel (4x + 60, 4y + 20).
 		var border = Box();
-		border.RenderTransform = Matrix3x2.CreateTranslation(5f, 0f);
+		border.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateTranslation(5f, 0f) };
 		Canvas.SetLeft(border, 10f);
 		Canvas.SetTop(border, 5f);
 		var canvas = CanvasOf(border);
-		canvas.RenderTransform = Matrix3x2.CreateScale(2f);
+		canvas.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateScale(2f) };
 		var host = new UIHost();
 		host.CreateRoot(new UILayer(0, 2f)).Root.Content = canvas;
 		host.Tick(0.016, 0f, new Vector2(400f, 400f));
@@ -276,7 +295,7 @@ public sealed class HitTestTests
 	{
 		var slider = new Slider { Minimum = 0d, Maximum = 100d, StepFrequency = 0d, Width = 100f };
 		var canvas = CanvasOf(slider);
-		canvas.RenderTransform = transform;
+		canvas.RenderTransform = new MatrixTransform { Matrix = transform };
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = canvas;
 		host.Tick(0.016, 0f, new Vector2(400f, 200f));
@@ -303,6 +322,7 @@ public sealed class HitTestTests
 	}
 
 	[Test]
+	[NotInParallel(TestIsolation.HotReload)]
 	public void Pointer_moves_across_a_large_tree_allocate_nothing()
 	{
 		// 20 rows of 10 boxes, each row in its own panel, plus buttons: a move crosses many elements and enters and
@@ -316,7 +336,7 @@ public sealed class HitTestTests
 			rows.Children.Add(row);
 		}
 		var host = new UIHost();
-		host.CreateRoot(UILayer.Default).Root.Content = new Border { Child = rows, Background = HdrColor.FromRgb(10, 10, 10) };
+		host.CreateRoot(UILayer.Default).Root.Content = new Border { Child = rows, Background = new SolidColorBrush(HdrColor.FromRgb(10, 10, 10)) };
 		var size = new Vector2(400f, 400f);
 		host.Tick(0.016, 0f, size);
 
@@ -332,10 +352,6 @@ public sealed class HitTestTests
 
 		Sweep();
 		Sweep();
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		Sweep();
-		var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-		allocated.ShouldBe(0L);
+		Allocations.ShouldAllocateNothing(Sweep);
 	}
 }

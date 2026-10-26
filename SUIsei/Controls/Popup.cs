@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
@@ -15,6 +16,9 @@ public sealed class Popup : FrameworkElement
 	public static readonly DependencyProperty<Popup, bool> IsOpenProperty =
 		DependencyProperty.Register(nameof(IsOpen),
 			new PropertyMetadata<Popup, bool> { DefaultValue = false, PropertyChanged = static (p, _, open) => p.OnIsOpenChanged(open) });
+
+	// The light-dismiss layer's background: transparent, but there, so the layer is hit.
+	private static readonly SolidColorBrush DismissBackground = Brush.Sealed(HdrColor.Transparent);
 
 	private Border? _dismissLayer;
 	private bool _shown;
@@ -54,7 +58,7 @@ public sealed class Popup : FrameworkElement
 
 		if (IsLightDismissEnabled)
 		{
-			_dismissLayer = new Border { Background = HdrColor.Transparent };
+			_dismissLayer = new Border { Background = DismissBackground };
 			_dismissLayer.AddHandler(PointerPressedEvent, OnDismissPressed);
 			root.AddOverlay(_dismissLayer, Vector2.Zero, fullSurface: true);
 		}

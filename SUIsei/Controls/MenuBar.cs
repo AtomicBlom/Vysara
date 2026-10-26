@@ -1,3 +1,5 @@
+using SUIsei.Media;
+
 namespace SUIsei.Controls;
 
 /// <summary>
@@ -9,7 +11,7 @@ public sealed class MenuBar : Panel
 {
 	private MenuBarItem? _openItem;
 
-	public MenuBar() => Background = HdrColor.FromRgb(34, 37, 46);
+	public MenuBar() => Background = new SolidColorBrush(HdrColor.FromRgb(34, 37, 46));
 
 	/// <summary>True while one of the bar's items has its drop-down menu open.</summary>
 	public bool IsAnyMenuOpen => _openItem is not null;
