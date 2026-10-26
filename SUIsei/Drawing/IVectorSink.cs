@@ -1,8 +1,9 @@
 namespace SUIsei.Drawing;
 
 /// <summary>
-/// Receives the triangles <see cref="TessellatedPath.Emit"/> draws: the draw list's vector emitter, or a foreign
-/// compositor's own buffer. Implemented by a struct, it is called with no virtual dispatch and no allocation.
+/// Receives the triangles a <see cref="TessellatedPath"/> draws when emitted: the draw list's vector emitter, or
+/// a foreign compositor's own buffer. Implemented by a struct, it is called with no virtual dispatch and no
+/// allocation.
 /// </summary>
 public interface IVectorSink
 {
