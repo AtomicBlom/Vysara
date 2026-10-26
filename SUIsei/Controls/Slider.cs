@@ -102,7 +102,7 @@ public sealed class Slider : Control
 		AddHandler(PointerExitedEvent, OnPointerExited);
 		AddHandler(KeyDownEvent, OnKeyDown);
 
-		UpdateVisualState();
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnValueChanged()
@@ -154,12 +154,12 @@ public sealed class Slider : Control
 
 	private void OnPointerPressed(object sender, RoutedEventArgs e)
 	{
-		if (!IsEnabled || e is not PointerRoutedEventArgs p)
+		if (e is not PointerRoutedEventArgs p)
 			return;
 		_dragging = true;
 		CapturePointer(0);
 		SetValueFromPointer(p);
-		UpdateVisualState();
+		GoToCommonState(useTransitions: true);
 		e.Handled = true;
 	}
 
@@ -177,31 +177,31 @@ public sealed class Slider : Control
 			return;
 		_dragging = false;
 		ReleasePointerCapture(0);
-		UpdateVisualState();
+		GoToCommonState(useTransitions: true);
 		e.Handled = true;
 	}
 
 	private void OnPointerCaptureLost(object sender, RoutedEventArgs e)
 	{
 		_dragging = false;
-		UpdateVisualState();
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnPointerEntered(object sender, RoutedEventArgs e)
 	{
 		_pointerOver = true;
-		UpdateVisualState();
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnPointerExited(object sender, RoutedEventArgs e)
 	{
 		_pointerOver = false;
-		UpdateVisualState();
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnKeyDown(object sender, RoutedEventArgs e)
 	{
-		if (!IsEnabled || e is not KeyRoutedEventArgs key)
+		if (e is not KeyRoutedEventArgs key)
 			return;
 		var step = StepFrequency > 0d ? StepFrequency : 1d;
 		switch (key.Key)
@@ -215,13 +215,18 @@ public sealed class Slider : Control
 		}
 	}
 
-	private void UpdateVisualState()
+	private protected override string CommonVisualState =>
+		!IsEnabled ? "Disabled" : _dragging ? "Pressed" : _pointerOver ? "PointerOver" : "Normal";
+
+	// A disabled slider sees no input, so a drag or hover in progress could never end: drop both, and the capture.
+	private protected override void OnIsEnabledChanged(bool isEnabled)
 	{
-		var state = !IsEnabled ? "Disabled"
-			: _dragging ? "Pressed"
-			: _pointerOver ? "PointerOver"
-			: "Normal";
-		VisualStateManager.GoToState(this, state, useTransitions: true);
+		if (_dragging)
+		{
+			_dragging = false;
+			ReleasePointerCapture(0);
+		}
+		_pointerOver = false;
 	}
 
 	// The default look: an unfilled rail, an accent fill up to the thumb, and a circular thumb whose colour the

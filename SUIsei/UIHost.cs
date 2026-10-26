@@ -96,9 +96,9 @@ public sealed class UIHost
 	public void QueueText(ReadOnlySpan<char> utf16) => _textQueue.Enqueue(utf16.ToString());
 
 	/// <summary>
-	/// Once per frame: lay out each root, drain pointer queue (coalescing moves) → hit-test → route events,
-	/// then drain keyboard queue → Tab intercepts focus → remaining keys route to the focused element.
-	/// Layout runs first so input hit-tests this frame's geometry.
+	/// Once per frame: lay out each root, release focus from a control that has been disabled, drain pointer queue
+	/// (coalescing moves) → hit-test → route events, then drain keyboard queue → Tab intercepts focus → remaining keys
+	/// route to the focused element. Layout runs first so input hit-tests this frame's geometry.
 	/// </summary>
 	public void Tick(double deltaSeconds, float time, Vector2 framebufferSize)
 	{
@@ -114,6 +114,7 @@ public sealed class UIHost
 		_framebufferSize = new Size(framebufferSize.X, framebufferSize.Y);
 		foreach (var view in _views)
 			view.Root.LayoutPass(_framebufferSize);
+		Focus.ReleaseDisabledFocus();
 		DrainPointers();
 		DrainKeyboard();
 

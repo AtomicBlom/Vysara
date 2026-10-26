@@ -8,7 +8,7 @@ namespace SUIsei;
 /// Per-host focus state machine. Tracks the focused element, raises the four focus
 /// routed events (GettingFocus/LosingFocus tunnel, GotFocus/LostFocus bubble), and drives Tab/Shift-Tab
 /// navigation across a set of <see cref="UIView"/>s respecting <see cref="UIElement.IsTabStop"/>,
-/// <see cref="UIElement.IsEnabled"/> and <see cref="UIElement.TabIndex"/>. Tab order runs across all the views as one
+/// <see cref="Controls.Control.IsEnabled"/> and <see cref="UIElement.TabIndex"/>. Tab order runs across all the views as one
 /// sequence: no subtree keeps focus within itself, and <see cref="Controls.Control.TabFocusNavigation"/> is not read.
 /// </summary>
 public sealed class FocusManager
@@ -22,13 +22,27 @@ public sealed class FocusManager
 	/// <summary>
 	/// True when an element holds keyboard focus, so this frame's keys route into the UI rather than past it. Mirrors
 	/// exactly how the host drains keyboard input — keys are delivered to <see cref="FocusedElement"/> whenever one is
-	/// set, regardless of its later enabled/visible/tab-stop state — so the report never disagrees with where the keys
-	/// actually go. The keyboard half of the coarse capture report.
+	/// set, regardless of its later visible/tab-stop state (a control disabled since is released before the keys are
+	/// drained) — so the report never disagrees with where the keys actually go. The keyboard half of the coarse
+	/// capture report.
 	/// </summary>
 	internal bool WantsKeyboard => FocusedElement is not null;
 
 	/// <summary>How focus was last acquired.</summary>
 	public FocusState FocusState { get; private set; }
+
+	// A tab stop that is visible and not in a disabled control (a disabled control, and the parts of its template, take
+	// no focus).
+	private static bool IsFocusable(UIElement el) =>
+		el.IsTabStop && el.Visibility == Visibility.Visible && !el.InDisabledControl;
+
+	/// <summary>Clear focus when the focused element has since been disabled (it, or the control it is part of), since a
+	/// disabled control cannot hold focus. The host calls this each frame before it routes keyboard input.</summary>
+	internal void ReleaseDisabledFocus()
+	{
+		if (FocusedElement is { InDisabledControl: true })
+			TrySetFocus(null, FocusState.Programmatic);
+	}
 
 	/// <summary>
 	/// Move focus to <paramref name="newEl"/> with the given <paramref name="state"/>. Raises
@@ -38,7 +52,7 @@ public sealed class FocusManager
 	/// </summary>
 	public bool TrySetFocus(UIElement? newEl, FocusState state)
 	{
-		if (newEl is not null && (!newEl.IsTabStop || !newEl.IsEnabled || newEl.Visibility != Visibility.Visible))
+		if (newEl is not null && !IsFocusable(newEl))
 			return false;
 
 		var oldEl = FocusedElement;
@@ -90,7 +104,7 @@ public sealed class FocusManager
 	public bool FocusFromPointer(UIElement? hit)
 	{
 		for (var el = hit; el is not null; el = el.Parent)
-			if (el.IsTabStop && el.IsEnabled && el.Visibility == Visibility.Visible)
+			if (IsFocusable(el))
 				return TrySetFocus(el, FocusState.Pointer);
 		return false;
 	}
@@ -140,7 +154,7 @@ public sealed class FocusManager
 
 	private static void CollectTabStops(UIElement el, List<UIElement> result)
 	{
-		if (el.Visibility == Visibility.Collapsed || !el.IsEnabled)
+		if (el.Visibility == Visibility.Collapsed || el is Controls.Control { IsEnabled: false })
 			return;
 		if (el.IsTabStop)
 			result.Add(el);
