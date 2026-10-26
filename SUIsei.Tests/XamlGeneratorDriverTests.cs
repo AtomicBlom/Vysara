@@ -56,6 +56,37 @@ public sealed class XamlGeneratorDriverTests
 	}
 
 	[Test]
+	public void A_member_type_change_regenerates_and_a_body_only_edit_does_not()
+	{
+		const string xaml = """
+			<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+						xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						x:Class="Demo.MyView">
+				<TextBlock x:Name="Title" Text="{x:Bind Caption}" />
+			</StackPanel>
+			""";
+		static string CodeBehind(string type, string value) =>
+			$$"""namespace Demo { internal partial class MyView { public {{type}} Caption => {{value}}; } }""";
+		static IncrementalStepRunReason[] Reasons(GeneratorDriver d) =>
+			[.. d.GetRunResult().Results[0].TrackedSteps["XamlGenerate"].SelectMany(s => s.Outputs).Select(o => o.Reason)];
+
+		var (driver, compilation) = XamlGeneratorHarness.Create(xaml, CodeBehind("string", "\"a\""));
+		driver = driver.RunGenerators(compilation);
+		driver.GetRunResult().Diagnostics.ShouldBeEmpty();
+
+		// Same member surface: the generate step is skipped outright.
+		var bodyEdit = compilation.ReplaceSyntaxTree(compilation.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(CodeBehind("string", "\"b\"")));
+		driver = driver.RunGenerators(bodyEdit);
+		Reasons(driver).ShouldAllBe(r => r == IncrementalStepRunReason.Cached);
+
+		// The bound member's type changes, so the binding must be checked again: a cached result would miss the mismatch.
+		var typeEdit = bodyEdit.ReplaceSyntaxTree(bodyEdit.SyntaxTrees.Single(), CSharpSyntaxTree.ParseText(CodeBehind("int", "1")));
+		driver = driver.RunGenerators(typeEdit);
+		Reasons(driver).ShouldContain(IncrementalStepRunReason.Modified);
+		driver.GetRunResult().DiagnosticIds().ShouldBe(["SUISEI009"]);
+	}
+
+	[Test]
 	public void Same_short_class_name_in_different_namespaces_does_not_collide()
 	{
 		static string View(string fqClass) => $"""
@@ -144,10 +175,10 @@ public sealed class XamlGeneratorDriverTests
 	[Test]
 	public void Unsupported_property_element_is_surfaced_not_silently_dropped()
 	{
-		// Recognized property elements (Resources/Template/VisualStateGroups/ItemTemplate/ItemsPanel) are handled;
-		// any other is surfaced as a warning rather than silently dropped.
-		XamlGeneratorHarness.Run(Wrap("<StackPanel.Margin />"))
-			.DiagnosticIds().ShouldContain("SUISEI020");
+		// A property element that gives its property no value is an error, never silently dropped.
+		var diagnostic = XamlGeneratorHarness.Run(Wrap("<StackPanel.Margin />")).Diagnostics.Single();
+		diagnostic.Id.ShouldBe("SUISEI020");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
 	}
 
 	[Test]

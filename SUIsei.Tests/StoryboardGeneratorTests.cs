@@ -140,6 +140,56 @@ public sealed class StoryboardGeneratorTests
 		diagnostic.GetMessage().ShouldBe("Property path 'Nonsense' does not resolve: 'Border' has no dependency property 'Nonsense'");
 	}
 
+	private const string ExtensionCodeBehind = """
+		namespace Demo { public partial class V { } }
+		namespace SUIsei.Extensions
+		{
+			public sealed class Glow : SUIsei.DependencyObject
+			{
+				public static readonly SUIsei.DependencyProperty<Glow, float> RadiusProperty =
+					SUIsei.DependencyProperty.RegisterAttached<Glow, float>("Radius", new SUIsei.PropertyMetadata<Glow, float>());
+				public static void SetRadius(SUIsei.UIElement element, float value) => element.SetValue(RadiusProperty, value);
+			}
+		}
+		""";
+
+	// The default View with the extension namespace declared as `suisei:` and SUIsei.Controls as `using:`.
+	private static string PrefixedView(string animations) => View(animations).Replace(
+		"x:Class=\"Demo.V\"",
+		"xmlns:suisei=\"https://github.com/AtomicBlom/SUIsei/extensions\" xmlns:ctl=\"using:SUIsei.Controls\" x:Class=\"Demo.V\"");
+
+	[Test]
+	public void Owner_prefixes_resolve_through_their_XML_namespace()
+	{
+		var xaml = PrefixedView("""
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(suisei:Glow.Radius)" To="3" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(ctl:Canvas.Top)" To="4" />
+			""");
+		var result = XamlGeneratorHarness.Run(xaml, ExtensionCodeBehind);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Extensions.Glow.RadiusProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Canvas.TopProperty);");
+		XamlGeneratorHarness.CompileErrors(xaml, ExtensionCodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("(suisei:Nope.Radius)", "SUISEI022")]   // no such extension type
+	[Arguments("(nope:Glow.Radius)", "SUISEI021")]     // an undeclared prefix
+	[Arguments("(ctl:Glow.Radius)", "SUISEI021")]      // declared, but the type is not in that namespace
+	public void An_unresolvable_owner_prefix_diagnoses(string path, string id) =>
+		XamlGeneratorHarness.Run(PrefixedView($"""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="{path}" To="1" />"""), ExtensionCodeBehind)
+			.DiagnosticIds().ShouldBe([id]);
+
+	[Test]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\" Bogus=\"2\" />", "SUISEI004")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"lots\" />", "SUISEI012")]
+	[Arguments("<ColorAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Background\" From=\"Blurple\" />", "SUISEI012")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\" Duration=\"later\" />", "SUISEI012")]
+	public void A_bad_animation_attribute_is_an_error(string animation, string id) =>
+		XamlGeneratorHarness.Run(View(animation), CodeBehind).DiagnosticIds().ShouldBe([id]);
+
 	[Test]
 	public void Keyframes_and_easing_functions_are_emitted()
 	{
@@ -166,15 +216,15 @@ public sealed class StoryboardGeneratorTests
 		code.ShouldContain("new global::SUIsei.Animation.DoubleAnimationUsingKeyFrames()");
 		code.ShouldContain(".KeyTime = global::System.TimeSpan.FromSeconds(0.5);");
 		code.ShouldContain(".IsDiscrete = true;");
-		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.CubicEase { EasingMode = SUIsei.Animation.EasingMode.EaseIn };");
-		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.BackEase { Amplitude = 0.5d, EasingMode = SUIsei.Animation.EasingMode.EaseInOut };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.CubicEase { EasingMode = global::SUIsei.Animation.EasingMode.EaseIn };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.BackEase { Amplitude = 0.5d, EasingMode = global::SUIsei.Animation.EasingMode.EaseInOut };");
 		// With no Duration, a keyframe animation lasts until its last key.
 		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(2);");
 		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
 	}
 
 	[Test]
-	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><LinearDoubleKeyFrame KeyTime=\"soon\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI017")]
+	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><LinearDoubleKeyFrame KeyTime=\"soon\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI012")]
 	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><SplineDoubleKeyFrame KeyTime=\"0:0:1\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI020")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><BounceEase /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI003")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><CubicEase EasingMode=\"Sideways\" /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI012")]

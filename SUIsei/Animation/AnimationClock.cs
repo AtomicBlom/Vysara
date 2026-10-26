@@ -116,9 +116,9 @@ public sealed class AnimationClock
 	/// storyboard is involved, and once a tween of this shape has run, starting another allocates nothing; pass static
 	/// lambdas so the delegates are cached. A tween on the same target with the same <paramref name="set"/> delegate (a
 	/// static lambda is one delegate per call site) takes over from the running one where it is. The property is left at
-	/// <paramref name="to"/>.
+	/// <paramref name="to"/>. <paramref name="lerp"/> says how <typeparamref name="T"/> interpolates; the standard one in
+	/// <see cref="Lerps"/> when omitted.
 	/// </summary>
-	/// <param name="lerp">How <typeparamref name="T"/> interpolates; the standard one in <see cref="Lerps"/> when omitted.</param>
 	public void Tween<TTarget, T>(TTarget target, Func<TTarget, T> get, Action<TTarget, T> set, T to, TimeSpan duration,
 		IEasingFunction? easing = null, Lerp<T>? lerp = null)
 		where TTarget : class
@@ -135,7 +135,9 @@ public sealed class AnimationClock
 
 	/// <summary>
 	/// Animate a dependency property from its value now to <paramref name="to"/>, writing its local value every frame as
-	/// code setting it would; otherwise as <see cref="Tween{TTarget, T}"/>. The property must be animatable.
+	/// code setting it would; otherwise as the delegate-based
+	/// <see cref="Tween{TTarget, T}(TTarget, Func{TTarget, T}, Action{TTarget, T}, T, TimeSpan, IEasingFunction, Lerp{T})"/>.
+	/// The property must be animatable.
 	/// </summary>
 	public void Tween<TOwner, T>(DependencyObject target, DependencyProperty<TOwner, T> property, T to, TimeSpan duration,
 		IEasingFunction? easing = null)

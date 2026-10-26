@@ -5,7 +5,7 @@ A retained-mode, WinUI-inspired UI framework for .NET 10, designed for NativeAOT
 ## Features
 
 - **Retained-mode control tree** — `UIElement` / `FrameworkElement` / `Control` hierarchy with dependency properties, routed events, and data binding
-- **XAML source generator** — `SUIsei.SourceGen` compiles `.xaml` files at build time (bundled in the NuGet package)
+- **XAML source generator** — `SUIsei.SourceGen` compiles `.xaml` files at build time (bundled in the NuGet package) into typed construction code, converting values and resolving types, bindings and property paths at compile time. It accepts a published WinUI-dialect subset (Planning.md §4); SUIsei-only types and attached properties live in the `suisei:` extension namespace (`https://github.com/AtomicBlom/SUIsei/extensions`)
 - **Compositor** — walks the visual tree and produces a backend-neutral `DrawListData` (vertices + commands) with incremental damage tracking
 - **Headless by design** — no GPU dependency; the full layout + input + composite pipeline is unit-testable without a window
 - **Animation** — storyboard-based animations driven by `AnimationClock`, targeting WinUI property paths such as `(Canvas.Left)`, with keyframes and easing; allocation-free code-first `AnimationClock.Tween`; `VisualStateManager` for control state transitions

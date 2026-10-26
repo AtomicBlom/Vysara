@@ -11,10 +11,10 @@ partial class XamlSourceGenerator
 
 	private enum AnimationKind { Double, Color, DoubleKeyFrames }
 
-	// One step of a property path: `Property` alone, or `(Owner.Property)`.
-	private readonly record struct PathStep(string? Owner, string Property)
+	// One step of a property path: `Property` alone, or `(Owner.Property)` with an optional xmlns prefix on the owner.
+	private readonly record struct PathStep(string? Prefix, string? Owner, string Property)
 	{
-		public override string ToString() => Owner is null ? Property : $"({Owner}.{Property})";
+		public override string ToString() => Owner is null ? Property : Prefix is null ? $"({Owner}.{Property})" : $"({Prefix}:{Owner}.{Property})";
 	}
 
 	// Build a Storyboard local and return its variable name.
@@ -42,39 +42,22 @@ partial class XamlSourceGenerator
 		var animVar = NewName(gen, "__anim");
 		scope.Emit($"var {animVar} = new global::SUIsei.Animation.{name}();");
 
+		// Every other attribute is a property of the animation (From, To, Duration, RepeatBehavior, …), its value converted
+		// through the shared table.
+		var animType = gen.Compilation.GetTypeByMetadataName($"SUIsei.Animation.{name}")!;
 		XAttribute? targetName = null, targetProp = null;
 		var hasDuration = false;
 		foreach (var attr in animEl.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration)
+			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(animEl, attr.Name.Namespace))
 				continue;
 			switch (attr.Name.LocalName)
 			{
-				case "Storyboard.TargetName": targetName = attr; break;
-				case "Storyboard.TargetProperty": targetProp = attr; break;
-				case "From" or "To" when kind != AnimationKind.DoubleKeyFrames:
-				case "By" when kind == AnimationKind.Double:
-					EmitAnimationValue(gen, scope, animVar, attr.Name.LocalName, kind, attr);
-					break;
-				case "Duration":
-					hasDuration = true;
-					if (TryParseDuration(attr.Value, out var d)) scope.Emit($"{animVar}.Duration = global::System.TimeSpan.FromSeconds({Fmt(d)});");
-					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "Duration");
-					break;
-				case "BeginTime":
-					if (TryParseDuration(attr.Value, out var bt)) scope.Emit($"{animVar}.BeginTime = global::System.TimeSpan.FromSeconds({Fmt(bt)});");
-					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "BeginTime");
-					break;
-				case "AutoReverse":
-					scope.Emit($"{animVar}.AutoReverse = {(string.Equals(attr.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")};");
-					break;
-				case "FillBehavior":
-					scope.Emit($"{animVar}.FillBehavior = global::SUIsei.Animation.FillBehavior.{(attr.Value.Trim() == "Stop" ? "Stop" : "HoldEnd")};");
-					break;
-				case "RepeatBehavior":
-					scope.Emit($"{animVar}.RepeatBehavior = {RepeatBehaviorExpr(attr.Value)};");
-					break;
+				case "Storyboard.TargetName": targetName = attr; continue;
+				case "Storyboard.TargetProperty": targetProp = attr; continue;
+				case "Duration": hasDuration = true; break;
 			}
+			EmitObjectAttribute(gen, scope, animVar, animType, attr);
 		}
 
 		// Children: an easing function, or a keyframe animation's keys (directly, or inside <X.KeyFrames>).
@@ -120,19 +103,6 @@ partial class XamlSourceGenerator
 		scope.Emit($"{sbVar}.Children.Add({animVar});");
 	}
 
-	private static void EmitAnimationValue(Gen gen, Scope scope, string animVar, string prop, AnimationKind kind, XAttribute attr)
-	{
-		if (kind == AnimationKind.Color)
-		{
-			if (TryParseColor(attr.Value, out var code)) scope.Emit($"{animVar}.{prop} = {code};");
-			else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "colour");
-		}
-		else if (double.TryParse(attr.Value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-			scope.Emit($"{animVar}.{prop} = {attr.Value.Trim()}d;");
-		else
-			gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "number");
-	}
-
 	// One <Linear|Discrete|EasingDoubleKeyFrame>, added to the animation's keys. Returns its key time in seconds.
 	private static double EmitKeyFrame(Gen gen, Scope scope, string animVar, XElement keyEl)
 	{
@@ -148,25 +118,15 @@ partial class XamlSourceGenerator
 		if (name == "DiscreteDoubleKeyFrame")
 			scope.Emit($"{keyVar}.IsDiscrete = true;");
 
+		var keyType = gen.Compilation.GetTypeByMetadataName("SUIsei.Animation.DoubleKeyFrame")!;
 		var keyTime = 0.0;
 		foreach (var attr in keyEl.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration)
+			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(keyEl, attr.Name.Namespace))
 				continue;
-			switch (attr.Name.LocalName)
-			{
-				case "KeyTime":
-					if (TryParseDuration(attr.Value, out keyTime)) scope.Emit($"{keyVar}.KeyTime = global::System.TimeSpan.FromSeconds({Fmt(keyTime)});");
-					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "KeyTime");
-					break;
-				case "Value":
-					if (double.TryParse(attr.Value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _)) scope.Emit($"{keyVar}.Value = {attr.Value.Trim()}d;");
-					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "number");
-					break;
-				default:
-					gen.Report(UnknownProperty, attr, name, attr.Name.LocalName);
-					break;
-			}
+			if (attr.Name.LocalName == "KeyTime" && !TryParseDuration(attr.Value, out keyTime))
+				keyTime = 0;
+			EmitObjectAttribute(gen, scope, keyVar, keyType, attr);
 		}
 
 		foreach (var child in keyEl.Elements())
@@ -181,11 +141,11 @@ partial class XamlSourceGenerator
 		return keyTime;
 	}
 
-	// <Owner.EasingFunction> holding one easing element from SUIsei.Animation (CubicEase, QuadraticEase, BackEase, …),
-	// its attributes set as literal properties (EasingMode, Amplitude).
+	// <Owner.EasingFunction> holding one easing element (CubicEase, QuadraticEase, BackEase, …), its attributes set as
+	// properties through the shared converter table (EasingMode, Amplitude).
 	private static void EmitEasingFunction(Gen gen, Scope scope, string ownerVar, XElement propEl)
 	{
-		var easings = propEl.Elements().ToList();
+		var easings = ObjectChildren(propEl);
 		if (easings.Count != 1)
 		{
 			gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName);
@@ -193,25 +153,24 @@ partial class XamlSourceGenerator
 		}
 
 		var easeEl = easings[0];
-		var type = gen.Compilation.GetTypeByMetadataName("SUIsei.Animation." + easeEl.Name.LocalName);
+		var ns = easeEl.Name.Namespace == XNamespace.None ? Ui : easeEl.Name.Namespace;
+		var type = ResolveType(gen.Compilation, ns, easeEl.Name.LocalName);
 		var contract = gen.Compilation.GetTypeByMetadataName("SUIsei.Animation.IEasingFunction");
 		if (type is null || type.IsAbstract || contract is null || !type.AllInterfaces.Contains(contract, SymbolEqualityComparer.Default))
 		{
-			gen.Report(UnknownElement, easeEl, easeEl.Name.LocalName);
+			gen.Report(ns == ExtensionNs ? UnknownExtensionMember : UnknownElement, easeEl, easeEl.Name.LocalName);
 			return;
 		}
 
 		var assignments = new List<string>();
 		foreach (var attr in easeEl.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration)
+			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(easeEl, attr.Name.Namespace))
 				continue;
 			if (FindProperty(type, attr.Name.LocalName) is not { } prop)
 				gen.Report(UnknownProperty, attr, easeEl.Name.LocalName, attr.Name.LocalName);
-			else if (TryLiteral(prop.Type, attr.Value, out var code) == LiteralStatus.Ok)
+			else if (ConvertOrReport(gen, attr, prop.Type, attr.Value, prop.Name) is { } code)
 				assignments.Add($"{prop.Name} = {code}");
-			else
-				gen.Report(InvalidLiteral, attr, attr.Value.Trim(), prop.Name, prop.Type.ToDisplayString());
 		}
 		scope.Emit($"{ownerVar}.EasingFunction = new {Fq(type)} {{ {string.Join(", ", assignments)} }};");
 	}
@@ -236,12 +195,15 @@ partial class XamlSourceGenerator
 		for (var i = 0; i < steps.Count; i++)
 		{
 			var step = steps[i];
-			var owner = step.Owner is null ? current : ResolvePathOwner(gen, step.Owner, current);
+			var owner = step.Owner is null ? current : ResolvePathOwner(gen, step, current, attr.Parent!);
 			if (owner is null)
 			{
-				gen.Report(BadPropertyPath, attr, raw, step.Owner is null
-					? "there is no Storyboard.TargetName to look the property up on"
-					: $"'{step.Owner}' is not a known type");
+				if (step.Prefix is not null && attr.Parent!.GetNamespaceOfPrefix(step.Prefix) == ExtensionNs)
+					gen.Report(UnknownExtensionMember, attr, $"{step.Owner}.{step.Property}");
+				else
+					gen.Report(BadPropertyPath, attr, raw, step.Owner is null
+						? "there is no Storyboard.TargetName to look the property up on"
+						: $"'{step}' names no known type");
 				return false;
 			}
 
@@ -288,8 +250,8 @@ partial class XamlSourceGenerator
 		return true;
 	}
 
-	// Parse a property path into steps: `Property` or `(Owner.Property)`, joined by '.'. Null when malformed. An xmlns
-	// prefix on an owner is accepted; owners resolve by name, so it does not change which type is found.
+	// Parse a property path into steps: `Property` or `(Owner.Property)`, joined by '.'; an owner may carry an xmlns
+	// prefix, as in `(suisei:Owner.Property)`. Null when malformed.
 	private static List<PathStep>? ParsePropertyPath(string raw)
 	{
 		var steps = new List<PathStep>();
@@ -302,9 +264,15 @@ partial class XamlSourceGenerator
 				if (close < 0)
 					return null;
 				var inner = raw.Substring(i + 1, close - i - 1).Trim();
+				string? prefix = null;
 				var colon = inner.IndexOf(':');
 				if (colon >= 0)
+				{
+					prefix = inner.Substring(0, colon).Trim();
 					inner = inner.Substring(colon + 1);
+					if (!IsIdentifier(prefix))
+						return null;
+				}
 				var dot = inner.LastIndexOf('.');
 				if (dot <= 0)
 					return null;
@@ -312,7 +280,7 @@ partial class XamlSourceGenerator
 				var property = inner.Substring(dot + 1).Trim();
 				if (!IsIdentifier(owner) || !IsIdentifier(property))
 					return null;
-				steps.Add(new PathStep(owner, property));
+				steps.Add(new PathStep(prefix, owner, property));
 				i = close + 1;
 			}
 			else
@@ -323,7 +291,7 @@ partial class XamlSourceGenerator
 				var property = raw.Substring(i, end - i).Trim();
 				if (!IsIdentifier(property))
 					return null;
-				steps.Add(new PathStep(null, property));
+				steps.Add(new PathStep(null, null, property));
 				i = end;
 			}
 
@@ -337,14 +305,19 @@ partial class XamlSourceGenerator
 		return steps.Count > 0 ? steps : null;
 	}
 
-	// A path step's owner: the type itself or a base of the object the step starts from, else a SUIsei type (the owner
-	// of an attached property, such as Canvas).
-	private static INamedTypeSymbol? ResolvePathOwner(Gen gen, string owner, INamedTypeSymbol? current)
+	// A path step's owner. A prefixed owner resolves through the prefix's XML namespace in scope at `context` (the
+	// extension namespace for `suisei:`). An unprefixed one is the type itself or a base of the object the step starts
+	// from, else a type in the default namespace (the owner of an attached property, such as Canvas).
+	private static INamedTypeSymbol? ResolvePathOwner(Gen gen, PathStep step, INamedTypeSymbol? current, XElement context)
 	{
+		if (step.Prefix is not null)
+			return context.GetNamespaceOfPrefix(step.Prefix) is { } ns ? ResolveType(gen.Compilation, ns, step.Owner!) : null;
 		for (var t = current; t is not null; t = t.BaseType)
-			if (t.Name == owner)
+		{
+			if (t.Name == step.Owner)
 				return t;
-		return ResolveType(gen.Compilation, owner);
+		}
+		return ResolveType(gen.Compilation, step.Owner!);
 	}
 
 	// The paths that name an element channel rather than a dependency property: a plain colour property (`Background`,
