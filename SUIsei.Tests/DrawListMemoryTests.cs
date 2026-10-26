@@ -37,13 +37,16 @@ public sealed class DrawListMemoryTests
 		for (var i = 0; i < warm; i++)
 			Frame(i);
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < measured; i++)
-			Frame(i);
-		var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+		var windows = 0;
+		var allocated = Allocations.Measure(() =>
+		{
+			windows++;
+			for (var i = 0; i < measured; i++)
+				Frame(i);
+		});
 
 		allocated.ShouldBe(0L);
-		host.DrawLists[0].Data.Revision.ShouldBe((uint)(warm + measured)); // every frame really recomposited
+		host.DrawLists[0].Data.Revision.ShouldBe((uint)(warm + measured * windows)); // every frame really recomposited
 		host.DrawLists[0].Data.TextureSlots.Count.ShouldBe(3); // the white texel, the glyph atlas page and the image
 		host.DrawLists[0].Data.TextureRevision.ShouldBe(1u);   // frames that only move geometry keep the same textures
 

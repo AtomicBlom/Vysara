@@ -105,10 +105,13 @@ public sealed class RetainedContentTests
 		var paintBefore = paint.Version;
 		var revisionBefore = host.DrawLists[0].Data.Revision;
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < measured; i++)
-			Frame(i);
-		var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+		var windows = 0u;
+		var allocated = Allocations.Measure(() =>
+		{
+			windows++;
+			for (var i = 0; i < measured; i++)
+				Frame(i);
+		});
 
 		allocated.ShouldBe(0L);
 		// The same content and paint were recoloured in place every frame, the paint versioning the change, and every
@@ -116,8 +119,8 @@ public sealed class RetainedContentTests
 		animated.Visual.Content.ShouldBeSameAs(content);
 		content.Fill.ShouldBeSameAs(paint);
 		content.Version.ShouldBe(versionBefore);
-		paint.Version.ShouldBeGreaterThanOrEqualTo(paintBefore + measured);
-		host.DrawLists[0].Data.Revision.ShouldBe(revisionBefore + measured);
+		paint.Version.ShouldBeGreaterThanOrEqualTo(paintBefore + measured * windows);
+		host.DrawLists[0].Data.Revision.ShouldBe(revisionBefore + measured * windows);
 		// The animations and tweens really ran.
 		fading.Opacity.ShouldBeInRange(0.25f, 1f);
 		fading.Opacity.ShouldNotBe(1f);

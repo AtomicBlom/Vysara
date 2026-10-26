@@ -352,10 +352,6 @@ public sealed class HitTestTests
 
 		Sweep();
 		Sweep();
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		Sweep();
-		var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-		allocated.ShouldBe(0L);
+		Allocations.Measure(Sweep).ShouldBe(0L);
 	}
 }
