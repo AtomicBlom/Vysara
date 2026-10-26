@@ -11,9 +11,9 @@ namespace SUIsei.Controls;
 public sealed class MenuFlyoutItem : ButtonBase
 {
 	// The built-in look's brushes, shared by every menu item and never changed.
-	private static readonly SolidColorBrush NormalBackground = new(HdrColor.Transparent);
-	private static readonly SolidColorBrush OverBackground = new(HdrColor.FromRgb(70, 70, 85));
-	private static readonly SolidColorBrush PressedBackground = new(HdrColor.FromRgb(55, 55, 70));
+	private static readonly SolidColorBrush NormalBackground = Brush.Sealed(HdrColor.Transparent);
+	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(70, 70, 85));
+	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(55, 55, 70));
 
 	public MenuFlyoutItem()
 	{
@@ -50,7 +50,7 @@ public sealed class MenuFlyoutItem : ButtonBase
 			host.ContentChanged += (_, _) => presenter.Content = host.Content;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal" });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(border) });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);

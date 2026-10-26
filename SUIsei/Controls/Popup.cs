@@ -18,7 +18,7 @@ public sealed class Popup : FrameworkElement
 			new PropertyMetadata<Popup, bool> { DefaultValue = false, PropertyChanged = static (p, _, open) => p.OnIsOpenChanged(open) });
 
 	// The light-dismiss layer's background: transparent, but there, so the layer is hit.
-	private static readonly SolidColorBrush DismissBackground = new(HdrColor.Transparent);
+	private static readonly SolidColorBrush DismissBackground = Brush.Sealed(HdrColor.Transparent);
 
 	private Border? _dismissLayer;
 	private bool _shown;

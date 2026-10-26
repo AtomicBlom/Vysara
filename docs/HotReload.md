@@ -15,6 +15,8 @@ there is no XAML-specific tooling to install.
 4. When the delta is applied, the `[MetadataUpdateHandler]` records the changed types. The **next**
    `UIHost.Tick` drains them on the UI thread, calls the generated `RebuildComponent()` (which detaches the old
    `{x:Bind}` subscriptions, then rebuilds a fresh tree + bindings), and re-hosts the new root.
+5. The replaced tree leaves the host, so its elements stop listening to the brushes and transforms they showed: a
+   brush that outlives the rebuild (a static, or one in a dictionary the rebuild keeps) holds none of the old tree.
 
 The whole mechanism is gated on `HotReload.Enabled`, which defaults to `MetadataUpdater.IsSupported`: it is
 `false` under NativeAOT / an optimized publish, so the registry, the handler, and the per-view `Track` call are

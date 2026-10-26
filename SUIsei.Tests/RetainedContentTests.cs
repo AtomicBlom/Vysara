@@ -19,6 +19,7 @@ public sealed class RetainedContentTests
 	private static readonly CompositionColorBrush RedPaint = new(Red);
 
 	[Test]
+	[NotInParallel(TestIsolation.HotReload)]
 	public void Animations_tweens_and_a_re_arrange_allocate_nothing_once_warm()
 	{
 		var animated = new Border { Width = 40f, Height = 20f, Background = new SolidColorBrush(Red) };

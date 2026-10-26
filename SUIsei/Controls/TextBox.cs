@@ -26,7 +26,7 @@ public sealed class TextBox : Control
 	private static readonly CompositionColorBrush HoverBorder = new(HdrColor.FromRgb(130, 130, 150));
 	private static readonly CompositionColorBrush FocusBorder = new(HdrColor.FromRgb(80, 150, 240));
 	private static readonly CompositionColorBrush FocusBackground = new(HdrColor.FromRgb(36, 38, 48));
-	private static readonly SolidColorBrush TextForeground = new(HdrColor.FromRgb(235, 235, 240));
+	private static readonly SolidColorBrush TextForeground = Brush.Sealed(HdrColor.FromRgb(235, 235, 240));
 
 	// The Windows caret cadence: solid through a half-period, then hidden through the next, repeating. The short ramp
 	// keeps it an effectively hard on/off (a fade would read as a pulse, not a caret).
@@ -37,8 +37,8 @@ public sealed class TextBox : Control
 		DependencyProperty.Register<TextBox, string>(nameof(Text),
 			new PropertyMetadata<TextBox, string> { DefaultValue = "", Invalidates = InvalidationFlags.Measure, PropertyChanged = static (t, _, _) => t.OnTextChanged() });
 
-	private static readonly SolidColorBrush CaretBrush = new(HdrColor.FromRgb(230, 230, 235));
-	private static readonly SolidColorBrush SelectionBrush = new(HdrColor.FromRgb(60, 110, 200));
+	private static readonly SolidColorBrush CaretBrush = Brush.Sealed(HdrColor.FromRgb(230, 230, 235));
+	private static readonly SolidColorBrush SelectionBrush = Brush.Sealed(HdrColor.FromRgb(60, 110, 200));
 
 	private readonly TextBlock _textBlock = new() { Foreground = TextForeground };
 	private readonly Border _caretVisual = new() { Background = CaretBrush };

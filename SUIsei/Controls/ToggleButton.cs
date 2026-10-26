@@ -14,10 +14,10 @@ namespace SUIsei.Controls;
 public class ToggleButton : ButtonBase
 {
 	// The built-in look's brushes, shared by every default toggle and never changed.
-	private static readonly SolidColorBrush NormalBackground = new(HdrColor.FromRgb(60, 60, 70));
-	private static readonly SolidColorBrush OverBackground = new(HdrColor.FromRgb(80, 80, 95));
-	private static readonly SolidColorBrush PressedBackground = new(HdrColor.FromRgb(40, 40, 55));
-	private static readonly SolidColorBrush AccentBackground = new(HdrColor.FromRgb(70, 120, 200));
+	private static readonly SolidColorBrush NormalBackground = Brush.Sealed(HdrColor.FromRgb(60, 60, 70));
+	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(80, 80, 95));
+	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(40, 40, 55));
+	private static readonly SolidColorBrush AccentBackground = Brush.Sealed(HdrColor.FromRgb(70, 120, 200));
 
 	public ToggleButton() => Template = DefaultTemplate;
 
@@ -140,7 +140,7 @@ public class ToggleButton : ButtonBase
 			root.Children.Add(presenter);
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal" });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(baseBorder) });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(baseBorder, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(baseBorder, PressedBackground) });
 

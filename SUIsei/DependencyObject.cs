@@ -97,6 +97,10 @@ public abstract class DependencyObject
 	internal void SetRung<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueRung rung, TValue value, bool hasValue)
 		where TOwner : DependencyObject
 	{
+		if (IsSealed)
+			throw new InvalidOperationException(
+				$"This {GetType().Name} is part of SUIsei's built-in look, shared by every control that shows it, and cannot change; " +
+				$"give the element one of its own to change its {dp.Name}.");
 		var slot = Slot(dp);
 		if (slot is null)
 		{
@@ -145,6 +149,16 @@ public abstract class DependencyObject
 		var baseValue = slot is not null && slot.TryResolve(out var v) ? v : dp.Metadata.DefaultValue;
 		return dp.Metadata.Coerce is { } coerce ? coerce((TOwner)this, baseValue) : baseValue;
 	}
+
+	/// <summary>
+	/// Whether this object can no longer change: every write to it throws. SUIsei seals the brushes of its built-in look,
+	/// which every control showing that look shares (across UI threads, too), so they need no change listeners and nothing
+	/// can recolour them for every control at once by accident.
+	/// </summary>
+	internal bool IsSealed { get; private set; }
+
+	/// <summary>Make this object unchangeable from now on (<see cref="IsSealed"/>).</summary>
+	internal void Seal() => IsSealed = true;
 
 	/// <summary>Hook for a resolved-value change that carries <see cref="InvalidationFlags"/> — <see cref="UIElement"/>
 	/// overrides it to schedule measure/arrange/render. Default no-op (non-visual dependency objects).</summary>

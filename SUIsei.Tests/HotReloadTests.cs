@@ -15,7 +15,7 @@ namespace SUIsei.Tests;
 /// reassigned on rebuild; the host is updated to the new Root. Tests verify that named fields are recreated.
 /// </para>
 /// </summary>
-[NotInParallel]
+[NotInParallel(TestIsolation.HotReload)]
 public sealed class HotReloadTests
 {
 	private static UIHost FreshHost()
@@ -79,6 +79,48 @@ public sealed class HotReloadTests
 			HotReload.Reset();
 		}
 	}
+
+	[Test]
+	public void Rebuild_releases_the_old_tree_from_the_brushes_it_showed()
+	{
+		try
+		{
+			var host = FreshHost();
+			var view = new Sample.SharedBrushView();
+			view.InitializeComponent();
+			var uiView = host.CreateRoot(UILayer.Default);
+			uiView.Root.Content = view.Root;
+			host.Tick(0.016, 0f, new Vector2(300f, 200f));
+			var (oldAccent, oldFirst) = ResourceBrushAndFirstUser(view);
+			oldAccent.ListenerCount.ShouldBe(4); // First, Second, Label and Styled
+
+			HotReload.NotifyUpdate([typeof(Sample.SharedBrushView)]);
+			host.Tick(0.016, 0f, new Vector2(300f, 200f));
+
+			// The old tree left the host, so nothing of it is registered with the brush it showed, and the rebuilt tree
+			// registered with its own resource brush.
+			oldAccent.ListenerCount.ShouldBe(0);
+			view.First.Background.ShouldNotBeSameAs(oldAccent);
+			((Media.SolidColorBrush)view.First.Background!).ListenerCount.ShouldBe(4);
+
+			// The old brush, still held here, keeps none of the old tree alive.
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
+			GC.Collect();
+			oldFirst.IsAlive.ShouldBeFalse();
+			GC.KeepAlive(oldAccent);
+		}
+		finally
+		{
+			HotReload.Enabled = false;
+			HotReload.Reset();
+		}
+	}
+
+	// The view's resource brush, and a weak reference to its first user, read where no local of this frame outlives them.
+	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	private static (Media.SolidColorBrush Accent, WeakReference First) ResourceBrushAndFirstUser(Sample.SharedBrushView view) =>
+		((Media.SolidColorBrush)view.First.Background!, new WeakReference(view.First));
 
 	[Test]
 	public void Rebuild_reattaches_bindings_to_the_view_model()

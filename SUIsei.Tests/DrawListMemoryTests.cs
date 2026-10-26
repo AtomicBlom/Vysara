@@ -13,6 +13,7 @@ namespace SUIsei.Tests;
 public sealed class DrawListMemoryTests
 {
 	[Test]
+	[NotInParallel(TestIsolation.HotReload)]
 	public void Recompositing_a_dirty_surface_allocates_nothing_once_warm()
 	{
 		// Every path the walk emits: rect fills, a glyph run, an image, and a faded group drawn as a layer.

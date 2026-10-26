@@ -60,9 +60,6 @@ internal static class GradientSplitter
 			return;
 		}
 
-		Span<Vector2> abovePos = stackalloc Vector2[MaxCut];
-		Span<Vector2> aboveUv = stackalloc Vector2[MaxCut];
-		Span<float> aboveT = stackalloc float[MaxCut];
 		Span<Vector2> bandPos = stackalloc Vector2[MaxCut];
 		Span<Vector2> bandUv = stackalloc Vector2[MaxCut];
 		Span<float> bandT = stackalloc float[MaxCut];
@@ -80,8 +77,7 @@ internal static class GradientSplitter
 				b = MathF.BitIncrement(a); // rounding put the next break on this one: step past it
 			var colorB = gradient.EvaluateBelow(b, opacity);
 
-			var m = Cut(local, uv, t[..n], a, keepAbove: true, abovePos, aboveUv, aboveT);
-			m = Cut(abovePos[..m], aboveUv[..m], aboveT[..m], b, keepAbove: false, bandPos, bandUv, bandT);
+			var m = CutToBand(local, uv, t[..n], a, b, bandPos, bandUv, bandT);
 			if (m >= 3)
 			{
 				var span = b - a;
@@ -99,9 +95,11 @@ internal static class GradientSplitter
 		}
 	}
 
-	// Cut a convex polygon by the line t = edge (Sutherland–Hodgman), keeping the side where t ≥ edge (keepAbove) or
-	// t ≤ edge. A corner the line crosses an edge at gets t = edge exactly; one already on the line is kept once.
-	private static int Cut(ReadOnlySpan<Vector2> pos, ReadOnlySpan<Vector2> uv, ReadOnlySpan<float> t, float edge, bool keepAbove,
+	// The part of a convex polygon between the lines t = a and t = b, in order around it: each corner inside the band,
+	// and where an edge crosses either line, the crossing. A crossing is always computed from the original edge's two
+	// corners, never from a piece of it, so the band either side of a line gets bit-identical corners there and the
+	// triangles meet exactly, with no pixel on the seam drawn twice or missed.
+	private static int CutToBand(ReadOnlySpan<Vector2> pos, ReadOnlySpan<Vector2> uv, ReadOnlySpan<float> t, float a, float b,
 		Span<Vector2> outPos, Span<Vector2> outUv, Span<float> outT)
 	{
 		var count = 0;
@@ -109,23 +107,33 @@ internal static class GradientSplitter
 		for (var i = 0; i < n; i++)
 		{
 			var j = i + 1 == n ? 0 : i + 1;
-			var inI = keepAbove ? t[i] >= edge : t[i] <= edge;
-			var inJ = keepAbove ? t[j] >= edge : t[j] <= edge;
-			if (inI)
+			if (t[i] >= a && t[i] <= b)
 			{
 				outPos[count] = pos[i];
 				outUv[count] = uv[i];
 				outT[count] = t[i];
 				count++;
 			}
-			if (inI == inJ || t[i] == edge || t[j] == edge)
-				continue;
-			var f = (edge - t[i]) / (t[j] - t[i]);
-			outPos[count] = Vector2.Lerp(pos[i], pos[j], f);
-			outUv[count] = Vector2.Lerp(uv[i], uv[j], f);
-			outT[count] = edge;
-			count++;
+			// Crossings strictly inside the edge, in the order the edge meets them.
+			var (first, second) = t[j] >= t[i] ? (a, b) : (b, a);
+			var lo = MathF.Min(t[i], t[j]);
+			var hi = MathF.Max(t[i], t[j]);
+			if (lo < first && first < hi)
+				AddCrossing(ref count, pos, uv, t, i, j, first, outPos, outUv, outT);
+			if (lo < second && second < hi)
+				AddCrossing(ref count, pos, uv, t, i, j, second, outPos, outUv, outT);
 		}
 		return count;
+	}
+
+	// The point where the edge from corner i to corner j crosses t = line, with t set to exactly the line.
+	private static void AddCrossing(ref int count, ReadOnlySpan<Vector2> pos, ReadOnlySpan<Vector2> uv, ReadOnlySpan<float> t, int i, int j,
+		float line, Span<Vector2> outPos, Span<Vector2> outUv, Span<float> outT)
+	{
+		var f = (line - t[i]) / (t[j] - t[i]);
+		outPos[count] = Vector2.Lerp(pos[i], pos[j], f);
+		outUv[count] = Vector2.Lerp(uv[i], uv[j], f);
+		outT[count] = line;
+		count++;
 	}
 }

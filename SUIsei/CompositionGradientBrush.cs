@@ -21,9 +21,11 @@ public abstract class CompositionGradientBrush : CompositionBrush
 {
 	/// <summary>
 	/// How many pieces a stop interval is cut into when the brush interpolates in <see cref="CompositionColorSpace.Rgb"/>.
-	/// Between the pieces' ends the colour is interpolated in linear light instead of sRGB. For opaque stops the error is
-	/// at most (Δ²/512)·max|EOTF''| ≈ 0.0059·Δ² in linear light, where Δ is the change of a channel's sRGB value across the
-	/// interval: under 0.006 for a full 0→1 step, which is less than one step of an 8-bit sRGB output.
+	/// The pieces' ends are exact; between them the colour is interpolated in linear light instead of in sRGB. For opaque
+	/// stops the error is at most (Δ²/512)·max|EOTF''| ≈ 0.0059·Δ² in linear light, where Δ is the change of a channel's
+	/// sRGB value across the interval, so under 0.006 even for a full 0→1 step. In an 8-bit sRGB output that is under one
+	/// step from mid-grey up, and up to five steps near black, where the sRGB encoding is steepest; both shrink with the
+	/// square of the step between stops.
 	/// </summary>
 	public const int SrgbSubBands = 8;
 

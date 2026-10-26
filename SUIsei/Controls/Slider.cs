@@ -21,13 +21,13 @@ public sealed class Slider : Control
 	private const float DefaultLength = 132f;
 
 	// The built-in look's brushes, shared by every slider and never changed.
-	private static readonly SolidColorBrush RailColor = new(HdrColor.FromRgb(70, 74, 86));
-	private static readonly SolidColorBrush FillColor = new(HdrColor.FromRgb(76, 140, 224));
-	private static readonly SolidColorBrush ThumbBorder = new(HdrColor.FromRgb(28, 32, 40));
-	private static readonly SolidColorBrush ThumbNormal = new(HdrColor.FromRgb(90, 150, 230));
-	private static readonly SolidColorBrush ThumbOver = new(HdrColor.FromRgb(120, 175, 245));
-	private static readonly SolidColorBrush ThumbPressed = new(HdrColor.FromRgb(150, 195, 255));
-	private static readonly SolidColorBrush ThumbDisabled = new(HdrColor.FromRgb(95, 98, 108));
+	private static readonly SolidColorBrush RailColor = Brush.Sealed(HdrColor.FromRgb(70, 74, 86));
+	private static readonly SolidColorBrush FillColor = Brush.Sealed(HdrColor.FromRgb(76, 140, 224));
+	private static readonly SolidColorBrush ThumbBorder = Brush.Sealed(HdrColor.FromRgb(28, 32, 40));
+	private static readonly SolidColorBrush ThumbNormal = Brush.Sealed(HdrColor.FromRgb(90, 150, 230));
+	private static readonly SolidColorBrush ThumbOver = Brush.Sealed(HdrColor.FromRgb(120, 175, 245));
+	private static readonly SolidColorBrush ThumbPressed = Brush.Sealed(HdrColor.FromRgb(150, 195, 255));
+	private static readonly SolidColorBrush ThumbDisabled = Brush.Sealed(HdrColor.FromRgb(95, 98, 108));
 
 	private SliderTrack? _track;
 	private bool _dragging;
@@ -258,7 +258,7 @@ public sealed class Slider : Control
 			slider._track = track;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal" });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(thumb) });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(thumb, ThumbOver) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(thumb, ThumbPressed) });
 			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Background(thumb, ThumbDisabled) });

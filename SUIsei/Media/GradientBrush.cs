@@ -7,9 +7,9 @@ namespace SUIsei.Media;
 /// <para>
 /// Colours interpolate as premultiplied values. <see cref="ColorInterpolationMode.ScRgbLinearInterpolation"/> is drawn
 /// exactly, colours above paper white included, by splitting what is painted where the stops fall: there is no ramp
-/// texture to clamp or quantize them. The default, <see cref="ColorInterpolationMode.SRgbLinearInterpolation"/>, is exact
-/// at eight points per stop interval and within the error <see cref="CompositionGradientBrush.SrgbSubBands"/> documents
-/// between them, and a stop above 1 in it throws when the brush is drawn.
+/// texture to clamp or quantize them. The default, <see cref="ColorInterpolationMode.SRgbLinearInterpolation"/>, cuts each
+/// stop interval into eight pieces, exact at their ends and within the error <see cref="CompositionGradientBrush.SrgbSubBands"/>
+/// documents between them, and a stop above 1 in it throws when the brush is drawn.
 /// </para>
 /// </summary>
 [ContentProperty(Name = nameof(GradientStops))]

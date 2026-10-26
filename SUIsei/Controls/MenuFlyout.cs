@@ -18,9 +18,9 @@ public sealed class MenuFlyout
 	private const float MinMenuHeight = 48f;
 
 	// The menu's look, and the light-dismiss layer's transparent (but hit) background. Shared and never changed.
-	private static readonly SolidColorBrush MenuBackground = new(HdrColor.FromRgb(45, 45, 55));
-	private static readonly SolidColorBrush MenuBorder = new(HdrColor.FromRgb(80, 80, 95));
-	private static readonly SolidColorBrush DismissBackground = new(HdrColor.Transparent);
+	private static readonly SolidColorBrush MenuBackground = Brush.Sealed(HdrColor.FromRgb(45, 45, 55));
+	private static readonly SolidColorBrush MenuBorder = Brush.Sealed(HdrColor.FromRgb(80, 80, 95));
+	private static readonly SolidColorBrush DismissBackground = Brush.Sealed(HdrColor.Transparent);
 
 	private UIRoot? _root;
 	private Border? _menu;

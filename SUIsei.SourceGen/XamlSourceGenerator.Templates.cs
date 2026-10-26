@@ -348,15 +348,17 @@ partial class XamlSourceGenerator
 		scope.ResourceOwners.Add(ownerVar);
 	}
 
-	// One keyed resource into the dictionary `dictionaryExpr`. A resource lookup made while building it (a BasedOn)
-	// starts from `ownerVar`.
+	// One keyed resource into the dictionary `dictionaryExpr`: a Style, or any other object, such as a brush shared by
+	// the elements that name it with {StaticResource}. A resource lookup made while building it (a BasedOn) starts from
+	// `ownerVar`. Templates are set with <X.Template>, not kept as resources.
 	private static void EmitResourceEntry(Gen gen, Scope scope, string ownerVar, string dictionaryExpr, XElement resEl)
 	{
 		var key = resEl.Attribute(X + "Key")?.Value;
 		if (key is null) { gen.Report(BadPropertyElement, resEl, $"{resEl.Name.LocalName} (resource needs an x:Key)"); return; }
-		if (resEl.Name.LocalName != "Style") { gen.Report(BadPropertyElement, resEl, resEl.Name.LocalName); return; }
-		if (EmitStyle(gen, scope, ownerVar, resEl) is { } styleVar)
-			scope.Emit($"{dictionaryExpr}.Add({Quote(key)}, {styleVar});");
+		if (resEl.Name.LocalName is "ControlTemplate" or "DataTemplate" or "ItemsPanelTemplate") { gen.Report(BadPropertyElement, resEl, resEl.Name.LocalName); return; }
+		var valueVar = resEl.Name.LocalName == "Style" ? EmitStyle(gen, scope, ownerVar, resEl) : EmitElement(gen, scope, resEl);
+		if (valueVar is not null)
+			scope.Emit($"{dictionaryExpr}.Add({Quote(key)}, {valueVar});");
 	}
 
 	// A dictionary loaded from a file (Source="…") needs that file at runtime, which an inline-only subset cannot give.

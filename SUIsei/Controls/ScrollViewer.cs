@@ -17,9 +17,9 @@ public sealed class ScrollViewer : FrameworkElement
 {
 	// The thumb brightens and widens through rest → hover → grabbed, so it visibly reacts to the pointer.
 	// Shared by every scroll viewer and never changed.
-	private static readonly SolidColorBrush ThumbRest = new(HdrColor.FromRgb(86, 92, 108));
-	private static readonly SolidColorBrush ThumbHover = new(HdrColor.FromRgb(124, 132, 152));
-	private static readonly SolidColorBrush ThumbActive = new(HdrColor.FromRgb(160, 168, 190));
+	private static readonly SolidColorBrush ThumbRest = Brush.Sealed(HdrColor.FromRgb(86, 92, 108));
+	private static readonly SolidColorBrush ThumbHover = Brush.Sealed(HdrColor.FromRgb(124, 132, 152));
+	private static readonly SolidColorBrush ThumbActive = Brush.Sealed(HdrColor.FromRgb(160, 168, 190));
 	private const float ThumbThickness = 8f;
 	private const float ThumbThicknessActive = 11f;
 	private const float ThumbMinLength = 28f;

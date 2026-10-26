@@ -15,12 +15,12 @@ namespace SUIsei.Controls;
 public sealed class CheckBox : ToggleButton
 {
 	// The built-in look's brushes, shared by every check box and never changed.
-	private static readonly SolidColorBrush BoxBorder = new(HdrColor.FromRgb(160, 160, 170));
-	private static readonly SolidColorBrush BoxBackground = new(HdrColor.FromRgb(40, 40, 48));
-	private static readonly SolidColorBrush BoxBackgroundHover = new(HdrColor.FromRgb(58, 58, 70));
-	private static readonly SolidColorBrush BoxBackgroundPressed = new(HdrColor.FromRgb(30, 30, 38));
-	private static readonly SolidColorBrush CheckFill = new(HdrColor.FromRgb(80, 150, 240));
-	private static readonly SolidColorBrush IndeterminateFill = new(HdrColor.FromRgb(120, 120, 130));
+	private static readonly SolidColorBrush BoxBorder = Brush.Sealed(HdrColor.FromRgb(160, 160, 170));
+	private static readonly SolidColorBrush BoxBackground = Brush.Sealed(HdrColor.FromRgb(40, 40, 48));
+	private static readonly SolidColorBrush BoxBackgroundHover = Brush.Sealed(HdrColor.FromRgb(58, 58, 70));
+	private static readonly SolidColorBrush BoxBackgroundPressed = Brush.Sealed(HdrColor.FromRgb(30, 30, 38));
+	private static readonly SolidColorBrush CheckFill = Brush.Sealed(HdrColor.FromRgb(80, 150, 240));
+	private static readonly SolidColorBrush IndeterminateFill = Brush.Sealed(HdrColor.FromRgb(120, 120, 130));
 
 	private Border? _box;
 	private Border? _checkGlyph;
@@ -76,7 +76,7 @@ public sealed class CheckBox : ToggleButton
 			row.Children.Add(presenter);
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal" });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(box) });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(box, BoxBackgroundHover) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(box, BoxBackgroundPressed) });
 			VisualStateManager.SetVisualStateGroups(row, [common]);

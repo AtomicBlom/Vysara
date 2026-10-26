@@ -15,6 +15,11 @@ namespace SUIsei.Media;
 /// <c>(Border.Background).(SolidColorBrush.Color)</c> on a border whose background is a resource, recolours every element
 /// showing that brush, as it does in WinUI. Give an element its own brush to animate it alone.
 /// </para>
+/// <para>
+/// Like any dependency object, a brush belongs to the UI thread of the elements that show it. The brushes of SUIsei's
+/// built-in control look are the exception: they are sealed, so they are shared by every control on every thread, keep
+/// no listeners, and throw if anything tries to change them.
+/// </para>
 /// </summary>
 public abstract class Brush : DependencyObject
 {
@@ -45,9 +50,27 @@ public abstract class Brush : DependencyObject
 	/// alive.</summary>
 	internal int ListenerCount => _listeners.Count;
 
-	internal void AddListener(ISubPropertyListener listener) => _listeners.Add(listener);
+	// A sealed brush never changes, so it has nothing to tell anyone and keeps no listeners; that also keeps the built-in
+	// look's shared brushes free of writes from every UI thread that shows them.
+	internal void AddListener(ISubPropertyListener listener)
+	{
+		if (!IsSealed)
+			_listeners.Add(listener);
+	}
 
-	internal void RemoveListener(ISubPropertyListener listener) => _listeners.Remove(listener);
+	internal void RemoveListener(ISubPropertyListener listener)
+	{
+		if (!IsSealed)
+			_listeners.Remove(listener);
+	}
+
+	/// <summary>A sealed brush of <paramref name="color"/>, for SUIsei's built-in look.</summary>
+	internal static SolidColorBrush Sealed(HdrColor color)
+	{
+		var brush = new SolidColorBrush(color);
+		brush.Seal();
+		return brush;
+	}
 
 	/// <summary>Tell everything showing this brush that its paint changed.</summary>
 	private protected void Changed() => _listeners.Notify(this);

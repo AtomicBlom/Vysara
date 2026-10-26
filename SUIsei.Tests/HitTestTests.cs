@@ -322,6 +322,7 @@ public sealed class HitTestTests
 	}
 
 	[Test]
+	[NotInParallel(TestIsolation.HotReload)]
 	public void Pointer_moves_across_a_large_tree_allocate_nothing()
 	{
 		// 20 rows of 10 boxes, each row in its own panel, plus buttons: a move crosses many elements and enters and

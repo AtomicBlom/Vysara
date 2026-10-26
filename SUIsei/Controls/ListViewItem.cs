@@ -11,7 +11,7 @@ namespace SUIsei.Controls;
 /// </summary>
 public sealed class ListViewItem : ContentControl
 {
-	private static readonly SolidColorBrush SelectedBackground = new(HdrColor.FromRgb(50, 90, 160));
+	private static readonly SolidColorBrush SelectedBackground = Brush.Sealed(HdrColor.FromRgb(50, 90, 160));
 
 	/// <summary>The data item this container represents (used by the list to map selection back to the source).</summary>
 	internal object? DataItem { get; init; }
@@ -23,7 +23,7 @@ public sealed class ListViewItem : ContentControl
 	{
 		BackgroundTransition = TemplateStates.Fade(80);
 		var selection = new VisualStateGroup { Name = "SelectionStates" };
-		selection.States.Add(new VisualState { Name = "Unselected" });
+		selection.States.Add(new VisualState { Name = "Unselected", Storyboard = TemplateStates.RestoreBackground(this) });
 		selection.States.Add(new VisualState { Name = "Selected", Storyboard = TemplateStates.Background(this, SelectedBackground) });
 		VisualStateManager.SetVisualStateGroups(this, [selection]);
 	}
