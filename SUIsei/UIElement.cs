@@ -240,6 +240,17 @@ public abstract class UIElement : DependencyObject
 	/// it over its background so a colour animation drives the brush on the no-relayout visual path.</summary>
 	private protected HdrColor? AnimatedFill => _animatedFill;
 
+	/// <summary>The colour this element paints now: the animated fill if one is running, else its own
+	/// (<see cref="BaseFill"/>), else transparent. Where a colour animation with no <c>From</c> starts.</summary>
+	internal HdrColor CurrentFill => _animatedFill ?? BaseFill ?? HdrColor.Transparent;
+
+	/// <summary>The colour the animated fill overrides — a control's background, a text block's foreground — or null
+	/// for an element that paints none.</summary>
+	private protected virtual HdrColor? BaseFill => null;
+
+	/// <summary>The offset an animation currently adds to the render transform; zero when none is running.</summary>
+	internal Vector2 AnimatedTranslate => _animatedTranslate;
+
 	/// <summary>The element's effective composition transform: render transform, plus any animated translate, placed
 	/// at the layout position. Used by both <see cref="SyncVisual"/> and the translate animation so they agree.</summary>
 	private Matrix3x2 ComposeTransform()

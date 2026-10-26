@@ -16,47 +16,53 @@ public sealed class RetainedContentTests
 	private static readonly HdrColor Blue = HdrColor.FromRgb(40, 40, 220);
 
 	[Test]
-	public void A_colour_animation_an_opacity_animation_and_a_re_arrange_allocate_nothing_once_warm()
+	public void Animations_tweens_and_a_re_arrange_allocate_nothing_once_warm()
 	{
 		var animated = new Border { Width = 40f, Height = 20f, Background = Red };
 		var fading = new Border { Width = 40f, Height = 20f, Background = Blue };
+		var blinking = new Border { Width = 40f, Height = 20f, Background = Blue };
+		var tweened = new Border { Width = 40f, Height = 20f, Background = Red };
+		var sliding = new Border { Width = 10f, Height = 10f, Background = Red };
+		var canvas = new Canvas { Width = 100f, Height = 20f };
+		canvas.Children.Add(sliding);
 		var label = new TextBlock { Text = "Steady", FontSize = 16f };
 		var framed = new Border { Background = HdrColor.FromRgb(30, 30, 30), Padding = new Thickness(4f), Child = label };
-		var panel = new StackPanel { Background = HdrColor.FromRgb(10, 10, 10) };
-		panel.Children.Add(animated);
-		panel.Children.Add(fading);
-		panel.Children.Add(framed);
-		panel.Children.Add(new Image { Source = ImageSource.FromRgba8(2, 2, new byte[16]), Width = 8f, Height = 8f });
 		var checkBox = new CheckBox { Content = "Templated" };
-		panel.Children.Add(checkBox);
+		var panel = new StackPanel { Background = HdrColor.FromRgb(10, 10, 10) };
+		foreach (var child in new UIElement[] { animated, fading, blinking, tweened, canvas, framed, checkBox })
+			panel.Children.Add(child);
+		panel.Children.Add(new Image { Source = ImageSource.FromRgba8(2, 2, new byte[16]), Width = 8f, Height = 8f });
 
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = panel;
 
-		// The colour animation runs through the storyboard channel a XAML Background animation resolves to. The
-		// opacity animation writes the visual directly: a storyboard on the Opacity dependency property still boxes
-		// its value into the property store.
+		// Every kind of storyboard animation, each through Target + TargetProperty as generated XAML does: a colour
+		// channel, a float dependency property, an attached property, and a keyframe animation.
+		var blink = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(0.5), RepeatBehavior = RepeatBehavior.Forever, Target = blinking, TargetProperty = UIElement.OpacityProperty };
+		blink.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.Zero, Value = 1.0 });
+		blink.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.FromSeconds(0.25), Value = 0.5, IsDiscrete = true });
+		blink.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.FromSeconds(0.5), Value = 0.2, EasingFunction = new CubicEase() });
 		host.Clock.Begin(new Storyboard
 		{
 			Children =
 			{
-				new ColorAnimation { From = Red, To = Blue, AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, Target = animated, TargetProperty = "Background" },
-				new DoubleAnimation
-				{
-					From = 1.0, To = 0.25, AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
-					Apply = v =>
-					{
-						fading.Visual.Opacity = (float)v;
-						fading.Visual.MarkDirty();
-					},
-				},
+				new ColorAnimation { From = Red, To = Blue, AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, Target = animated, TargetProperty = PropertyPath.Fill },
+				new DoubleAnimation { To = 0.25, AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, Target = fading, TargetProperty = UIElement.OpacityProperty },
+				new DoubleAnimation { To = 60.0, AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, Target = sliding, TargetProperty = Canvas.LeftProperty },
+				blink,
 			},
 		});
 
-		const int warm = 8;
+		// Code-first tweens, restarted every eight frames and finishing in four, so each run returns its entry to the
+		// pool and the next rents it back.
+		var probe = new TweenProbe();
+		var ease = new QuadraticEase();
+		var tweenLength = TimeSpan.FromSeconds(4.0 / 60.0);
+
+		const int warm = 16;
 		const int measured = 64;
 		for (var i = 0; i < warm; i++)
-			Frame();
+			Frame(i);
 
 		var content = animated.Visual.Content.ShouldBeOfType<RectContent>();
 		var versionBefore = content.Version;
@@ -64,7 +70,7 @@ public sealed class RetainedContentTests
 
 		var before = GC.GetAllocatedBytesForCurrentThread();
 		for (var i = 0; i < measured; i++)
-			Frame();
+			Frame(i);
 		var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
 		allocated.ShouldBe(0L);
@@ -72,13 +78,27 @@ public sealed class RetainedContentTests
 		animated.Visual.Content.ShouldBeSameAs(content);
 		content.Version.ShouldBeGreaterThanOrEqualTo(versionBefore + measured);
 		host.DrawLists[0].Data.Revision.ShouldBe(revisionBefore + measured);
+		// The animations and tweens really ran.
+		fading.Opacity.ShouldBeInRange(0.25f, 1f);
+		fading.Opacity.ShouldNotBe(1f);
+		Canvas.GetLeft(sliding).ShouldBeGreaterThan(0f);
+		sliding.LayoutRect.X.ShouldBe(Canvas.GetLeft(sliding));
+		tweened.Opacity.ShouldBe(0.9f); // where the last tween ended
+		Frame(measured);                  // starts the next run outward
+		probe.Position.X.ShouldBeGreaterThan(0f);
 
-		void Frame()
+		void Frame(int i)
 		{
+			if (i % 8 == 0)
+			{
+				var forward = i % 16 == 0;
+				host.Clock.Tween(probe, static p => p.Position, static (p, v) => p.Position = v, forward ? new Vector2(10f, 20f) : Vector2.Zero, tweenLength, ease);
+				host.Clock.Tween(tweened, UIElement.OpacityProperty, forward ? 0.3f : 0.9f, tweenLength);
+			}
 			// Re-arrange the label, a templated control and every element above them, with their children unchanged.
 			label.InvalidateArrange();
 			checkBox.InvalidateArrange();
-			host.Tick(1.0 / 60.0, 0f, new Vector2(200f, 200f));
+			host.Tick(1.0 / 60.0, 0f, new Vector2(200f, 300f));
 			host.Render();
 		}
 	}
@@ -146,7 +166,7 @@ public sealed class RetainedContentTests
 		var clock = new AnimationClock();
 		clock.Begin(new Storyboard
 		{
-			Children = { new ColorAnimation { From = Red, To = Red, Target = label, TargetProperty = "Foreground" } },
+			Children = { new ColorAnimation { From = Red, To = Red, Target = label, TargetProperty = PropertyPath.Fill } },
 		});
 		clock.Advance(0.5);
 		content.Color.ShouldBe(Red);
@@ -179,5 +199,11 @@ public sealed class RetainedContentTests
 		root.LayoutPass(new Size(100f, 100f));
 
 		image.Visual.Dump().ShouldContain("image=4x2 dest=(0,0 40x20)");
+	}
+
+	// A plain object with a CLR property for a code-first tween to drive.
+	private sealed class TweenProbe
+	{
+		public Vector2 Position { get; set; }
 	}
 }

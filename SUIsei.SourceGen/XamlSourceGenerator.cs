@@ -63,7 +63,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor BadStoryboardTarget = new("SUISEI015", "Unresolved storyboard target",
 		"Storyboard.TargetName '{0}' does not name an x:Name'd element in this view", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadAnimationProperty = new("SUISEI016", "Unanimatable property",
-		"Storyboard.TargetProperty '{0}' is not an animatable channel (Opacity, Background, Foreground, Fill, RenderTransform.Translate.X/Y)", "SUIsei", DiagnosticSeverity.Error, true);
+		"Storyboard.TargetProperty '{0}' is a {1} property, which a {2} cannot animate", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadLiteralValue = new("SUISEI017", "Invalid markup value",
 		"'{0}' is not a valid {1}", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadSetterProperty = new("SUISEI018", "Unstylable property",
@@ -72,6 +72,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"{{TemplateBinding}} is only valid inside a ControlTemplate", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadPropertyElement = new("SUISEI020", "Unsupported property element",
 		"Property element '{0}' is outside the supported XAML subset", "SUIsei", DiagnosticSeverity.Warning, true);
+	private static readonly DiagnosticDescriptor BadPropertyPath = new("SUISEI021", "Unresolved property path",
+		"Property path '{0}' does not resolve: {1}", "SUIsei", DiagnosticSeverity.Error, true);
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -179,6 +181,9 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		// The x:Name registry for this scope: enforces uniqueness and resolves storyboard targets. The page scope
 		// shares the generator's global set; each template gets its own (a name may repeat across templates).
 		public HashSet<string> Names { get; init; } = [];
+		// Each x:Name'd element's type and the expression that reaches it (a field, a local, or `this` for an unsealed
+		// root): what a storyboard's TargetName resolves to.
+		public Dictionary<string, (INamedTypeSymbol Type, string Expr)> NamedElements { get; } = [];
 		public bool IsTemplate { get; init; }
 		public bool IsControlTemplate { get; init; }
 		// The {x:Bind}/{TemplateBinding} data-root expression (e.g. "__data" / "__tc") and its type, for a template.
@@ -343,10 +348,12 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			scope.Emit($"var {var} = new {typeName}();");
 		}
 
+		if (hasName)
+			scope.NamedElements[nameAttr!.Value] = (type, var);
+
 		foreach (var attr in el.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X)
-				continue;
+			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X) continue;
 			if (attr.Name.Namespace != XNamespace.None)
 			{
 				gen.Report(IgnoredContent, attr, $"namespaced attribute '{attr.Name.LocalName}'");

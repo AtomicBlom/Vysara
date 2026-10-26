@@ -68,5 +68,7 @@ public class ContentPresenter : FrameworkElement
 		return finalSize;
 	}
 
+	private protected override HdrColor? BaseFill => Background;
+
 	private protected override VisualContent? UpdateContent() => Background is { } bg ? RetainedRect(bg) : null;
 }

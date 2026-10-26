@@ -52,6 +52,35 @@ public sealed class HotReloadTests
 	}
 
 	[Test]
+	public void Rebuild_points_storyboards_at_the_rebuilt_elements()
+	{
+		try
+		{
+			var host = FreshHost();
+			var view = new Sample.AnimationView();
+			view.InitializeComponent();
+			var uiView = host.CreateRoot(UILayer.Default);
+			uiView.Root.Content = view.Root;
+			var oldBox = view.Box;
+
+			HotReload.NotifyUpdate([typeof(Sample.AnimationView)]);
+			host.Tick(0.016, 0f, new Vector2(300f, 200f));
+			view.Box.ShouldNotBeSameAs(oldBox);
+
+			// The rebuilt visual states belong to the rebuilt host and animate the rebuilt box, not the discarded one.
+			Animation.VisualStateManager.GoToState(view.Host, "Moved", useTransitions: true).ShouldBeTrue();
+			host.Tick(0.5, 0f, new Vector2(300f, 200f));
+			Controls.Canvas.GetLeft(view.Box).ShouldBe(50f, 1e-4f);
+			Controls.Canvas.GetLeft(oldBox).ShouldBe(0f);
+		}
+		finally
+		{
+			HotReload.Enabled = false;
+			HotReload.Reset();
+		}
+	}
+
+	[Test]
 	public void Rebuild_reattaches_bindings_to_the_view_model()
 	{
 		try

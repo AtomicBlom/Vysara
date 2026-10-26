@@ -38,6 +38,8 @@ public sealed class TextBlock : FrameworkElement
 	// The run this element draws, kept across updates so a recolour or re-arrange allocates nothing.
 	private GlyphRunContent? _glyphRun;
 
+	private protected override HdrColor? BaseFill => Foreground;
+
 	private protected override VisualContent? UpdateContent()
 	{
 		var text = Text;

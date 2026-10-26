@@ -15,4 +15,8 @@ public sealed class DoubleKeyFrame
 
 	/// <summary>Eases the segment from the previous key to this one.</summary>
 	public IEasingFunction? EasingFunction { get; set; }
+
+	/// <summary>Hold the previous key's value until <see cref="KeyTime"/>, then jump to <see cref="Value"/>, as WinUI's
+	/// <c>DiscreteDoubleKeyFrame</c> does. <see cref="EasingFunction"/> is then ignored.</summary>
+	public bool IsDiscrete { get; set; }
 }

@@ -112,6 +112,11 @@ partial class XamlSourceGenerator
 		return null;
 	}
 
+	// The value type of a dependency-property field declared as DependencyProperty<TOwner, TValue>; null when it is
+	// declared as the untyped base, whose value type the generator cannot see.
+	private static ITypeSymbol? DependencyValueType(IFieldSymbol field) =>
+		field.Type is INamedTypeSymbol { Name: "DependencyProperty", TypeArguments.Length: 2 } typed ? typed.TypeArguments[1] : null;
+
 	private static bool NeedsField(INamedTypeSymbol type, XElement el)
 	{
 		foreach (var attr in el.Attributes())

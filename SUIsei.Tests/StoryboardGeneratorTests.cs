@@ -2,11 +2,14 @@ namespace SUIsei.Tests;
 
 /// <summary>
 /// Generator coverage for <c>&lt;VisualStateManager.VisualStateGroups&gt;</c> + <c>&lt;Storyboard&gt;</c> markup:
-/// the generator emits the VSM groups, their state storyboards, and each animation with the
-/// declarative Target/TargetProperty the runtime resolves — no reflection. Asserted on the generated source text.
+/// the VSM groups, their state storyboards, each animation with its target, keyframes and easing functions, and
+/// <c>Storyboard.TargetProperty</c> paths resolved at compile time to dependency properties or element channels —
+/// no reflection, no runtime string lookup. Asserted on the generated source text, and compiled.
 /// </summary>
 public sealed class StoryboardGeneratorTests
 {
+	private const string CodeBehind = "namespace Demo { public partial class V { } }";
+
 	private const string StatesXaml = """
 		<Border xmlns="https://github.com/AtomicBlom/SUIsei/ui"
 		        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -25,6 +28,30 @@ public sealed class StoryboardGeneratorTests
 		</Border>
 		""";
 
+	// A view with a Canvas-hosted Border "Box" and a TextBlock "Label", and one visual state whose storyboard holds
+	// `animations`.
+	private static string View(string animations) => $$"""
+		<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+		            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		            x:Class="Demo.V">
+		  <Canvas Width="200" Height="100">
+		    <Border x:Name="Box" Width="10" Height="10" Background="#FF0000" />
+		  </Canvas>
+		  <TextBlock x:Name="Label" Text="Hi" />
+		  <ContentControl x:Name="Host">
+		    <VisualStateManager.VisualStateGroups>
+		      <VisualStateGroup Name="G">
+		        <VisualState Name="S">
+		          <Storyboard>
+		            {{animations}}
+		          </Storyboard>
+		        </VisualState>
+		      </VisualStateGroup>
+		    </VisualStateManager.VisualStateGroups>
+		  </ContentControl>
+		</StackPanel>
+		""";
+
 	[Test]
 	public void Visual_state_groups_and_storyboards_are_emitted()
 	{
@@ -39,28 +66,137 @@ public sealed class StoryboardGeneratorTests
 		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(0.12);");
 		code.ShouldContain(".FillBehavior = global::SUIsei.Animation.FillBehavior.HoldEnd;");
 		code.ShouldContain(".Target = Bg;");
-		code.ShouldContain(".TargetProperty = \"Background\";");
+		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.Fill;");
 		code.ShouldContain("global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups(Bg,");
 	}
 
 	[Test]
-	public void Unknown_animatable_channel_diagnoses()
+	public void Owner_qualified_and_attached_paths_resolve_to_dependency_properties()
 	{
-		var xaml = """
-			<Border xmlns="https://github.com/AtomicBlom/SUIsei/ui"
-			        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-			        x:Class="T.BadView" x:Name="Bg">
-			  <VisualStateManager.VisualStateGroups>
-			    <VisualStateGroup Name="G">
-			      <VisualState Name="S">
-			        <Storyboard>
-			          <DoubleAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="Nonsense" To="1" Duration="0:0:1" />
-			        </Storyboard>
-			      </VisualState>
-			    </VisualStateGroup>
-			  </VisualStateManager.VisualStateGroups>
-			</Border>
-			""";
-		XamlGeneratorHarness.Run(xaml).DiagnosticIds().ShouldContain("SUISEI016");
+		var xaml = View("""
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)" To="0.5" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Left)" To="100" />
+			<DoubleAnimation Storyboard.TargetName="Label" Storyboard.TargetProperty="(TextBlock.FontSize)" To="20" />
+			""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.UIElement.OpacityProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Canvas.LeftProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.TextBlock.FontSizeProperty);");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void WinUI_brush_and_transform_paths_reach_the_element_channels()
+	{
+		var xaml = View("""
+			<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#0000FF" />
+			<ColorAnimation Storyboard.TargetName="Label" Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)" To="#0000FF" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.TranslateX)" To="5" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="5" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="RenderTransform.Translate.X" To="5" />
+			""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.Fill;");
+		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.TranslateX;");
+		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.TranslateY;");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("<ColorAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"#0000FF\" />")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Background\" To=\"1\" />")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"(Grid.Row)\" To=\"1\" />")]
+	public void A_property_the_animation_cannot_drive_diagnoses_SUISEI016(string animation) =>
+		XamlGeneratorHarness.Run(View(animation), CodeBehind).DiagnosticIds().ShouldBe(["SUISEI016"]);
+
+	[Test]
+	[Arguments("Nonsense")]                                      // no such property
+	[Arguments("(Nope.Opacity)")]                                // unknown owner type
+	[Arguments("(TextBlock.FontSize)")]                          // a TextBlock property, on a Border
+	[Arguments("Foreground")]                                    // a Border has no Foreground
+	[Arguments("(UIElement.Opacity).(UIElement.Opacity)")]       // Opacity holds a float, not an object to step into
+	[Arguments("(UIElement.Opacity")]                            // malformed
+	[Arguments("Opacity.")]                                      // malformed
+	public void An_unresolvable_path_diagnoses_SUISEI021(string path) =>
+		XamlGeneratorHarness.Run(View($"""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="{path}" To="1" />"""), CodeBehind)
+			.DiagnosticIds().ShouldBe(["SUISEI021"]);
+
+	[Test]
+	public void A_path_diagnostic_points_at_the_target_property_attribute()
+	{
+		var xaml = View("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Nonsense" To="1" />""");
+		var diagnostic = XamlGeneratorHarness.Run(xaml, CodeBehind).Diagnostics.Single();
+
+		var span = diagnostic.Location.GetLineSpan();
+		var line = xaml.Split('\n')[span.StartLinePosition.Line];
+		line.Substring(span.StartLinePosition.Character).ShouldStartWith("Storyboard.TargetProperty=\"Nonsense\"");
+		diagnostic.GetMessage().ShouldBe("Property path 'Nonsense' does not resolve: 'Border' has no dependency property 'Nonsense'");
+	}
+
+	[Test]
+	public void Keyframes_and_easing_functions_are_emitted()
+	{
+		var xaml = View("""
+			<DoubleAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)" RepeatBehavior="Forever">
+			  <LinearDoubleKeyFrame KeyTime="0:0:0" Value="1" />
+			  <DiscreteDoubleKeyFrame KeyTime="0:0:0.5" Value="0.5" />
+			  <EasingDoubleKeyFrame KeyTime="0:0:2" Value="0.25">
+			    <EasingDoubleKeyFrame.EasingFunction>
+			      <CubicEase EasingMode="EaseIn" />
+			    </EasingDoubleKeyFrame.EasingFunction>
+			  </EasingDoubleKeyFrame>
+			</DoubleAnimationUsingKeyFrames>
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Left)" To="100">
+			  <DoubleAnimation.EasingFunction>
+			    <BackEase Amplitude="0.5" EasingMode="EaseInOut" />
+			  </DoubleAnimation.EasingFunction>
+			</DoubleAnimation>
+			""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain("new global::SUIsei.Animation.DoubleAnimationUsingKeyFrames()");
+		code.ShouldContain(".KeyTime = global::System.TimeSpan.FromSeconds(0.5);");
+		code.ShouldContain(".IsDiscrete = true;");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.CubicEase { EasingMode = SUIsei.Animation.EasingMode.EaseIn };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.BackEase { Amplitude = 0.5d, EasingMode = SUIsei.Animation.EasingMode.EaseInOut };");
+		// With no Duration, a keyframe animation lasts until its last key.
+		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(2);");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><LinearDoubleKeyFrame KeyTime=\"soon\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI017")]
+	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><SplineDoubleKeyFrame KeyTime=\"0:0:1\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI020")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><BounceEase /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI003")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><CubicEase EasingMode=\"Sideways\" /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI012")]
+	public void Bad_keyframes_and_easing_functions_diagnose(string animation, string id) =>
+		XamlGeneratorHarness.Run(View(animation), CodeBehind).DiagnosticIds().ShouldBe([id]);
+
+	[Test]
+	public void An_edited_storyboard_regenerates_on_the_next_run()
+	{
+		// What XAML Hot Reload does: the IDE swaps in the edited file and re-runs the generator. The edit must reach the
+		// output rather than a cached result.
+		var before = View("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" />""");
+		var after = View("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Top)" To="40" />""");
+		var (driver, compilation) = XamlGeneratorHarness.Create(before, CodeBehind);
+
+		driver = driver.RunGenerators(compilation);
+		driver.GetRunResult().AllGeneratedText().ShouldContain("global::SUIsei.UIElement.OpacityProperty");
+
+		driver = XamlGeneratorHarness.Edit(driver, after).RunGenerators(compilation);
+		var code = driver.GetRunResult().AllGeneratedText();
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Canvas.TopProperty);");
+		code.ShouldContain(".To = 40d;");
+		code.ShouldNotContain("OpacityProperty");
 	}
 }

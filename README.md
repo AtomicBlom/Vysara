@@ -8,7 +8,7 @@ A retained-mode, WinUI-inspired UI framework for .NET 10, designed for NativeAOT
 - **XAML source generator** — `SUIsei.SourceGen` compiles `.xaml` files at build time (bundled in the NuGet package)
 - **Compositor** — walks the visual tree and produces a backend-neutral `DrawListData` (vertices + commands) with incremental damage tracking
 - **Headless by design** — no GPU dependency; the full layout + input + composite pipeline is unit-testable without a window
-- **Animation** — storyboard-based animations driven by `AnimationClock`; `VisualStateManager` for control state transitions
+- **Animation** — storyboard-based animations driven by `AnimationClock`, targeting WinUI property paths such as `(Canvas.Left)`, with keyframes and easing; allocation-free code-first `AnimationClock.Tween`; `VisualStateManager` for control state transitions
 - **NativeAOT safe** — no reflection at runtime; all code paths are trim-friendly
 
 ## Usage

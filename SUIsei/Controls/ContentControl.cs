@@ -73,5 +73,7 @@ public class ContentControl : Control
 		return finalSize;
 	}
 
+	private protected override HdrColor? BaseFill => Background;
+
 	private protected override VisualContent? UpdateContent() => Template is null && (AnimatedFill ?? Background) is { } bg ? RetainedRect(bg) : null;
 }

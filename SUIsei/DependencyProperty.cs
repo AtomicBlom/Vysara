@@ -1,3 +1,5 @@
+using SUIsei.Animation;
+
 namespace SUIsei;
 
 /// <summary>
@@ -32,6 +34,10 @@ public abstract class DependencyProperty
 	/// <summary>What a resolved-value change invalidates.</summary>
 	public InvalidationFlags Invalidates { get; }
 
+	/// <summary>Whether an animation can drive this property: it has a
+	/// <see cref="PropertyMetadata{TOwner, TValue}.Lerp"/>, declared or standard for its type.</summary>
+	public abstract bool IsAnimatable { get; }
+
 	/// <summary>Register a normal dependency property on <typeparamref name="TOwner"/>.</summary>
 	public static DependencyProperty<TOwner, TValue> Register<TOwner, TValue>(string name, PropertyMetadata<TOwner, TValue> metadata)
 		where TOwner : DependencyObject =>
@@ -43,31 +49,53 @@ public abstract class DependencyProperty
 		where TOwner : DependencyObject =>
 		new(name, DependencyPropertyKind.Attached, metadata);
 
-	// Non-generic seams the (non-generic) effective-value store calls; the generic subclass casts and dispatches
-	// the typed delegates — so there is no reflection anywhere on the set path.
-	internal abstract object? DefaultValueBoxed { get; }
-	internal abstract void RaiseChanged(DependencyObject owner, object? oldValue, object? newValue);
-	internal abstract object? CoerceBoxed(DependencyObject owner, object? value);
+	// Seams for callers that hold only the non-generic property — a style setter's boxed value, clearing a rung. The
+	// typed subclass unboxes once and writes the typed store, so there is no reflection on the set path.
+	internal abstract void SetRungBoxed(DependencyObject target, DependencyObject.ValueRung rung, object? value);
+	internal abstract void ClearRung(DependencyObject target, DependencyObject.ValueRung rung);
+
+	/// <summary>The property's value on <paramref name="target"/> as a <see cref="DependencyObject"/>, or null when it
+	/// holds none (or holds a value type) — how a property path steps from one object to the next.</summary>
+	internal abstract DependencyObject? GetObjectValue(DependencyObject target);
 
 	public override string ToString() => $"{Name}#{GlobalIndex}";
 }
 
 /// <summary>The concrete, typed dependency property.</summary>
-public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty where TOwner : DependencyObject
+public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAnimationTarget<TValue> where TOwner : DependencyObject
 {
 	internal DependencyProperty(string name, DependencyPropertyKind kind, PropertyMetadata<TOwner, TValue> metadata)
-		: base(name, kind, metadata.Invalidates) => Metadata = metadata;
+		: base(name, kind, metadata.Invalidates)
+	{
+		Metadata = metadata;
+		Lerp = metadata.Lerp ?? Lerps.For<TValue>();
+	}
 
 	public PropertyMetadata<TOwner, TValue> Metadata { get; }
 
-	/// <summary>The typed default — boxed only when crossing the non-generic store seam, not on the generic fast path.</summary>
+	/// <summary>The typed default.</summary>
 	public TValue DefaultValue => Metadata.DefaultValue;
 
-	internal override object? DefaultValueBoxed => Metadata.DefaultValue;
+	/// <summary>How the property interpolates when animated: the metadata's, else the standard one for its type, else
+	/// null (not animatable).</summary>
+	public Lerp<TValue>? Lerp { get; }
 
-	internal override void RaiseChanged(DependencyObject owner, object? oldValue, object? newValue) =>
-		Metadata.PropertyChanged?.Invoke((TOwner)owner, (TValue)oldValue!, (TValue)newValue!);
+	public override bool IsAnimatable => Lerp is not null;
 
-	internal override object? CoerceBoxed(DependencyObject owner, object? value) =>
-		Metadata.Coerce is { } coerce ? coerce((TOwner)owner, (TValue)value!) : value;
+	internal override void SetRungBoxed(DependencyObject target, DependencyObject.ValueRung rung, object? value) =>
+		target.SetRung(this, rung, (TValue)value!, hasValue: true);
+
+	internal override void ClearRung(DependencyObject target, DependencyObject.ValueRung rung) =>
+		target.SetRung(this, rung, default!, hasValue: false);
+
+	internal override DependencyObject? GetObjectValue(DependencyObject target) =>
+		typeof(TValue).IsValueType ? null : target.GetValue(this) as DependencyObject;
+
+	string IAnimationTarget.ValueTypeName => typeof(TValue).Name;
+
+	TValue IAnimationTarget<TValue>.Read(DependencyObject target) => target.GetValue(this);
+
+	void IAnimationTarget<TValue>.Write(DependencyObject target, TValue value) => target.SetAnimatedValue(this, value);
+
+	void IAnimationTarget<TValue>.Release(DependencyObject target) => target.ClearAnimatedValue(this);
 }

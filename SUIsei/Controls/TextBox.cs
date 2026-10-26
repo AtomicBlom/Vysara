@@ -163,6 +163,8 @@ public sealed class TextBox : Control
 	/// <summary>The caret's arranged rect within the field (test seam).</summary>
 	internal Rect CaretRect => _caretVisual.LayoutRect;
 
+	private protected override HdrColor? BaseFill => Background;
+
 	private protected override VisualContent? UpdateContent()
 	{
 		var brush = _focused ? FocusBorder : _pointerOver ? HoverBorder : BorderBrush;

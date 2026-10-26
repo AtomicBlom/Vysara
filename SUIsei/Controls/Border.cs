@@ -59,6 +59,8 @@ public sealed class Border : FrameworkElement
 		return finalSize;
 	}
 
+	private protected override HdrColor? BaseFill => Background;
+
 	private protected override VisualContent? UpdateContent()
 	{
 		var fill = AnimatedFill ?? Background;

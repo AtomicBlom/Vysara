@@ -244,7 +244,7 @@ public sealed class AnimationTests
 	[Test]
 	public void Declarative_target_property_resolves_to_a_channel()
 	{
-		// The path a generated storyboard uses: Target + TargetProperty (strings) instead of an explicit closure.
+		// The path a generated storyboard uses: Target + TargetProperty instead of an explicit closure.
 		var (border, _) = LaidOutBorder();
 		var clock = new AnimationClock();
 		clock.Begin(StoryboardOf(new ColorAnimation
@@ -253,7 +253,7 @@ public sealed class AnimationTests
 			To = new HdrColor(1, 1, 1, 1),
 			Duration = TimeSpan.FromSeconds(1),
 			Target = border,
-			TargetProperty = "Background",
+			TargetProperty = PropertyPath.Fill,
 		}));
 
 		clock.Advance(0.5);

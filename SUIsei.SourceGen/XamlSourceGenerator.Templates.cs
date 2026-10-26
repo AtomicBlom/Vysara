@@ -72,94 +72,6 @@ partial class XamlSourceGenerator
 		scope.Emit($"global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
 	}
 
-	// Build a Storyboard local and return its variable name.
-	private static string EmitStoryboard(Gen gen, Scope scope, XElement sbEl)
-	{
-		var sbVar = NewName(gen, "__sb");
-		scope.Emit($"var {sbVar} = new global::SUIsei.Animation.Storyboard();");
-		foreach (var animEl in sbEl.Elements())
-			EmitAnimation(gen, scope, sbVar, animEl);
-		return sbVar;
-	}
-
-	private static void EmitAnimation(Gen gen, Scope scope, string sbVar, XElement animEl)
-	{
-		var kind = animEl.Name.LocalName;
-		var typeName = kind switch
-		{
-			"ColorAnimation" => "global::SUIsei.Animation.ColorAnimation",
-			"DoubleAnimation" => "global::SUIsei.Animation.DoubleAnimation",
-			_ => null,
-		};
-		if (typeName is null) { gen.Report(BadPropertyElement, animEl, kind); return; }
-
-		var animVar = NewName(gen, "__anim");
-		scope.Emit($"var {animVar} = new {typeName}();");
-
-		string? targetName = null, targetProp = null;
-		foreach (var attr in animEl.Attributes())
-		{
-			if (attr.IsNamespaceDeclaration)
-				continue;
-			switch (attr.Name.LocalName)
-			{
-				case "Storyboard.TargetName": targetName = attr.Value.Trim(); break;
-				case "Storyboard.TargetProperty": targetProp = attr.Value.Trim(); break;
-				case "From": EmitAnimationValue(gen, scope, animVar, "From", kind, attr); break;
-				case "To": EmitAnimationValue(gen, scope, animVar, "To", kind, attr); break;
-				case "By" when kind == "DoubleAnimation": EmitAnimationValue(gen, scope, animVar, "By", kind, attr); break;
-				case "Duration":
-					if (TryParseDuration(attr.Value, out var d)) scope.Emit($"{animVar}.Duration = global::System.TimeSpan.FromSeconds({Fmt(d)});");
-					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "Duration");
-					break;
-				case "BeginTime":
-					if (TryParseDuration(attr.Value, out var bt)) scope.Emit($"{animVar}.BeginTime = global::System.TimeSpan.FromSeconds({Fmt(bt)});");
-					else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "BeginTime");
-					break;
-				case "AutoReverse":
-					scope.Emit($"{animVar}.AutoReverse = {(string.Equals(attr.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")};");
-					break;
-				case "FillBehavior":
-					scope.Emit($"{animVar}.FillBehavior = global::SUIsei.Animation.FillBehavior.{(attr.Value.Trim() == "Stop" ? "Stop" : "HoldEnd")};");
-					break;
-				case "RepeatBehavior":
-					scope.Emit($"{animVar}.RepeatBehavior = {RepeatBehaviorExpr(attr.Value)};");
-					break;
-			}
-		}
-
-		if (targetName is not null)
-		{
-			if (!scope.Names.Contains(targetName)) gen.Report(BadStoryboardTarget, animEl, targetName);
-			else scope.Emit($"{animVar}.Target = {targetName};");
-		}
-		if (targetProp is not null)
-		{
-			if (!IsAnimatableChannel(targetProp)) gen.Report(BadAnimationProperty, animEl, targetProp);
-			scope.Emit($"{animVar}.TargetProperty = {Quote(targetProp)};");
-		}
-		scope.Emit($"{sbVar}.Children.Add({animVar});");
-	}
-
-	private static void EmitAnimationValue(Gen gen, Scope scope, string animVar, string prop, string kind, XAttribute attr)
-	{
-		if (kind == "ColorAnimation")
-		{
-			if (TryParseColor(attr.Value, out var code)) scope.Emit($"{animVar}.{prop} = {code};");
-			else gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "colour");
-		}
-		else // DoubleAnimation
-		{
-			if (double.TryParse(attr.Value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-				scope.Emit($"{animVar}.{prop} = {attr.Value.Trim()}d;");
-			else
-				gen.Report(BadLiteralValue, attr, attr.Value.Trim(), "number");
-		}
-	}
-
-	private static bool IsAnimatableChannel(string property) => property is
-		"Opacity" or "Background" or "Foreground" or "Fill" or "RenderTransform.Translate.X" or "RenderTransform.Translate.Y";
-
 	// --- Templates: ControlTemplate / DataTemplate / ItemsPanelTemplate factories ---
 
 	private static void EmitControlTemplateProperty(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
@@ -270,13 +182,15 @@ partial class XamlSourceGenerator
 			scope.Emit($"{host}.ContentChanged += (_, _) => {targetVar}.{prop.Name} = {host}.Content;");
 			return;
 		}
-		// Otherwise the source must be a dependency property on the templated control.
-		if (scope.DataRootType is null || FindDependencyProperty(scope.DataRootType, sourceProp) is not { } dp)
+		// Otherwise the source must be a typed dependency property on the templated control; the push is typed too, so a
+		// value-type property reaches the child unboxed.
+		if (scope.DataRootType is null || FindDependencyProperty(scope.DataRootType, sourceProp) is not { } dp || DependencyValueType(dp) is null)
 		{
-			gen.Report(BadAnimationProperty, attr, sourceProp);
+			gen.Report(BadPropertyPath, attr, sourceProp,
+				$"{scope.DataRootType?.Name ?? "the templated control"} has no dependency property '{sourceProp}Property'");
 			return;
 		}
-		scope.Emit($"{scope.DataRootExpr}.RegisterTemplateBinding({Fq(dp.ContainingType!)}.{dp.Name}, __v => {targetVar}.{prop.Name} = ({Fq(prop.Type)})__v!);");
+		scope.Emit($"{scope.DataRootExpr}.RegisterTemplateBinding({Fq(dp.ContainingType!)}.{dp.Name}, __v => {targetVar}.{prop.Name} = ({Fq(prop.Type)})__v);");
 	}
 
 	// --- Resources + Style markup ---

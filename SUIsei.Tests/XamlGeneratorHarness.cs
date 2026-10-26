@@ -52,6 +52,11 @@ internal static class XamlGeneratorHarness
 		return (driver, compilation);
 	}
 
+	/// <summary>Swap the driver's .xaml for an edited version, as an IDE does on a XAML Hot Reload edit, ready to run
+	/// again against the same compilation.</summary>
+	public static GeneratorDriver Edit(GeneratorDriver driver, string xaml, string xamlPath = "Test.xaml") =>
+		driver.ReplaceAdditionalTexts([new XamlText(xamlPath, xaml)]);
+
 	/// <summary>Run the generator once and return the run result (generated sources + diagnostics).</summary>
 	public static GeneratorDriverRunResult Run(string xaml, string? codeBehind = null, string xamlPath = "Test.xaml")
 	{
