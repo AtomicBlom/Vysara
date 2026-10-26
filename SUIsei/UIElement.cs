@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Extensions;
 using SUIsei.Media;
@@ -11,8 +12,12 @@ namespace SUIsei;
 /// owned composition <see cref="Visual"/>, render-affecting DPs, routed events (pointer + keyboard + focus),
 /// hit-testing, and focus/capture queries. The WinUI <c>MeasureCore</c>/<c>ArrangeCore</c> seam lets
 /// <see cref="FrameworkElement"/> layer Margin/Min/Max/alignment on top of the element's intrinsic sizing.
+/// <para>
+/// While it is in a live tree an element listens to the brushes and the transform it shows, so a change to a shared one
+/// reaches it on the visual path, with no layout; it stops listening when it leaves, so they do not keep it alive.
+/// </para>
 /// </summary>
-public abstract class UIElement : DependencyObject
+public abstract class UIElement : DependencyObject, ISubPropertyListener
 {
 	// --- Dependency properties ---
 
@@ -104,8 +109,44 @@ public abstract class UIElement : DependencyObject
 	public event RoutedEventHandler GotFocus { add => AddHandler(GotFocusEvent, value); remove => RemoveHandler(GotFocusEvent, value); }
 	public event RoutedEventHandler LostFocus { add => AddHandler(LostFocusEvent, value); remove => RemoveHandler(LostFocusEvent, value); }
 
-	/// <summary>A local render transform, composed under layout placement (animatable later).</summary>
-	public Matrix3x2 RenderTransform { get; set; } = Matrix3x2.Identity;
+	/// <summary>The transform applied to the element as it is drawn, about <see cref="RenderTransformOrigin"/>, with no
+	/// effect on layout. Its properties animate through paths such as
+	/// <c>(UIElement.RenderTransform).(CompositeTransform.TranslateX)</c>.</summary>
+	public static readonly DependencyProperty<UIElement, Transform?> RenderTransformProperty =
+		DependencyProperty.Register(nameof(RenderTransform),
+			new PropertyMetadata<UIElement, Transform?> { PropertyChanged = static (e, old, @new) => e.OnRenderTransformChanged(old, @new) });
+
+	/// <summary>The point <see cref="RenderTransform"/> is applied about, as a fraction of the element's size: (0,0) its
+	/// top left, (0.5,0.5) its centre.</summary>
+	public static readonly DependencyProperty<UIElement, Point> RenderTransformOriginProperty =
+		DependencyProperty.Register(nameof(RenderTransformOrigin),
+			new PropertyMetadata<UIElement, Point> { PropertyChanged = static (e, _, _) => e.ApplyTransform() });
+
+	/// <summary>The transform applied to the element as it is drawn, with no effect on layout; null for none.</summary>
+	public Transform? RenderTransform { get => GetValue(RenderTransformProperty); set => SetValue(RenderTransformProperty, value); }
+
+	/// <summary>The point <see cref="RenderTransform"/> is applied about, relative to the element's size.</summary>
+	public Point RenderTransformOrigin { get => GetValue(RenderTransformOriginProperty); set => SetValue(RenderTransformOriginProperty, value); }
+
+	/// <summary>
+	/// An offset in DIPs added to where the element is drawn, after its <see cref="RenderTransform"/>, as WinUI 3's
+	/// <c>UIElement.Translation</c>. A plain property rather than a dependency property: setting it writes the element's
+	/// composition visual directly, with no layout and no property-store cost, so it suits a value set every frame, such
+	/// as a label tracking a point in a 3D scene. Hit-testing and <see cref="TransformToVisual"/> follow it. Animate it
+	/// from code with <see cref="Animation.AnimationClock.Tween{TTarget, T}(TTarget, Func{TTarget, T}, Action{TTarget, T}, T, TimeSpan, Animation.IEasingFunction, Animation.Lerp{T})"/>.
+	/// SUIsei composites in 2D, so <c>Z</c> is kept but moves nothing, as it moves nothing in WinUI without a perspective.
+	/// </summary>
+	public Vector3 Translation
+	{
+		get;
+		set
+		{
+			if (field == value)
+				return;
+			field = value;
+			ApplyTransform();
+		}
+	}
 
 	/// <summary>Whether this element always clips its subtree to its layout bounds, as a control that needs it
 	/// (ScrollViewer, TextBox) sets it. Markup asks for the same with <see cref="Clipping.ClipToBoundsProperty"/>; the
@@ -131,9 +172,77 @@ public abstract class UIElement : DependencyObject
 
 	internal void SetAttachedRoot(UIRoot? root)
 	{
+		var wasAttached = AttachedRoot is not null;
 		AttachedRoot = root;
+		if (wasAttached != root is not null)
+			OnLiveTreeChanged(root is not null);
 		foreach (var child in VisualChildren)
 			child.SetAttachedRoot(root);
+	}
+
+	/// <summary>
+	/// The element joined (<paramref name="attached"/>) or left a live tree: start or stop listening to the brushes and
+	/// transform it shows. An override registers its own brush properties through <see cref="Listen(Brush, bool)"/> and calls the
+	/// base. Joining also marks the visual dirty, since a shared brush may have changed while the element was away.
+	/// </summary>
+	private protected virtual void OnLiveTreeChanged(bool attached)
+	{
+		Listen(RenderTransform, attached);
+		if (attached)
+			Visual.MarkDirty();
+	}
+
+	/// <summary>Start or stop listening to <paramref name="brush"/>.</summary>
+	private protected void Listen(Brush? brush, bool listen)
+	{
+		if (brush is null)
+			return;
+		if (listen)
+			brush.AddListener(this);
+		else
+			brush.RemoveListener(this);
+	}
+
+	private void Listen(Transform? transform, bool listen)
+	{
+		if (transform is null)
+			return;
+		if (listen)
+			transform.AddListener(this);
+		else
+			transform.RemoveListener(this);
+	}
+
+	/// <summary>A brush property changed from <paramref name="old"/> to <paramref name="new"/>: move the listener
+	/// registration if the element is in a live tree, and repaint its content in place, with no layout.</summary>
+	private protected void OnBrushChanged(Brush? old, Brush? @new)
+	{
+		if (AttachedRoot is not null)
+		{
+			Listen(old, false);
+			Listen(@new, true);
+		}
+		InvalidateContent();
+	}
+
+	private void OnRenderTransformChanged(Transform? old, Transform? @new)
+	{
+		if (AttachedRoot is not null)
+		{
+			Listen(old, false);
+			Listen(@new, true);
+		}
+		ApplyTransform();
+	}
+
+	void ISubPropertyListener.OnSubPropertyChanged(DependencyObject source)
+	{
+		// A transform moved: recompose the visual's transform. A brush changed its paint in place: the content already
+		// holds that paint, so the visual only needs recompositing.
+		if (source is Transform)
+			ApplyTransform();
+		else
+			Visual.MarkDirty();
 	}
 
 	/// <summary>The composition node this element owns. Layout writes its transform/size;
@@ -216,61 +325,94 @@ public abstract class UIElement : DependencyObject
 		Visual.MarkDirty();
 	}
 
-	// --- Independent (no-relayout) animation channels ---
-	// The animation clock writes these directly and marks the visual dirty; because they are composed back into the
-	// visual in SyncVisual, a later relayout cannot clobber them. RenderTransform is not a dependency property, so a
-	// translate animation rides this override rather than the DP rung (Opacity, a DP, goes through SetAnimatedValue).
+	// --- The visual's transform ---
 
-	private Vector2 _animatedTranslate;
-	private bool _hasAnimatedTranslate;
-	private HdrColor? _animatedFill;
-
-	/// <summary>The animation-overridden brush, if any; a content-bearing control's <see cref="UpdateContent"/> prefers
-	/// it over its background so a colour animation drives the brush on the no-relayout visual path.</summary>
-	private protected HdrColor? AnimatedFill => _animatedFill;
-
-	/// <summary>The colour this element paints now: the animated fill if one is running, else its own
-	/// (<see cref="BaseFill"/>), else transparent. Where a colour animation with no <c>From</c> starts.</summary>
-	internal HdrColor CurrentFill => _animatedFill ?? BaseFill ?? HdrColor.Transparent;
-
-	/// <summary>The colour the animated fill overrides — a control's background, a text block's foreground — or null
-	/// for an element that paints none.</summary>
-	private protected virtual HdrColor? BaseFill => null;
-
-	/// <summary>The offset an animation currently adds to the render transform; zero when none is running.</summary>
-	internal Vector2 AnimatedTranslate => _animatedTranslate;
-
-	/// <summary>The element's effective composition transform: render transform, plus any animated translate, placed
-	/// at the layout position. Used by both <see cref="SyncVisual"/> and the translate animation so they agree.</summary>
+	/// <summary>The element's composition transform: its render transform about its origin, then its translation, placed
+	/// at its layout position. Layout (<see cref="SyncVisual"/>), a transform change and <see cref="Translation"/> all
+	/// compose it here, so they agree.</summary>
 	private Matrix3x2 ComposeTransform()
 	{
-		var t = RenderTransform;
-		if (_hasAnimatedTranslate)
-			t *= Matrix3x2.CreateTranslation(_animatedTranslate);
-		return t * Matrix3x2.CreateTranslation(LayoutRect.X, LayoutRect.Y);
+		var t = Matrix3x2.Identity;
+		if (RenderTransform is { } render)
+		{
+			var origin = RenderTransformOrigin;
+			var pivot = new Vector2(origin.X * LayoutRect.Width, origin.Y * LayoutRect.Height);
+			t = Matrix3x2.CreateTranslation(-pivot) * render.ToMatrix() * Matrix3x2.CreateTranslation(pivot);
+		}
+		return t * Matrix3x2.CreateTranslation(Translation.X + LayoutRect.X, Translation.Y + LayoutRect.Y);
 	}
 
-	private void ApplyAnimatedTransform()
+	/// <summary>Write the composed transform to the visual (which marks it dirty if it moved), with no layout.</summary>
+	private void ApplyTransform() => Visual.Transform = ComposeTransform();
+
+	// --- Background transitions ---
+
+	// A running BrushTransition: the colour the background moves from and to, and the paint it shows meanwhile.
+	private sealed class RunningTransition
 	{
-		Visual.Transform = ComposeTransform();
-		Visual.MarkDirty();
+		public readonly CompositionColorBrush Paint = new();
+		public HdrColor From;
+		public HdrColor To;
+		public bool Running;
 	}
 
-	internal void SetAnimatedTranslateX(float x) { _animatedTranslate.X = x; _hasAnimatedTranslate = true; ApplyAnimatedTransform(); }
-	internal void SetAnimatedTranslateY(float y) { _animatedTranslate.Y = y; _hasAnimatedTranslate = true; ApplyAnimatedTransform(); }
+	private RunningTransition? _backgroundTransition;
 
-	internal void ClearAnimatedTranslate()
+	/// <summary>The paint an element's background shows for <paramref name="background"/>: its brush's own, or the
+	/// transition's while a <see cref="BrushTransition"/> is running.</summary>
+	private protected CompositionBrush? BackgroundPaint(Brush? background) =>
+		_backgroundTransition is { Running: true } transition ? transition.Paint : background?.CompositionBrush;
+
+	/// <summary>
+	/// The background changed from <paramref name="old"/> to <paramref name="new"/>: with a <paramref name="transition"/>,
+	/// the element on a live host's clock, and solid colours on both sides (or a solid colour and no brush, which fades
+	/// that colour in or out), animate from the colour on screen to the new one. Otherwise end any transition, so the new
+	/// brush shows at once. Call before updating the content.
+	/// </summary>
+	private protected void TransitionBackground(BrushTransition? transition, Brush? old, Brush? @new)
 	{
-		_hasAnimatedTranslate = false;
-		_animatedTranslate = default;
-		ApplyAnimatedTransform();
+		if (transition is null || AttachedRoot?.Clock is not { } clock || !TryFade(old, @new, out var start, out var end))
+		{
+			if (_backgroundTransition is { } running)
+				running.Running = false;
+			return;
+		}
+
+		var state = _backgroundTransition ??= new RunningTransition();
+		state.From = state.Running ? state.Paint.Color : start;
+		state.To = end;
+		state.Paint.Color = state.From;
+		state.Running = true;
+		clock.Tween(this, static _ => 0f, static (e, progress) => e.StepBackgroundTransition(progress), 1f, transition.Duration);
+
+		// The colours a fade runs between: each solid brush's colour with its opacity folded into the alpha, and for a
+		// missing brush the other's colour made transparent. False for anything else.
+		static bool TryFade(Brush? old, Brush? @new, out HdrColor start, out HdrColor end)
+		{
+			start = end = default;
+			if (old is not (null or SolidColorBrush) || @new is not (null or SolidColorBrush) || (old is null && @new is null))
+				return false;
+			start = old is SolidColorBrush o ? Shown(o) : Shown((SolidColorBrush)@new!) with { A = 0f };
+			end = @new is SolidColorBrush n ? Shown(n) : start with { A = 0f };
+			return true;
+		}
+
+		static HdrColor Shown(SolidColorBrush brush) => brush.Color with { A = brush.Color.A * brush.Opacity };
 	}
 
-	/// <summary>Push an animated brush onto this element's drawn content (no relayout).</summary>
-	internal void SetAnimatedFill(HdrColor color) { _animatedFill = color; InvalidateContent(); }
-
-	/// <summary>Clear the animated brush, reverting to the element's own background.</summary>
-	internal void ClearAnimatedFill() { _animatedFill = null; InvalidateContent(); }
+	private void StepBackgroundTransition(float progress)
+	{
+		if (_backgroundTransition is not { Running: true } state)
+			return;
+		if (progress < 1f)
+		{
+			state.Paint.Color = Lerps.Color(state.From, state.To, progress);
+			Visual.MarkDirty();
+			return;
+		}
+		state.Running = false;
+		InvalidateContent(); // hand the background back to the brush itself
+	}
 
 	/// <summary>Bring just this element's drawn content up to date in place (a brush/background change) against the
 	/// current <see cref="LayoutRect"/> — no relayout. Marks the visual dirty for the next composite.</summary>
@@ -336,7 +478,7 @@ public abstract class UIElement : DependencyObject
 	private RectContent? _rectContent;
 
 	/// <summary>This element's retained <see cref="RectContent"/>, updated to its layout size and the given paint.</summary>
-	private protected RectContent RetainedRect(HdrColor? fill, float cornerRadius = 0f, HdrColor? borderBrush = null, float borderThickness = 0f)
+	private protected RectContent RetainedRect(CompositionBrush? fill, float cornerRadius = 0f, CompositionBrush? borderBrush = null, float borderThickness = 0f)
 	{
 		var content = _rectContent ??= new RectContent();
 		content.Update(new Vector2(LayoutRect.Width, LayoutRect.Height), fill, cornerRadius, borderBrush, borderThickness);
@@ -477,13 +619,14 @@ public abstract class UIElement : DependencyObject
 
 	/// <summary>
 	/// Whether <paramref name="content"/>, drawn in an element's local space, covers <paramref name="local"/>: one case
-	/// per content kind, as the compositor draws one per kind. A rect covers its bounds, an image its destination rect
-	/// (not the letterbox around it), and text its element's layout bounds. Exact shape geometry is one more case here.
+	/// per content kind, as the compositor draws one per kind. A rect covers its bounds, except that one filled only by an
+	/// image covers just the image (not the letterbox around it), and text covers its element's layout bounds. Exact shape
+	/// geometry is one more case here.
 	/// </summary>
 	private static bool ContentContains(VisualContent content, Vector2 local, in Rect layoutRect) => content switch
 	{
+		RectContent { Fill: CompositionSurfaceBrush image, BorderBrush: null } rect => image.PaintedRect(rect.Size).Contains(local),
 		RectContent rect => new Rect(0f, 0f, rect.Size.X, rect.Size.Y).Contains(local),
-		ImageContent image => image.Dest.Contains(local),
 		_ => new Rect(0f, 0f, layoutRect.Width, layoutRect.Height).Contains(local),
 	};
 
@@ -504,22 +647,26 @@ public abstract class UIElement : DependencyObject
 	/// <summary>
 	/// A transform from this element's local space to <paramref name="visual"/>'s, or to the root's DIP space when it is
 	/// null, as WinUI's <c>UIElement.TransformToVisual</c>. It goes through the composed visual transforms, so render
-	/// transforms, animated translates and scroll offsets count. Valid until either element moves.
+	/// transforms, <see cref="Translation"/> and scroll offsets count. A snapshot: it does not follow either element when
+	/// it moves. The transform it returns is a <see cref="MatrixTransform"/>.
 	/// </summary>
 	/// <exception cref="ArgumentException"><paramref name="visual"/> is not in the same tree as this element.</exception>
 	public GeneralTransform TransformToVisual(UIElement? visual)
 	{
 		var toRoot = TransformToRoot(out var top);
 		if (visual is null)
-			return new MatrixGeneralTransform(toRoot);
+			return new MatrixTransform { Matrix = toRoot };
 
 		var otherToRoot = visual.TransformToRoot(out var otherTop);
 		var sameTree = ReferenceEquals(top, otherTop) || (AttachedRoot is not null && ReferenceEquals(AttachedRoot, visual.AttachedRoot));
 		if (!sameTree)
 			throw new ArgumentException("The element is not in the same tree as this one.", nameof(visual));
-		return new MatrixGeneralTransform(Matrix3x2.Invert(otherToRoot, out var rootToOther)
-			? toRoot * rootToOther
-			: new Matrix3x2(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN));
+		return new MatrixTransform
+		{
+			Matrix = Matrix3x2.Invert(otherToRoot, out var rootToOther)
+				? toRoot * rootToOther
+				: new Matrix3x2(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN),
+		};
 	}
 
 	internal void AdoptChild(UIElement child)

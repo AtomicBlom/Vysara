@@ -2,6 +2,7 @@ using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -19,7 +20,7 @@ public sealed class TemplateTests
 		Factory = control =>
 		{
 			var cc = (ContentControl)control;
-			var border = new Border { Background = HdrColor.FromRgb(10, 20, 30), CornerRadius = 4f };
+			var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(10, 20, 30)), CornerRadius = new CornerRadius(4f) };
 			var presenter = new ContentPresenter();
 			border.Child = presenter;
 			presenter.Content = cc.Content; // {TemplateBinding Content} — initial
@@ -95,7 +96,7 @@ public sealed class TemplateTests
 		// The button is now templated, so the animated fill lives on the template root (the Border), not the button.
 		var border = (Border)button.GetTemplateRoot()!;
 		var content = border.Visual.Content.ShouldBeOfType<RectContent>();
-		content.Fill.ShouldBe(HdrColor.FromRgb(80, 80, 95)); // the PointerOver background
+		content.Fill.SolidColor().ShouldBe(HdrColor.FromRgb(80, 80, 95)); // the PointerOver background
 	}
 
 	[Test]

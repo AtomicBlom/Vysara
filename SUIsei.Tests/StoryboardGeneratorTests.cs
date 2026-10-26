@@ -3,8 +3,9 @@ namespace SUIsei.Tests;
 /// <summary>
 /// Generator coverage for <c>&lt;VisualStateManager.VisualStateGroups&gt;</c> + <c>&lt;Storyboard&gt;</c> markup:
 /// the VSM groups, their state storyboards, each animation with its target, keyframes and easing functions, and
-/// <c>Storyboard.TargetProperty</c> paths resolved at compile time to dependency properties or element channels —
-/// no reflection, no runtime string lookup. Asserted on the generated source text, and compiled.
+/// <c>Storyboard.TargetProperty</c> paths resolved at compile time to dependency properties, through the brushes and
+/// transforms that hold them — no reflection, no runtime string lookup. Asserted on the generated source text, and
+/// compiled.
 /// </summary>
 public sealed class StoryboardGeneratorTests
 {
@@ -19,7 +20,7 @@ public sealed class StoryboardGeneratorTests
 		      <VisualState Name="Normal" />
 		      <VisualState Name="Highlighted">
 		        <Storyboard>
-		          <ColorAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="Background"
+		          <ColorAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
 		                          To="#5060A0" Duration="0:0:0.12" FillBehavior="HoldEnd" />
 		        </Storyboard>
 		      </VisualState>
@@ -66,7 +67,7 @@ public sealed class StoryboardGeneratorTests
 		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(0.12);");
 		code.ShouldContain(".FillBehavior = global::SUIsei.Animation.FillBehavior.HoldEnd;");
 		code.ShouldContain(".Target = Bg;");
-		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.Fill;");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Border.BackgroundProperty, global::SUIsei.Media.SolidColorBrush.ColorProperty);");
 		code.ShouldContain("global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups(Bg,");
 	}
 
@@ -90,23 +91,39 @@ public sealed class StoryboardGeneratorTests
 	}
 
 	[Test]
-	public void WinUI_brush_and_transform_paths_reach_the_element_channels()
+	public void WinUI_brush_and_transform_paths_step_through_the_objects_that_hold_them()
 	{
 		var xaml = View("""
 			<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#0000FF" />
 			<ColorAnimation Storyboard.TargetName="Label" Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)" To="#0000FF" />
 			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.TranslateX)" To="5" />
 			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="5" />
-			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="RenderTransform.Translate.X" To="5" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(Brush.Opacity)" To="0.5" />
 			""");
 		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
 		var code = result.AllGeneratedText();
 
 		result.DiagnosticIds().ShouldBeEmpty();
-		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.Fill;");
-		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.TranslateX;");
-		code.ShouldContain(".TargetProperty = global::SUIsei.Animation.PropertyPath.TranslateY;");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Border.BackgroundProperty, global::SUIsei.Media.SolidColorBrush.ColorProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.TextBlock.ForegroundProperty, global::SUIsei.Media.SolidColorBrush.ColorProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.UIElement.RenderTransformProperty, global::SUIsei.Media.CompositeTransform.TranslateXProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.UIElement.RenderTransformProperty, global::SUIsei.Media.TranslateTransform.YProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Border.BackgroundProperty, global::SUIsei.Media.Brush.OpacityProperty);");
 		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("<ColorAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Background\" To=\"Blue\" />", "(Border.Background).(SolidColorBrush.Color)")]
+	[Arguments("<ColorAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"(Border.Background)\" To=\"Blue\" />", "(Border.Background).(SolidColorBrush.Color)")]
+	[Arguments("<ColorAnimation Storyboard.TargetName=\"Label\" Storyboard.TargetProperty=\"Foreground\" To=\"Blue\" />", "(TextBlock.Foreground).(SolidColorBrush.Color)")]
+	[Arguments("<ColorAnimation Storyboard.TargetName=\"Host\" Storyboard.TargetProperty=\"Background\" To=\"Blue\" />", "(ContentControl.Background).(SolidColorBrush.Color)")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"RenderTransform.Translate.X\" To=\"5\" />", "(UIElement.RenderTransform).(TranslateTransform.X)")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"RenderTransform.Translate.Y\" To=\"5\" />", "(UIElement.RenderTransform).(TranslateTransform.Y)")]
+	public void The_animation_shorthand_from_before_brushes_diagnoses_SUISEI023_with_the_WinUI_path(string animation, string suggestion)
+	{
+		var diagnostic = XamlGeneratorHarness.Run(View(animation), CodeBehind).Diagnostics.Single();
+		diagnostic.Id.ShouldBe("SUISEI023");
+		diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldEndWith($"write the WinUI path '{suggestion}'");
 	}
 
 	[Test]
@@ -185,7 +202,7 @@ public sealed class StoryboardGeneratorTests
 	[Test]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\" Bogus=\"2\" />", "SUISEI004")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"lots\" />", "SUISEI012")]
-	[Arguments("<ColorAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Background\" From=\"Blurple\" />", "SUISEI012")]
+	[Arguments("<ColorAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"(Border.Background).(SolidColorBrush.Color)\" From=\"Blurple\" />", "SUISEI012")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\" Duration=\"later\" />", "SUISEI012")]
 	public void A_bad_animation_attribute_is_an_error(string animation, string id) =>
 		XamlGeneratorHarness.Run(View(animation), CodeBehind).DiagnosticIds().ShouldBe([id]);

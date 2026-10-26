@@ -6,7 +6,9 @@ namespace SUIsei;
 /// <summary>
 /// Loom's default <see cref="IUICompositor"/>: walks a surface's composition tree, folds transform/clip/opacity
 /// into a pre-transformed vertex/command stream, and exposes it as a neutral <see cref="DrawListData"/>. Emits the
-/// rectangle family (fills + borders) and MSDF glyph runs. Output is asserted on CPU via
+/// rectangle family (fills + borders) and MSDF glyph runs, painted by colour, linear-gradient or image brushes; a
+/// gradient is drawn exactly by cutting the geometry where its colour stops being linear
+/// (<see cref="GradientSplitter"/>). Output is asserted on CPU via
 /// <see cref="DrawListData.Dump"/> — the primary test seam, no backend needed.
 /// </summary>
 public sealed class DrawListCompositor : IUICompositor
@@ -159,24 +161,93 @@ public sealed class DrawListCompositor : IUICompositor
 			case RectContent rc:
 				{
 					var rect = new Rect(0, 0, rc.Size.X, rc.Size.Y);
+					var hasBorder = rc.BorderBrush is not null && rc.BorderThickness > 0;
 					if (rc.Fill is { } fill)
 					{
 						var kind = rc.CornerRadius > 0 ? UIPrimKind.RoundedRect : UIPrimKind.Fill;
 						// params = (cornerRadius, borderThickness, sizeX, sizeY) — the layout ui.slang's analytic rounded-box
 						// SDF reads (uv is 0..1 across the rect; the shader scales by params.zw to local pixels). Fill ignores it.
-						list.AddRect(rect, matrix, fill.ToPremultiplied(alpha), kind, new Vector4(rc.CornerRadius, 0f, rc.Size.X, rc.Size.Y), localClip);
+						var prm = new Vector4(rc.CornerRadius, 0f, rc.Size.X, rc.Size.Y);
+						if (fill is CompositionSurfaceBrush surface)
+						{
+							if (kind != UIPrimKind.Fill || hasBorder)
+								throw ImageOnShapedRect();
+							AddSurface(list, surface, rc.Size, matrix, alpha, localClip);
+						}
+						else
+							AddPaintedRect(list, fill, rect, matrix, alpha, kind, prm, localClip);
 					}
-					if (rc.BorderBrush is { } bb && rc.BorderThickness > 0)
-						list.AddRect(rect, matrix, bb.ToPremultiplied(alpha), UIPrimKind.Border, new Vector4(rc.CornerRadius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
+					if (hasBorder)
+					{
+						if (rc.BorderBrush is CompositionSurfaceBrush)
+							throw ImageOnShapedRect();
+						AddPaintedRect(list, rc.BorderBrush!, rect, matrix, alpha, UIPrimKind.Border,
+							new Vector4(rc.CornerRadius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
+					}
 					break;
 				}
 			case GlyphRunContent gr:
-				list.AddGlyphRun(gr.Text, gr.FontSizePx, gr.Color.ToPremultiplied(alpha), _font, matrix, localClip);
-				break;
-			case ImageContent ic:
-				// White tint (image unchanged) folded by the subtree opacity — the shader does colour *= texSample.
-				list.AddImage(ic.Dest, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, alpha), ic.Source, localClip);
+				switch (gr.Brush)
+				{
+					case CompositionColorBrush color:
+						list.AddGlyphRun(gr.Text, gr.FontSizePx, color.Color.ToPremultiplied(alpha * color.Opacity), _font, matrix, localClip);
+						break;
+					case CompositionLinearGradientBrush gradient:
+						gradient.ThrowIfUndefined();
+						list.AddGlyphRun(gr.Text, gr.FontSizePx, default, _font, matrix, localClip,
+							gradient, GradientLine.For(gradient, gr.Size), alpha * gradient.Opacity);
+						break;
+					case CompositionSurfaceBrush:
+						throw new NotSupportedException("An image brush cannot paint text yet: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
+				}
 				break;
 		}
 	}
+
+	// A rect painted by a colour or a linear gradient: one quad for a colour, as many bands as the gradient needs.
+	private static void AddPaintedRect(UIDrawList list, CompositionBrush paint, in Rect rect, in Matrix3x2 matrix, float alpha, UIPrimKind kind,
+		Vector4 prm, in Rect clip)
+	{
+		switch (paint)
+		{
+			case CompositionColorBrush color:
+				list.AddRect(rect, matrix, color.Color.ToPremultiplied(alpha * color.Opacity), kind, prm, clip);
+				break;
+			case CompositionLinearGradientBrush gradient:
+				{
+					gradient.ThrowIfUndefined();
+					Span<Vector2> corners = [new(rect.X, rect.Y), new(rect.Right, rect.Y), new(rect.Right, rect.Bottom), new(rect.X, rect.Bottom)];
+					Span<Vector2> uvs = [new(0f, 0f), new(1f, 0f), new(1f, 1f), new(0f, 1f)];
+					GradientSplitter.AddPolygon(list, corners, uvs, gradient, GradientLine.For(gradient, new Vector2(rect.Width, rect.Height)),
+						alpha * gradient.Opacity, matrix, kind, prm, clip, slot: 0);
+					break;
+				}
+			default:
+				throw new NotSupportedException($"The compositor cannot paint a {paint.GetType().Name}.");
+		}
+	}
+
+	// An image brush over a plain rect: the image placed by the brush's stretch and alignment, cut at the rect's edges by
+	// narrowing its uv range. White tint (image unchanged) folded by the subtree opacity — the shader does colour *= texSample.
+	private static void AddSurface(UIDrawList list, CompositionSurfaceBrush surface, Vector2 size, in Matrix3x2 matrix, float alpha, in Rect clip)
+	{
+		if (surface.Surface is not { } source)
+			return;
+		var image = surface.ImageRect(size);
+		var visible = image;
+		Vector2 uv0 = Vector2.Zero, uv1 = Vector2.One;
+		if (image.X < 0f || image.Y < 0f || image.Right > size.X || image.Bottom > size.Y)
+		{
+			visible = image.Intersect(new Rect(0f, 0f, size.X, size.Y));
+			if (visible.IsEmpty)
+				return;
+			uv0 = new Vector2((visible.X - image.X) / image.Width, (visible.Y - image.Y) / image.Height);
+			uv1 = new Vector2((visible.Right - image.X) / image.Width, (visible.Bottom - image.Y) / image.Height);
+		}
+		list.AddImage(visible, uv0, uv1, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, alpha * surface.Opacity), source, clip);
+	}
+
+	private static NotSupportedException ImageOnShapedRect() => new(
+		"An image brush cannot paint a rectangle with rounded corners or a border yet, nor a border itself: that needs the " +
+		"vector primitive, which SUIsei does not have yet. Use square corners and no border, or draw the image in a separate element.");
 }

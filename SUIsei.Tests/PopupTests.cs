@@ -1,7 +1,7 @@
 using System.Numerics;
-
 using SUIsei.Controls;
 using SUIsei.Input;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -17,7 +17,7 @@ public sealed class PopupTests
 		var view = host.CreateRoot(UILayer.Default);
 		var popup = new Popup
 		{
-			Child = new Border { Width = 50f, Height = 30f, Background = HdrColor.FromRgb(10, 10, 10) },
+			Child = new Border { Width = 50f, Height = 30f, Background = new SolidColorBrush(HdrColor.FromRgb(10, 10, 10)) },
 			HorizontalOffset = 100f,
 			VerticalOffset = 100f,
 		};

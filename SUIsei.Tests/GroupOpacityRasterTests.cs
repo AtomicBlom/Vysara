@@ -25,7 +25,7 @@ public sealed class GroupOpacityRasterTests
 	private static SpriteVisual Fill(float x, float y, float w, float h, HdrColor color) => new()
 	{
 		Transform = Matrix3x2.CreateTranslation(x, y),
-		Content = new RectContent(new Vector2(w, h), color),
+		Content = new RectContent(new Vector2(w, h), new CompositionColorBrush(color)),
 	};
 
 	private static byte[] RenderFadedRedGroup(float opacity, out SoftwareRasterizer rast)

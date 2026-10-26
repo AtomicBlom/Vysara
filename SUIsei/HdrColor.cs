@@ -1,3 +1,4 @@
+using System.Numerics;
 using SUIsei.Drawing;
 using SUIsei.Markup;
 
@@ -42,8 +43,16 @@ public readonly record struct HdrColor(float R, float G, float B, float A)
 	/// </summary>
 	public PremultipliedHdrColor ToPremultiplied(float opacity = 1f)
 	{
+		var v = ToPremultipliedVector(opacity);
+		return PremultipliedHdrColor.FromPremultiplied(v.X, v.Y, v.Z, v.W);
+	}
+
+	/// <summary>As <see cref="ToPremultiplied"/>, in single precision: linear light, premultiplied. Gradient colours are
+	/// computed with it, so a gradient sampled at a stop gives exactly the stop's colour.</summary>
+	internal Vector4 ToPremultipliedVector(float opacity = 1f)
+	{
 		var a = A * opacity;
-		return PremultipliedHdrColor.FromPremultiplied(SrgbToLinear(R) * a, SrgbToLinear(G) * a, SrgbToLinear(B) * a, a);
+		return new Vector4(SrgbToLinear(R) * a, SrgbToLinear(G) * a, SrgbToLinear(B) * a, a);
 	}
 
 	/// <summary>

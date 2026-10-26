@@ -113,7 +113,7 @@ public sealed class IndexWindowTests
 	private static SpriteVisual Quad(int i) => new()
 	{
 		Transform = Matrix3x2.CreateTranslation(i % Columns, i / Columns),
-		Content = new RectContent(new Vector2(2, 2), HdrColor.FromRgb((byte)i, (byte)(i >> 8), (byte)(i * 37))),
+		Content = new RectContent(new Vector2(2, 2), new CompositionColorBrush(HdrColor.FromRgb((byte)i, (byte)(i >> 8), (byte)(i * 37)))),
 	};
 
 	// Two overlapping opaque rects under a half-opacity container: a group the compositor draws as one layer.
@@ -123,12 +123,12 @@ public sealed class IndexWindowTests
 		group.Add(new SpriteVisual
 		{
 			Transform = Matrix3x2.CreateTranslation(20, 20),
-			Content = new RectContent(new Vector2(60, 60), HdrColor.FromRgb(255, 255, 255)),
+			Content = new RectContent(new Vector2(60, 60), new CompositionColorBrush(HdrColor.FromRgb(255, 255, 255))),
 		});
 		group.Add(new SpriteVisual
 		{
 			Transform = Matrix3x2.CreateTranslation(50, 50),
-			Content = new RectContent(new Vector2(60, 60), HdrColor.FromRgb(0, 0, 0)),
+			Content = new RectContent(new Vector2(60, 60), new CompositionColorBrush(HdrColor.FromRgb(0, 0, 0))),
 		});
 		return group;
 	}

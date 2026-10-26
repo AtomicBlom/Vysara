@@ -9,9 +9,10 @@ namespace SUIsei.Rasterizer;
 /// A CPU reference rasterizer for the neutral <see cref="DrawListData"/> — the software twin of the engine's
 /// <c>ui.slang</c> fragment shader (Loom.Shaders/Shaders/ui.slang). It walks the draw commands, rasterizes each
 /// triangle of every quad, and shades per pixel with the same analytic math the GPU ran: rounded-box SDFs for
-/// rect/border, and (later) MTSDF coverage for glyphs. Compositing is premultiplied alpha-over in <b>linear</b>
+/// rect/border, and MTSDF coverage for glyphs. Compositing is premultiplied alpha-over in <b>linear</b>
 /// space (the GPU rendered to a linear target and re-encoded sRGB on store), so <see cref="ResolveToRgba8"/> does
-/// that sRGB encode itself.
+/// that sRGB encode itself. Pixels are sampled at their centres with the GPU's top-left fill rule, so a centre on an edge
+/// two triangles share (a quad's diagonal, the cut between a gradient's bands) is drawn once, never twice or not at all.
 ///
 /// Covers all five drawable kinds: <see cref="UIPrimKind.Fill"/>/<see cref="UIPrimKind.RoundedRect"/>/<see cref="UIPrimKind.Border"/>
 /// (analytic) plus <see cref="UIPrimKind.Glyph"/> (MTSDF) and <see cref="UIPrimKind.Image"/> (tinted blit), which
@@ -54,6 +55,10 @@ public sealed class SoftwareRasterizer
 
 	public int Width => _width;
 	public int Height => _height;
+
+	/// <summary>The framebuffer's value at pixel (<paramref name="x"/>, <paramref name="y"/>): linear light, premultiplied,
+	/// before any clamp, so colours above paper white read as drawn.</summary>
+	public Vector4 ReadLinear(int x, int y) => _fb[y * _width + x];
 
 	/// <summary>Triangles rasterized by the last <see cref="Render"/> call (perf-shape instrumentation).</summary>
 	public int TrianglesDrawn { get; private set; }
@@ -435,8 +440,12 @@ public sealed class SoftwareRasterizer
 				var w0 = Edge(p1, p2, pt) * inv;
 				var w1 = Edge(p2, p0, pt) * inv;
 				var w2 = Edge(p0, p1, pt) * inv;
-				if (w0 < 0f || w1 < 0f || w2 < 0f)
+				if (w0 < -NearEdge || w1 < -NearEdge || w2 < -NearEdge)
 					continue; // outside (winding handled by the sign of inv)
+							  // A centre on or within rounding of an edge: decide it as a GPU does, so a pixel on an edge two triangles
+							  // share (a quad's diagonal, the cut between two gradient bands) is drawn by exactly one of them.
+				if ((w0 <= NearEdge || w1 <= NearEdge || w2 <= NearEdge) && !Owns(p0, p1, p2, pt, area > 0f))
+					continue;
 
 				var uv = w0 * va.Uv + w1 * vb.Uv + w2 * vc.Uv;
 				var col = w0 * c0 + w1 * c1 + w2 * c2;     // premultiplied, linear
@@ -527,6 +536,31 @@ public sealed class SoftwareRasterizer
 
 	private static float Edge(Vector2 a, Vector2 b, Vector2 p) =>
 		(b.X - a.X) * (p.Y - a.Y) - (b.Y - a.Y) * (p.X - a.X);
+
+	// How close (as a barycentric weight) a pixel centre must be to an edge before the fill rule decides it rather than
+	// the plain inside test: wide enough to cover the rounding between two triangles' views of a shared edge.
+	private const float NearEdge = 1e-5f;
+
+	// The GPU fill rule for a pixel centre at or near an edge: inside each edge, decided from that edge's own canonical
+	// orientation so two triangles sharing it see exactly opposite values, and a centre exactly on an edge belongs to the
+	// triangle for which that edge is a top or left one (Direct3D's and Vulkan's top-left rule).
+	private static bool Owns(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 pt, bool positive) =>
+		InsideEdge(p1, p2, pt, positive) && InsideEdge(p2, p0, pt, positive) && InsideEdge(p0, p1, pt, positive);
+
+	private static bool InsideEdge(Vector2 a, Vector2 b, Vector2 p, bool positive)
+	{
+		if (!positive)
+			(a, b) = (b, a); // orient the edge so the triangle lies on its positive side
+		var e = Precedes(a, b) ? Edge(a, b, p) : -Edge(b, a, p);
+		if (e != 0f)
+			return e > 0f;
+		// On the edge. In y-down pixels, with the triangle on the positive side, a top edge runs horizontally rightwards
+		// (the triangle below it) and a left edge runs upwards (the triangle to its right).
+		var d = b - a;
+		return d.Y < 0f || (d.Y == 0f && d.X > 0f);
+	}
+
+	private static bool Precedes(Vector2 a, Vector2 b) => a.X < b.X || (a.X == b.X && a.Y < b.Y);
 
 	private static float Median3(float a, float b, float c) =>
 		MathF.Max(MathF.Min(a, b), MathF.Min(MathF.Max(a, b), c));

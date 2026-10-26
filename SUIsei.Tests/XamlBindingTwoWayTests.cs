@@ -135,7 +135,7 @@ public sealed class XamlBindingTwoWayTests
 			    }
 			    class FallbackViewModel3 : INotifyPropertyChanged
 			    {
-			        public SUIsei.HdrColor? Tint { get; set; }
+			        public SUIsei.Media.Brush? Tint { get; set; }
 			        public event PropertyChangedEventHandler? PropertyChanged;
 			    }
 			}
@@ -143,7 +143,7 @@ public sealed class XamlBindingTwoWayTests
 
 		var result = XamlGeneratorHarness.Run(xaml, codeBehind);
 		result.Diagnostics.ShouldBeEmpty();
-		result.AllGeneratedText().ShouldContain("global::SUIsei.HdrColor.FromRgb(100, 149, 237)");
+		result.AllGeneratedText().ShouldContain("new global::SUIsei.Media.SolidColorBrush(global::SUIsei.HdrColor.FromRgb(100, 149, 237))");
 		XamlGeneratorHarness.CompileErrors(xaml, codeBehind).ShouldBeEmpty();
 
 		// A value the target type cannot hold is a SUISEI012 at the binding, not a C# error in generated code.

@@ -1,4 +1,5 @@
 using SUIsei.Animation;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
@@ -12,10 +13,11 @@ namespace SUIsei.Controls;
 /// </summary>
 public class ToggleButton : ButtonBase
 {
-	private static readonly HdrColor NormalBackground = HdrColor.FromRgb(60, 60, 70);
-	private static readonly HdrColor OverBackground = HdrColor.FromRgb(80, 80, 95);
-	private static readonly HdrColor PressedBackground = HdrColor.FromRgb(40, 40, 55);
-	private static readonly HdrColor AccentBackground = HdrColor.FromRgb(70, 120, 200);
+	// The built-in look's brushes, shared by every default toggle and never changed.
+	private static readonly SolidColorBrush NormalBackground = new(HdrColor.FromRgb(60, 60, 70));
+	private static readonly SolidColorBrush OverBackground = new(HdrColor.FromRgb(80, 80, 95));
+	private static readonly SolidColorBrush PressedBackground = new(HdrColor.FromRgb(40, 40, 55));
+	private static readonly SolidColorBrush AccentBackground = new(HdrColor.FromRgb(70, 120, 200));
 
 	public ToggleButton() => Template = DefaultTemplate;
 
@@ -104,7 +106,8 @@ public class ToggleButton : ButtonBase
 		OnToggleStateChanged();
 	}
 
-	// The default toggle look: a rounded button whose pointer states animate the base border, layered under an accent
+	// The default toggle look: a rounded button whose pointer states show their backgrounds on the base border (faded by
+	// its BrushTransition), layered under an accent
 	// overlay whose opacity the CheckStates group drives — so checked/unchecked cross-fades the accent in and out
 	// without fighting the hover/press background (two states, two properties, no conflict). CheckBox replaces this
 	// template entirely with its box-and-glyph look.
@@ -115,14 +118,20 @@ public class ToggleButton : ButtonBase
 			var toggle = (ToggleButton)control;
 			var root = new Grid();
 
-			var baseBorder = new Border { Background = NormalBackground, CornerRadius = 4f };
-			var accent = new Border { Background = AccentBackground, CornerRadius = 4f, Opacity = 0f };
+			var baseBorder = new Border { CornerRadius = new CornerRadius(4f), BackgroundTransition = TemplateStates.Fade(120) };
+			var accent = new Border { Background = AccentBackground, CornerRadius = new CornerRadius(4f), Opacity = 0f };
 			var presenter = new ContentPresenter
 			{
 				Margin = new Thickness(10f, 5f),
 				HorizontalAlignment = HorizontalAlignment.Center,
 				VerticalAlignment = VerticalAlignment.Center,
 			};
+			// As WinUI's default template: the base border paints the toggle's Background, BorderBrush and BorderThickness,
+			// and the presenter its Foreground.
+			toggle.RegisterTemplateBinding(BackgroundProperty, value => baseBorder.Background = value ?? NormalBackground);
+			toggle.RegisterTemplateBinding(BorderBrushProperty, value => baseBorder.BorderBrush = value);
+			toggle.RegisterTemplateBinding(BorderThicknessProperty, value => baseBorder.BorderThickness = value);
+			toggle.RegisterTemplateBinding(ForegroundProperty, value => presenter.Foreground = value);
 			presenter.Content = toggle.Content;
 			toggle.ContentChanged += (_, _) => presenter.Content = toggle.Content;
 
@@ -131,9 +140,9 @@ public class ToggleButton : ButtonBase
 			root.Children.Add(presenter);
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = BackgroundTo(baseBorder, OverBackground, NormalBackground) });
-			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = BackgroundTo(baseBorder, NormalBackground, OverBackground) });
-			common.States.Add(new VisualState { Name = "Pressed", Storyboard = BackgroundTo(baseBorder, OverBackground, PressedBackground) });
+			common.States.Add(new VisualState { Name = "Normal" });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(baseBorder, OverBackground) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(baseBorder, PressedBackground) });
 
 			var check = new VisualStateGroup { Name = "CheckStates" };
 			check.States.Add(new VisualState { Name = "Unchecked", Storyboard = OpacityTo(accent, 0f) });
@@ -142,18 +151,6 @@ public class ToggleButton : ButtonBase
 
 			VisualStateManager.SetVisualStateGroups(root, [common, check]);
 			return root;
-		},
-	};
-
-	private static Storyboard BackgroundTo(Border target, HdrColor from, HdrColor to) => new()
-	{
-		Children =
-		{
-			new ColorAnimation
-			{
-				From = from, To = to, Duration = TimeSpan.FromMilliseconds(120), FillBehavior = FillBehavior.HoldEnd,
-				Apply = target.SetAnimatedFill, Release = target.ClearAnimatedFill,
-			},
 		},
 	};
 

@@ -3,9 +3,11 @@ using SUIsei.Drawing;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// Draws an <see cref="ImageSource"/>, scaled into its layout bounds per <see cref="Stretch"/>.
+/// Draws an <see cref="ImageSource"/>, scaled into its layout bounds per <see cref="Stretch"/> and cut at them.
 /// Measures to the source's natural pixel size (in DIPs) so an unconstrained image takes its intrinsic size; an
-/// explicit <c>Width</c>/<c>Height</c> on the element overrides that as usual.
+/// explicit <c>Width</c>/<c>Height</c> on the element overrides that as usual. Its content is a rectangle filled by a
+/// <see cref="CompositionSurfaceBrush"/>, centred, except that <see cref="Stretch.None"/> keeps the image at the top
+/// left.
 /// </summary>
 public sealed class Image : FrameworkElement
 {
@@ -26,35 +28,19 @@ public sealed class Image : FrameworkElement
 
 	protected override Size ArrangeOverride(Size finalSize) => finalSize;
 
-	// The image content this element draws, kept across updates so a re-arrange allocates nothing.
-	private ImageContent? _image;
+	// The paint this element draws with, kept across updates so a re-arrange allocates nothing.
+	private CompositionSurfaceBrush? _paint;
 
 	private protected override VisualContent? UpdateContent()
 	{
 		if (Source is not { } source)
 			return null;
-		var dest = ComputeDest(source, LayoutRect.Width, LayoutRect.Height, Stretch);
-		if (_image is null)
-			_image = new ImageContent(source, dest);
-		else
-			_image.Update(source, dest);
-		return _image;
-	}
-
-	// The destination rect (element-local) the source is drawn into. Fill stretches to the bounds; None uses the
-	// natural size; Uniform fits preserving aspect (letterbox); UniformToFill covers preserving aspect (overflow,
-	// clipped when the element clips).
-	private static Rect ComputeDest(ImageSource source, float width, float height, Stretch stretch)
-	{
-		float iw = source.Width, ih = source.Height;
-		if (iw <= 0f || ih <= 0f || stretch == Stretch.Fill)
-			return new Rect(0f, 0f, width, height);
-		if (stretch == Stretch.None)
-			return new Rect(0f, 0f, iw, ih);
-
-		var scale = stretch == Stretch.UniformToFill ? MathF.Max(width / iw, height / ih) : MathF.Min(width / iw, height / ih);
-		var dw = iw * scale;
-		var dh = ih * scale;
-		return new Rect((width - dw) / 2f, (height - dh) / 2f, dw, dh);
+		var paint = _paint ??= new CompositionSurfaceBrush();
+		paint.Surface = source;
+		paint.Stretch = Stretch;
+		var ratio = Stretch == Stretch.None ? 0f : 0.5f;
+		paint.HorizontalAlignmentRatio = ratio;
+		paint.VerticalAlignmentRatio = ratio;
+		return RetainedRect(paint);
 	}
 }

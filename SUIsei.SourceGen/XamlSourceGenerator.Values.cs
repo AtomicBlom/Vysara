@@ -22,7 +22,11 @@ partial class XamlSourceGenerator
 	private static readonly Dictionary<string, (Converter Convert, string Syntax)> Converters = new()
 	{
 		["SUIsei.HdrColor"] = (ConvertColor, "#RRGGBB, #AARRGGBB or a named colour"),
+		["SUIsei.Media.Brush"] = (ConvertBrush, "#RRGGBB, #AARRGGBB or a named colour, for a SolidColorBrush"),
+		["SUIsei.Media.SolidColorBrush"] = (ConvertBrush, "#RRGGBB, #AARRGGBB or a named colour"),
 		["SUIsei.Thickness"] = (ConvertThickness, "one, two or four numbers"),
+		["SUIsei.CornerRadius"] = (ConvertCornerRadius, "one or four numbers"),
+		["System.Numerics.Matrix3x2"] = (ConvertMatrix, "six numbers, 'M11,M12,M21,M22,OffsetX,OffsetY'"),
 		["SUIsei.Point"] = (ConvertPoint, "two numbers, 'x,y'"),
 		["System.Numerics.Vector2"] = (ConvertVector2, "two numbers, 'x,y'"),
 		["System.Numerics.Vector3"] = (ConvertVector3, "three numbers, 'x,y,z'"),
@@ -34,7 +38,9 @@ partial class XamlSourceGenerator
 	// Convert attribute text for a value of `type`. `expected` names the accepted syntax for a diagnostic.
 	private static LiteralStatus TryConvertValue(ITypeSymbol type, string raw, out string code, out string expected)
 	{
-		var unwrapped = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n ? n.TypeArguments[0] : type;
+		var unwrapped = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n
+			? n.TypeArguments[0]
+			: type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 		if (Converters.TryGetValue(unwrapped.ToDisplayString(), out var converter))
 		{
 			expected = converter.Syntax;
@@ -113,6 +119,36 @@ partial class XamlSourceGenerator
 			? $"global::SUIsei.HdrColor.FromRgb({r}, {g}, {b})"
 			: $"global::SUIsei.HdrColor.FromRgb({r}, {g}, {b}, {a})";
 		return true;
+	}
+
+	// A brush from a colour, as WinUI's Brush type converter: a SolidColorBrush of it. Each use makes its own brush.
+	private static bool ConvertBrush(string raw, out string code)
+	{
+		code = ConvertColor(raw, out var color) ? $"new global::SUIsei.Media.SolidColorBrush({color})" : "";
+		return code.Length > 0;
+	}
+
+	// WinUI corner radius: "u" (uniform) or "topLeft,topRight,bottomRight,bottomLeft".
+	private static bool ConvertCornerRadius(string raw, out string code)
+	{
+		var n = XamlValueSyntax.ParseNumbers(raw);
+		code = n?.Length switch
+		{
+			1 => $"new global::SUIsei.CornerRadius({F(n[0])})",
+			4 => $"new global::SUIsei.CornerRadius({F(n[0])}, {F(n[1])}, {F(n[2])}, {F(n[3])})",
+			_ => "",
+		};
+		return code.Length > 0;
+	}
+
+	// A MatrixTransform's matrix, in WinUI's order: M11, M12, M21, M22, OffsetX, OffsetY.
+	private static bool ConvertMatrix(string raw, out string code)
+	{
+		var n = XamlValueSyntax.ParseNumbers(raw);
+		code = n?.Length == 6
+			? $"new global::System.Numerics.Matrix3x2({F(n[0])}, {F(n[1])}, {F(n[2])}, {F(n[3])}, {F(n[4])}, {F(n[5])})"
+			: "";
+		return code.Length > 0;
 	}
 
 	// WinUI thickness: "u" (uniform), "h,v", or "l,t,r,b".

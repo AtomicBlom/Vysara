@@ -1,13 +1,14 @@
 using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
+using SUIsei.Media;
 using SUIsei.Tests.Sample;
 
 namespace SUIsei.Tests;
 
 /// <summary>
-/// How animations reach their targets: a <see cref="PropertyPath"/> resolved to a dependency property or an element
-/// channel and written unboxed, WinUI's start-from-the-current-value rule when <c>From</c> is omitted, binding
+/// How animations reach their targets: a <see cref="PropertyPath"/> resolved to a dependency property, through the objects
+/// that hold it, and written unboxed, WinUI's start-from-the-current-value rule when <c>From</c> is omitted, binding
 /// failures that throw rather than animate nothing, the code-first <see cref="AnimationClock.Tween{TTarget, T}"/>, and a
 /// storyboard compiled from XAML driving each kind of path.
 /// </summary>
@@ -37,14 +38,28 @@ public sealed class AnimationChannelTests
 	}
 
 	[Test]
-	public void A_colour_animation_with_no_From_starts_at_the_element_colour()
+	public void A_colour_animation_with_no_From_starts_at_the_brush_colour()
 	{
-		var border = new Border { Background = Red };
+		var border = new Border { Background = new SolidColorBrush(Red) };
 		var clock = new AnimationClock();
-		clock.Begin(StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = PropertyPath.Fill }));
+		clock.Begin(StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor }));
 
 		clock.Advance(0.5);
-		border.CurrentFill.ShouldBe(new HdrColor(0.5f, 0f, 0.5f, 1f));
+		border.Background.SolidColor().ShouldBe(new HdrColor(0.5f, 0f, 0.5f, 1f));
+	}
+
+	// WinUI's (Border.Background).(SolidColorBrush.Color), and the same through Control's background.
+	private static readonly PropertyPath BackgroundColor = new(Border.BackgroundProperty, SolidColorBrush.ColorProperty);
+	private static readonly PropertyPath ControlBackgroundColor = new(Control.BackgroundProperty, SolidColorBrush.ColorProperty);
+
+	[Test]
+	public void A_path_step_into_a_brush_of_another_kind_fails_when_it_begins()
+	{
+		var border = new Border { Background = new LinearGradientBrush() };
+		var storyboard = StoryboardOf(new ColorAnimation { To = Blue, Target = border, TargetProperty = BackgroundColor });
+
+		Should.Throw<InvalidOperationException>(() => new AnimationClock().Begin(storyboard)).Message
+			.ShouldContain("Background holds a LinearGradientBrush, which has no Color");
 	}
 
 	[Test]
@@ -68,7 +83,7 @@ public sealed class AnimationChannelTests
 	[Test]
 	public void A_visual_state_change_mid_transition_hands_over_from_the_colour_on_screen()
 	{
-		var control = new ContentControl { Background = HdrColor.FromRgb(255, 255, 255) };
+		var control = new ContentControl { Background = new SolidColorBrush(HdrColor.FromRgb(255, 255, 255)) };
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = control;
 		host.Tick(0, 0f, new Vector2(100f, 100f));
@@ -79,20 +94,20 @@ public sealed class AnimationChannelTests
 				Name = "Common",
 				States =
 				{
-					new VisualState { Name = "Red", Storyboard = StoryboardOf(new ColorAnimation { To = Red, Duration = OneSecond, Target = control, TargetProperty = PropertyPath.Fill }) },
-					new VisualState { Name = "Blue", Storyboard = StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = control, TargetProperty = PropertyPath.Fill }) },
+					new VisualState { Name = "Red", Storyboard = StoryboardOf(new ColorAnimation { To = Red, Duration = OneSecond, Target = control, TargetProperty = ControlBackgroundColor }) },
+					new VisualState { Name = "Blue", Storyboard = StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = control, TargetProperty = ControlBackgroundColor }) },
 				},
 			},
 		]);
 
 		VisualStateManager.GoToState(control, "Red", useTransitions: true).ShouldBeTrue();
 		host.Tick(0.5, 0f, new Vector2(100f, 100f));
-		var midway = control.CurrentFill; // halfway from white to red
+		var midway = control.ShownColor(); // halfway from white to red
 		midway.ShouldBe(new HdrColor(1f, 0.5f, 0.5f, 1f));
 
 		VisualStateManager.GoToState(control, "Blue", useTransitions: true).ShouldBeTrue();
 		host.Tick(0.5, 0f, new Vector2(100f, 100f));
-		control.CurrentFill.ShouldBe(Lerps.Color(midway, Blue, 0.5f)); // from the midway colour, with no jump
+		control.ShownColor().ShouldBe(Lerps.Color(midway, Blue, 0.5f)); // from the midway colour, with no jump
 	}
 
 	[Test]
@@ -244,12 +259,12 @@ public sealed class AnimationChannelTests
 		Canvas.GetLeft(view.Box).ShouldBe(25f, 1e-4f);  // (Canvas.Left), from its own 0
 		view.Box.LayoutRect.X.ShouldBe(25f, 1e-4f);     // and re-arranged in the same tick
 		view.Box.Opacity.ShouldBe(1f);                  // holding the first key until the discrete one
-		view.Box.CurrentFill.ShouldBe(Lerps.Color(Red, Blue, 0.25f));
+		view.Box.ShownColor().ShouldBe(Lerps.Color(Red, Blue, 0.25f));
 
 		host.Tick(0.5, 0f, new Vector2(300f, 200f));
 		Canvas.GetLeft(view.Box).ShouldBe(75f, 1e-4f);
 		view.Box.Opacity.ShouldBe(0.5f + (0.25f - 0.5f) * 0.125f, 1e-6f); // past the discrete key, eased in toward the last
-		view.Box.CurrentFill.ShouldBe(Lerps.Color(Red, Blue, 0.75f));
+		view.Box.ShownColor().ShouldBe(Lerps.Color(Red, Blue, 0.75f));
 	}
 
 	private sealed class Mover

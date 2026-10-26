@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -40,7 +41,7 @@ public sealed class VisualStateTests
 	{
 		var host = new UIHost();
 		var view = host.CreateRoot(UILayer.Default);
-		var control = new ContentControl { Background = HdrColor.FromRgb(0, 0, 0), Width = 20, Height = 20 };
+		var control = new ContentControl { Background = new SolidColorBrush(HdrColor.FromRgb(0, 0, 0)), Width = 20, Height = 20 };
 		view.Root.Content = control;
 		VisualStateManager.GetVisualStateGroups(control).Add(CommonStates(control, out _, out var over));
 

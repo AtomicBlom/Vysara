@@ -1,16 +1,44 @@
-using System.Numerics;
-
+using SUIsei.Media;
 
 namespace SUIsei.Controls;
 
 /// <summary>
 /// A single-child decorator with a background, a border, padding, and rounded corners:
 /// measure deflates by border + padding around the child; arrange insets the child by the same; the visual draws a
-/// (rounded) fill + border. <see cref="BorderThickness"/> is treated as uniform for the drawn stroke.
+/// (rounded) fill + border. <see cref="BorderThickness"/> is treated as uniform for the drawn stroke, and
+/// <see cref="CornerRadius"/> must be uniform.
 /// </summary>
 [ContentProperty(Name = nameof(Child))]
 public sealed class Border : FrameworkElement
 {
+	public static readonly DependencyProperty<Border, Brush?> BackgroundProperty =
+		DependencyProperty.Register(nameof(Background),
+			new PropertyMetadata<Border, Brush?>
+			{
+				PropertyChanged = static (b, old, @new) =>
+				{
+					b.TransitionBackground(b.BackgroundTransition, old, @new);
+					b.OnBrushChanged(old, @new);
+				},
+			});
+
+	public static readonly DependencyProperty<Border, Brush?> BorderBrushProperty =
+		DependencyProperty.Register(nameof(BorderBrush),
+			new PropertyMetadata<Border, Brush?> { PropertyChanged = static (b, old, @new) => b.OnBrushChanged(old, @new) });
+
+	/// <summary>The corner radius. SUIsei draws one radius for all four corners: radii that differ throw
+	/// <see cref="NotSupportedException"/> when set.</summary>
+	public static readonly DependencyProperty<Border, CornerRadius> CornerRadiusProperty =
+		DependencyProperty.Register(nameof(CornerRadius),
+			new PropertyMetadata<Border, CornerRadius>
+			{
+				PropertyChanged = static (b, old, value) =>
+				{
+					_ = value.Uniform; // fail loud now, not at the next draw
+					b.InvalidateContent();
+				},
+			});
+
 	// VisualChildren, rebuilt only when Child changes, so layout and hit-testing read it without allocating.
 	private UIElement[] _visualChildren = [];
 	public UIElement? Child
@@ -30,11 +58,20 @@ public sealed class Border : FrameworkElement
 		}
 	}
 
-	public HdrColor? Background { get; set { if (field != value) { field = value; InvalidateContent(); } } }
-	public HdrColor? BorderBrush { get; set { if (field != value) { field = value; InvalidateContent(); } } }
+	/// <summary>The brush painting the area inside the border; null paints nothing there.</summary>
+	public Brush? Background { get => GetValue(BackgroundProperty); set => SetValue(BackgroundProperty, value); }
+
+	/// <summary>The brush painting the border; null draws none.</summary>
+	public Brush? BorderBrush { get => GetValue(BorderBrushProperty); set => SetValue(BorderBrushProperty, value); }
+
+	/// <summary>How a change of <see cref="Background"/> animates; null shows it at once.</summary>
+	public BrushTransition? BackgroundTransition { get; set; }
+
 	public Thickness BorderThickness { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
 	public Thickness Padding { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
-	public float CornerRadius { get; set { if (field != value) { field = value; InvalidateContent(); } } }
+
+	/// <summary>The radius of the corners, uniform.</summary>
+	public CornerRadius CornerRadius { get => GetValue(CornerRadiusProperty); set => SetValue(CornerRadiusProperty, value); }
 
 	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
 
@@ -59,13 +96,19 @@ public sealed class Border : FrameworkElement
 		return finalSize;
 	}
 
-	private protected override HdrColor? BaseFill => Background;
+	private protected override void OnLiveTreeChanged(bool attached)
+	{
+		Listen(Background, attached);
+		Listen(BorderBrush, attached);
+		base.OnLiveTreeChanged(attached);
+	}
 
 	private protected override VisualContent? UpdateContent()
 	{
-		var fill = AnimatedFill ?? Background;
-		if (fill is null && (BorderBrush is null || BorderThickness.Horizontal + BorderThickness.Vertical <= 0f))
+		var fill = BackgroundPaint(Background);
+		var border = BorderBrush?.CompositionBrush;
+		if (fill is null && (border is null || BorderThickness.Horizontal + BorderThickness.Vertical <= 0f))
 			return null;
-		return RetainedRect(fill, CornerRadius, BorderBrush, BorderThickness.Left);
+		return RetainedRect(fill, CornerRadius.Uniform, border, BorderThickness.Left);
 	}
 }

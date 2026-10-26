@@ -22,7 +22,7 @@ public sealed class GroupOpacityTests
 	private static SpriteVisual Fill(float x, float y, float w, float h, HdrColor color) => new()
 	{
 		Transform = Matrix3x2.CreateTranslation(x, y),
-		Content = new RectContent(new Vector2(w, h), color),
+		Content = new RectContent(new Vector2(w, h), new CompositionColorBrush(color)),
 	};
 
 	private static RootVisual SurfaceWith(Visual child, float w = 100f, float h = 100f)
@@ -65,7 +65,7 @@ public sealed class GroupOpacityTests
 		var draw = Composite(SurfaceWith(new SpriteVisual
 		{
 			Opacity = 0.5f,
-			Content = new RectContent(new Vector2(60, 60), HdrColor.FromRgb(255, 0, 0)),
+			Content = new RectContent(new Vector2(60, 60), new CompositionColorBrush(HdrColor.FromRgb(255, 0, 0))),
 		}));
 		var dump = draw.Dump();
 

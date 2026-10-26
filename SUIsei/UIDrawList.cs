@@ -122,28 +122,61 @@ internal sealed class UIDrawList
 		return slot;
 	}
 
-	/// <summary>Append a transformed quad (the corners are baked through <paramref name="matrix"/>).</summary>
-	public void AddRect(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int slot = 0)
+	/// <summary>Append a transformed quad (the corners are baked through <paramref name="matrix"/>), its uv running 0..1
+	/// across it.</summary>
+	public void AddRect(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int slot = 0) =>
+		AddQuad(local, Vector2.Zero, Vector2.One, matrix, color, kind, @params, clip, slot);
+
+	/// <summary>Append a tinted image quad sampling the part of <paramref name="source"/> from <paramref name="uv0"/> to
+	/// <paramref name="uv1"/>, through the source's slot in this list's slot table.</summary>
+	public void AddImage(in Rect local, Vector2 uv0, Vector2 uv1, in Matrix3x2 matrix, PremultipliedHdrColor tint, TextureSource source, in Rect clip)
+	{
+		if (clip.IsEmpty)
+			return;
+		AddQuad(local, uv0, uv1, matrix, tint, UIPrimKind.Image, Vector4.Zero, clip, SlotFor(source));
+	}
+
+	private void AddQuad(in Rect local, Vector2 uv0, Vector2 uv1, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int slot)
 	{
 		if (clip.IsEmpty)
 			return;
 		EnsureRun(kind, slot, clip);
 
 		var first = ReserveVertices(4);
-		AddVertex(new Vector2(local.X, local.Y), new Vector2(0, 0), matrix, color, @params);
-		AddVertex(new Vector2(local.Right, local.Y), new Vector2(1, 0), matrix, color, @params);
-		AddVertex(new Vector2(local.Right, local.Bottom), new Vector2(1, 1), matrix, color, @params);
-		AddVertex(new Vector2(local.X, local.Bottom), new Vector2(0, 1), matrix, color, @params);
+		AddVertex(new Vector2(local.X, local.Y), new Vector2(uv0.X, uv0.Y), matrix, color, @params);
+		AddVertex(new Vector2(local.Right, local.Y), new Vector2(uv1.X, uv0.Y), matrix, color, @params);
+		AddVertex(new Vector2(local.Right, local.Bottom), new Vector2(uv1.X, uv1.Y), matrix, color, @params);
+		AddVertex(new Vector2(local.X, local.Bottom), new Vector2(uv0.X, uv1.Y), matrix, color, @params);
 		AddQuadIndices(first);
 	}
 
-	/// <summary>Append a tinted image quad sampling <paramref name="source"/> across its full UV, through the source's
-	/// slot in this list's slot table.</summary>
-	public void AddImage(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor tint, ImageSource source, in Rect clip)
+	/// <summary>
+	/// Append a convex polygon, its corners in order around it, as a fan of triangles from the first corner: each corner
+	/// with its own uv and colour (premultiplied linear light, rounded to half precision here), all sharing
+	/// <paramref name="params"/>. How a gradient's bands and the glyph pieces it cuts reach the list; a four-corner polygon
+	/// is indexed exactly as a quad.
+	/// </summary>
+	public void AddPolygon(ReadOnlySpan<Vector2> local, ReadOnlySpan<Vector2> uv, ReadOnlySpan<Vector4> color, in Matrix3x2 matrix,
+		UIPrimKind kind, Vector4 @params, in Rect clip, int slot)
 	{
-		if (clip.IsEmpty)
+		if (clip.IsEmpty || local.Length < 3)
 			return;
-		AddRect(local, matrix, tint, UIPrimKind.Image, Vector4.Zero, clip, SlotFor(source));
+		EnsureRun(kind, slot, clip);
+
+		var first = ReserveVertices(local.Length);
+		for (var i = 0; i < local.Length; i++)
+		{
+			var c = color[i];
+			AddVertex(local[i], uv[i], matrix, PremultipliedHdrColor.FromPremultiplied(c.X, c.Y, c.Z, c.W), @params);
+		}
+		var indices = _set.Indices;
+		for (var i = 1; i + 1 < local.Length; i++)
+		{
+			indices.Add(first);
+			indices.Add((ushort)(first + i));
+			indices.Add((ushort)(first + i + 1));
+		}
+		_runIdxCount += 3 * (local.Length - 2);
 	}
 
 	/// <summary>
@@ -154,18 +187,27 @@ internal sealed class UIDrawList
 	/// <paramref name="fontSizePx"/>) with its atlas UV and the shared per-run <c>screenPxRange</c> in
 	/// <see cref="OverlayVertex.Custom"/>.x; all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw.
 	/// The atlas page is an ordinary texture source: the glyphs sample it through its slot in this list.
+	/// <para>
+	/// With a <paramref name="gradient"/> the glyphs are painted by it instead of <paramref name="color"/>: each glyph quad
+	/// is cut where the gradient's colour stops being linear (<see cref="GradientSplitter"/>), its pieces keeping their
+	/// atlas uv, so text takes a gradient exactly, as rectangles do.
+	/// </para>
 	/// </summary>
-	public void AddGlyphRun(string text, float fontSizePx, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip)
+	public void AddGlyphRun(string text, float fontSizePx, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip,
+		CompositionGradientBrush? gradient = null, in GradientLine line = default, float opacity = 1f)
 	{
 		if (clip.IsEmpty || string.IsNullOrEmpty(text))
 			return;
-		EnsureRun(UIPrimKind.Glyph, SlotFor(font.Image), clip);
+		var slot = SlotFor(font.Image);
+		EnsureRun(UIPrimKind.Glyph, slot, clip);
 
 		var @params = new Vector4(font.ScreenPxRange(fontSizePx), 0f, 0f, 0f);
 		var baselineY = -font.Ascender * fontSizePx; // ascender is negative (y-down), so the top sits near y=0
 
 		_glyphBuf.Clear();
 		font.Shaper.Shape(text, font, _glyphBuf);
+		Span<Vector2> corners = stackalloc Vector2[4];
+		Span<Vector2> uvs = stackalloc Vector2[4];
 		foreach (var sg in _glyphBuf)
 		{
 			var g = sg.Glyph; // the shaper omits zero-geometry glyphs, so every entry draws a quad
@@ -174,6 +216,16 @@ internal sealed class UIDrawList
 			var x1 = penX + g.PlaneRight * fontSizePx;
 			var y0 = baselineY + (sg.YOffsetEm + g.PlaneTop) * fontSizePx;
 			var y1 = baselineY + (sg.YOffsetEm + g.PlaneBottom) * fontSizePx;
+
+			if (gradient is not null)
+			{
+				corners[0] = new Vector2(x0, y0); uvs[0] = new Vector2(g.U0, g.V0);
+				corners[1] = new Vector2(x1, y0); uvs[1] = new Vector2(g.U1, g.V0);
+				corners[2] = new Vector2(x1, y1); uvs[2] = new Vector2(g.U1, g.V1);
+				corners[3] = new Vector2(x0, y1); uvs[3] = new Vector2(g.U0, g.V1);
+				GradientSplitter.AddPolygon(this, corners, uvs, gradient, line, opacity, matrix, UIPrimKind.Glyph, @params, clip, slot);
+				continue;
+			}
 
 			var first = ReserveVertices(4);
 			AddVertex(new Vector2(x0, y0), new Vector2(g.U0, g.V0), matrix, color, @params);

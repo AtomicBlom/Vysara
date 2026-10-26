@@ -115,10 +115,10 @@ public sealed class SliderTests
 		// colour, a hover flash on every freshly shown slider.
 		CommonStates(slider).CurrentState!.Name.ShouldBe("Normal");
 		host.Clock.HasActiveClocks.ShouldBeFalse();
-		thumb.Visual.Content.ShouldBeOfType<RectContent>().Fill.ShouldBe(normal);
+		thumb.Visual.Content.ShouldBeOfType<RectContent>().Fill.SolidColor().ShouldBe(normal);
 
 		host.Tick(0.016, 0.016f, Framebuffer);
-		thumb.Visual.Content.ShouldBeOfType<RectContent>().Fill.ShouldBe(normal);
+		thumb.Visual.Content.ShouldBeOfType<RectContent>().Fill.SolidColor().ShouldBe(normal);
 	}
 
 	[Test]
