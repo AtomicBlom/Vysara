@@ -16,6 +16,7 @@ public abstract class Panel : FrameworkElement
 
 	internal override IReadOnlyList<UIElement> VisualChildren => Children.Items;
 
-	private protected override VisualContent? BuildContent() =>
-		Background is { } bg ? new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), bg) : null;
+	private protected override HdrColor? BaseFill => Background;
+
+	private protected override VisualContent? UpdateContent() => Background is { } bg ? RetainedRect(bg) : null;
 }

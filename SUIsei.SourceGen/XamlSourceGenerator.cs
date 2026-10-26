@@ -11,14 +11,16 @@ namespace SUIsei.SourceGen;
 /// <summary>
 /// The XAML → typed control-tree incremental generator. For each <c>.xaml</c> <see cref="AdditionalText"/> it
 /// emits a <c>partial</c> of the <c>x:Class</c> with typed <c>x:Name</c> fields and an
-/// <c>InitializeComponent()</c> that builds the tree with generated <c>new</c> (never reflection) and assigns
-/// literal/enum properties resolved against the <see cref="Compilation"/> semantic model.
+/// <c>InitializeComponent()</c> that builds the tree with generated <c>new</c> (never reflection). Types resolve through
+/// their XML namespace, and every value converts for its property's type through one compile-time converter table,
+/// both against the <see cref="Compilation"/> semantic model.
 /// <para>
 /// Compiled data + event binding: <c>{x:Bind path[, Mode=OneTime|OneWay|TwoWay][, FallbackValue=X][, TargetNullValue=Y]}</c>
 /// on a property emits a typed <c>&lt;Class&gt;_Bindings</c> helper (Initialize/Update/Subscribe/StopTracking +
 /// INPC tracking that switches on <c>PropertyName</c> literals). TwoWay additionally wires the control's
 /// <c>{PropertyName}Changed</c> event back to the VM. An event attribute wires <c>el.Event += this.Handler</c>.
-/// <c>{StaticResource key}</c> emits a <c>FindResource("key")</c> runtime lookup.
+/// <c>{StaticResource key}</c> emits a <c>FindResource("key")</c> lookup through the markup ancestors that declared
+/// resources; <c>{x:Null}</c> and <c>{x:Static}</c> resolve at compile time.
 /// Function paths and converters are outside the supported subset and diagnose.
 /// </para>
 /// </summary>
@@ -28,16 +30,22 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private const string TrackName = "XamlGenerate";
 
 	private static readonly XNamespace X = "http://schemas.microsoft.com/winfx/2006/xaml";
-	// Elements live in the SUIsei UI namespace (the default xmlns of a SUIsei view); an element in any other
-	// namespace is foreign and must not be silently resolved as if it were a SUIsei control.
+	// The SUIsei UI namespace (the default xmlns of a SUIsei view). Elements live in it, in the extension namespace or in
+	// a `using:` CLR namespace; one in any other namespace is foreign and is never resolved as if it were a SUIsei type.
 	private static readonly XNamespace Ui = "https://github.com/AtomicBlom/SUIsei/ui";
+	// The SUIsei extension namespace (conventionally `xmlns:suisei`): SUIsei-only types and attached properties with no
+	// WinUI equivalent, kept out of the default namespace so WinUI types keep exactly WinUI's surface.
+	private static readonly XNamespace ExtensionNs = "https://github.com/AtomicBlom/SUIsei/extensions";
+
+	// Markup compatibility: mc:Ignorable names the prefixes (typically d:) whose attributes and elements are skipped.
+	private static readonly XNamespace MarkupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 
 	private static readonly DiagnosticDescriptor ParseError = new("SUISEI001", "Invalid XAML",
 		"XAML parse error: {0}", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor MissingClass = new("SUISEI002", "Missing x:Class",
 		"The root element needs an x:Class attribute for the generator to emit a partial class", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor UnknownElement = new("SUISEI003", "Unknown element",
-		"'{0}' is not a known SUIsei element (looked under SUIsei.Controls and SUIsei)", "SUIsei", DiagnosticSeverity.Error, true);
+		"'{0}' is not a known SUIsei type (the default XAML namespace maps SUIsei.Controls, SUIsei, SUIsei.Media, SUIsei.Shapes, SUIsei.Documents and SUIsei.Animation)", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor UnknownProperty = new("SUISEI004", "Unknown property",
 		"'{0}' has no settable property '{1}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor UnsupportedProperty = new("SUISEI005", "Unsupported property type",
@@ -55,7 +63,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor InvalidName = new("SUISEI011", "Invalid x:Name",
 		"x:Name '{0}' is not usable as a field — it must be a unique, non-reserved C# identifier", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor InvalidLiteral = new("SUISEI012", "Invalid property value",
-		"'{0}' is not a valid value for property '{1}' of type '{2}'", "SUIsei", DiagnosticSeverity.Error, true);
+		"'{0}' is not a valid value for property '{1}' of type '{2}': expected {3}", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor IgnoredContent = new("SUISEI013", "Ignored XAML content",
 		"Ignored {0} — it is outside the supported XAML subset (elements, literal/enum attributes, {{x:Bind}}, {{StaticResource}}, and event handlers)", "SUIsei", DiagnosticSeverity.Warning, true);
 	private static readonly DiagnosticDescriptor TwoWayNoEvent = new("SUISEI014", "TwoWay binding — no changed event",
@@ -63,7 +71,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor BadStoryboardTarget = new("SUISEI015", "Unresolved storyboard target",
 		"Storyboard.TargetName '{0}' does not name an x:Name'd element in this view", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadAnimationProperty = new("SUISEI016", "Unanimatable property",
-		"Storyboard.TargetProperty '{0}' is not an animatable channel (Opacity, Background, Foreground, Fill, RenderTransform.Translate.X/Y)", "SUIsei", DiagnosticSeverity.Error, true);
+		"Storyboard.TargetProperty '{0}' is a {1} property, which a {2} cannot animate", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadLiteralValue = new("SUISEI017", "Invalid markup value",
 		"'{0}' is not a valid {1}", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadSetterProperty = new("SUISEI018", "Unstylable property",
@@ -71,7 +79,11 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor TemplateBindingOutsideTemplate = new("SUISEI019", "TemplateBinding outside a template",
 		"{{TemplateBinding}} is only valid inside a ControlTemplate", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadPropertyElement = new("SUISEI020", "Unsupported property element",
-		"Property element '{0}' is outside the supported XAML subset", "SUIsei", DiagnosticSeverity.Warning, true);
+		"Property element '{0}' is outside the supported XAML subset", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor BadPropertyPath = new("SUISEI021", "Unresolved property path",
+		"Property path '{0}' does not resolve: {1}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor UnknownExtensionMember = new("SUISEI022", "Unknown extension member",
+		"'{0}' is not a member of the SUIsei extension namespace (SUIsei.Extensions)", "SUIsei", DiagnosticSeverity.Error, true);
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -80,17 +92,16 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			.Select(static (a, ct) => new XamlInput(a.Path, a.GetText(ct)?.ToString() ?? ""));
 
 		// Narrow: instead of combining with the raw Compilation (a new reference on every keystroke),
-		// compute a fingerprint of the public type surface that matters to the generator — the current
-		// assembly's public types (page classes, ViewModels) plus the SUIsei control types. Equal
-		// fingerprint → the expensive Generate call is skipped even if the compilation reference changed.
-		// Body-only edits, whitespace, and comment changes never affect the fingerprint.
+		// compute a fingerprint of the type surface that matters to the generator — the current
+		// assembly's public and internal types (page classes, ViewModels, extension types) plus the SUIsei
+		// types, with member signatures. Equal fingerprint → the expensive Generate call is skipped even if
+		// the compilation reference changed. Body-only edits, whitespace, and comment changes never affect
+		// the fingerprint. It is computed once per compilation, not once per XAML file.
+		var surface = context.CompilationProvider
+			.Select(static (compilation, ct) => (Compilation: compilation, Fingerprint: ComputeFingerprint(compilation, ct)));
 		var results = inputs
-			.Combine(context.CompilationProvider)
-			.Select(static (pair, ct) =>
-			{
-				var (input, compilation) = pair;
-				return new CompilationSnapshot(input, compilation, ComputeFingerprint(compilation, ct));
-			})
+			.Combine(surface)
+			.Select(static (pair, _) => new CompilationSnapshot(pair.Left, pair.Right.Compilation, pair.Right.Fingerprint))
 			.Select(static (snap, ct) => Generate(snap.Input, snap.Compilation, ct))
 			.WithTrackingName(TrackName);
 
@@ -107,7 +118,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private readonly record struct GeneratedSource(string HintName, string Text);
 
 	// Combines the XAML input with the compilation but compares equal only when both the XAML text
-	// AND the public type surface (fingerprint) are unchanged — ignores the Compilation reference itself,
+	// AND the type surface (fingerprint) are unchanged — ignores the Compilation reference itself,
 	// which is a new object on every keystroke. This breaks the "incremental in name only" pattern that
 	// ran Generate on every C# edit even when no relevant type had changed.
 	private readonly record struct CompilationSnapshot(XamlInput Input, Compilation Compilation, string Fingerprint)
@@ -179,6 +190,12 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		// The x:Name registry for this scope: enforces uniqueness and resolves storyboard targets. The page scope
 		// shares the generator's global set; each template gets its own (a name may repeat across templates).
 		public HashSet<string> Names { get; init; } = [];
+		// Each x:Name'd element's type and the expression that reaches it (a field, a local, or `this` for an unsealed
+		// root): what a storyboard's TargetName resolves to.
+		public Dictionary<string, (INamedTypeSymbol Type, string Expr)> NamedElements { get; } = [];
+		// The markup ancestors (and the current element) whose <X.Resources> are emitted, outermost first: where a
+		// {StaticResource} resolved during construction finds its key. A control template starts with the templated control.
+		public List<string> ResourceOwners { get; init; } = [];
 		public bool IsTemplate { get; init; }
 		public bool IsControlTemplate { get; init; }
 		// The {x:Bind}/{TemplateBinding} data-root expression (e.g. "__data" / "__tc") and its type, for a template.
@@ -296,12 +313,17 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	{
 		gen.Ct.ThrowIfCancellationRequested();
 
-		var type = el.Name.Namespace == Ui || el.Name.Namespace == XNamespace.None
-			? ResolveType(gen.Compilation, el.Name.LocalName)
-			: null;
+		// Elements come from the default namespace, the extension namespace or a `using:` CLR namespace; any other XML
+		// namespace is foreign, not resolved as if it were a SUIsei type.
+		var ns = el.Name.Namespace;
+		var type = ResolveType(gen.Compilation, ns, el.Name.LocalName);
 		if (isRoot)
 			gen.RootType = type;
-		if (type is null) { gen.Report(UnknownElement, el, el.Name.LocalName); return null; }
+		if (type is null)
+		{
+			gen.Report(ns == ExtensionNs ? UnknownExtensionMember : UnknownElement, el, el.Name.LocalName);
+			return null;
+		}
 
 		var typeName = type.ToDisplayString();
 		var nameAttr = el.Attribute(X + "Name");
@@ -343,19 +365,22 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			scope.Emit($"var {var} = new {typeName}();");
 		}
 
+		if (hasName)
+			scope.NamedElements[nameAttr!.Value] = (type, var);
+
 		foreach (var attr in el.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X)
+			var attrNs = attr.Name.Namespace;
+			if (attr.IsNamespaceDeclaration || attrNs == X || IsIgnorable(el, attrNs))
 				continue;
-			if (attr.Name.Namespace != XNamespace.None)
+			if (attrNs == ExtensionNs || attr.Name.LocalName.Contains('.'))
 			{
-				gen.Report(IgnoredContent, attr, $"namespaced attribute '{attr.Name.LocalName}'");
+				EmitAttachedProperty(gen, scope, var, attr);
 				continue;
 			}
-			if (attr.Name.LocalName.Contains('.'))
+			if (attrNs != XNamespace.None)
 			{
-				if (!TryEmitAttachedProperty(gen, scope, var, attr))
-					gen.Report(IgnoredContent, attr, $"attached property '{attr.Name.LocalName}'");
+				gen.Report(IgnoredContent, attr, $"attribute '{attr.Name.LocalName}' in XML namespace '{attrNs.NamespaceName}'");
 				continue;
 			}
 
@@ -377,28 +402,28 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				continue;
 			}
 
+			var prop = FindProperty(type, name);
+			if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
+
 			if (!IsMarkup(value, out var inner))
 			{
-				// Plain literal / enum / colour / thickness value.
-				var prop2 = FindProperty(type, name);
-				if (prop2 is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
-				switch (TryAttributeValue(prop2.Type, value, out var code))
-				{
-					case LiteralStatus.Ok: scope.Emit($"{var}.{prop2.Name} = {code};"); break;
-					case LiteralStatus.BadValue: gen.Report(InvalidLiteral, attr, value.Trim(), name, prop2.Type.ToDisplayString()); break;
-					default: gen.Report(UnsupportedProperty, attr, name, prop2.Type.ToDisplayString()); break;
-				}
+				// Plain text, converted for the property's type.
+				if (ConvertOrReport(gen, attr, prop.Type, value, name) is { } code)
+					scope.Emit($"{var}.{prop.Name} = {code};");
 				continue;
 			}
 
 			// {x:Bind …}
 			if (TryParseXBind(inner, out var path, out var oneWay, out var twoWay, out var fallback, out var targetNull))
 			{
-				var prop = FindProperty(type, name);
-				if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
+				// FallbackValue / TargetNullValue are values of the property, converted like any other.
+				var fallbackCode = fallback is null ? null : ConvertOrReport(gen, attr, prop.Type, fallback, $"{name} FallbackValue");
+				var targetNullCode = targetNull is null ? null : ConvertOrReport(gen, attr, prop.Type, targetNull, $"{name} TargetNullValue");
+				if ((fallback is not null && fallbackCode is null) || (targetNull is not null && targetNullCode is null))
+					continue;
 				if (scope.IsTemplate)
 				{
-					EmitTemplateBind(gen, scope, attr, var, prop, path, fallback, targetNull);
+					EmitTemplateBind(gen, scope, attr, var, prop, path, fallbackCode, targetNullCode);
 					continue;
 				}
 				if (!TryResolvePath(gen.PageType, path, out var resultTypes, out var leafType))
@@ -415,37 +440,38 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				var effectiveTwoWay = twoWay && FindEvent(type, prop.Name + "Changed") is not null;
 				if (twoWay && !effectiveTwoWay)
 					gen.Report(TwoWayNoEvent, attr, type.ToDisplayString(), prop.Name);
-				gen.Bindings.Add(new Bind(var, prop.Name, path, resultTypes, leafType, oneWay, effectiveTwoWay, fallback, targetNull));
+				gen.Bindings.Add(new Bind(var, prop.Name, path, resultTypes, leafType, oneWay, effectiveTwoWay, fallbackCode, targetNullCode));
 				continue;
 			}
 
 			// {TemplateBinding source} — a OneWay wire from the templated control's property into this child.
 			if (TryParseTemplateBinding(inner, out var sourceProp))
 			{
-				var prop = FindProperty(type, name);
-				if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
 				if (!scope.IsControlTemplate) { gen.Report(TemplateBindingOutsideTemplate, attr); continue; }
 				EmitTemplateBinding(gen, scope, attr, var, prop, sourceProp);
 				continue;
 			}
 
-			// {StaticResource key}
-			if (TryParseStaticResource(inner, out var resKey))
+			// {StaticResource key} / {x:Null} / {x:Static Owner.Member}
+			if (TryMarkupValue(gen, scope, attr, var, inner, prop.Type, name, out var markupCode))
 			{
-				var prop = FindProperty(type, name);
-				if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
-				scope.Emit($"{var}.{prop.Name} = {var}.FindResource(\"{resKey}\") as {AsCastType(prop.Type)};");
+				if (markupCode is not null)
+					scope.Emit($"{var}.{prop.Name} = {markupCode};");
 				continue;
 			}
 
 			gen.Report(UnsupportedMarkup, attr, value.Trim());
 		}
 
-		// Child elements flow into the type's content property ([ContentProperty], else the name convention).
+		// Child elements flow into the type's content property ([ContentProperty], else the name convention). A
+		// <X.Resources> among them makes this element a resource owner for the rest of its subtree only.
 		var content = ContainerKind(type);
+		var resourceDepth = scope.ResourceOwners.Count;
 		foreach (var childEl in el.Elements())
 		{
 			gen.Ct.ThrowIfCancellationRequested();
+			if (IsIgnorable(childEl, childEl.Name.Namespace))
+				continue;
 			if (childEl.Name.LocalName.Contains('.'))
 			{
 				HandlePropertyElement(gen, scope, var, type, childEl);
@@ -459,6 +485,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			else
 				gen.Report(NoContentModel, childEl, typeName, childEl.Name.LocalName);
 		}
+		scope.ResourceOwners.RemoveRange(resourceDepth, scope.ResourceOwners.Count - resourceDepth);
 
 		foreach (var textNode in el.Nodes().OfType<XText>())
 		{

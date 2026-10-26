@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Markup-forms end-to-end fixture. SUIsei.SourceGen turns this into a partial SUIsei.Tests.Sample.MarkupFormsView at
+	build time, so its compilation proves the emitted code is valid C#; MarkupFormsTests then checks the tree it builds.
+	It covers the three kinds of XML namespace (the default one, the suisei: extension namespace and a using: CLR
+	namespace), design-time markup under mc:Ignorable, generic property elements (a value, an object, a collection and
+	an attached property), the value converters, {x:Null}, {x:Static}, an inline merged dictionary, an attached-property
+	Setter, a storyboard path through a suisei: owner, and the runtime's own extensions (Clipping, Scrolling and
+	Virtualization, the last on the panel an ItemsPanelTemplate builds).
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			xmlns:suisei="https://github.com/AtomicBlom/SUIsei/extensions"
+			xmlns:local="using:SUIsei.Tests.Sample"
+			xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			mc:Ignorable="d"
+			d:DesignWidth="320"
+			x:Class="SUIsei.Tests.Sample.MarkupFormsView">
+	<StackPanel.Resources>
+		<ResourceDictionary>
+			<ResourceDictionary.MergedDictionaries>
+				<ResourceDictionary>
+					<Style x:Key="BaseText" TargetType="TextBlock">
+						<Setter Property="FontSize" Value="18" />
+					</Style>
+				</ResourceDictionary>
+			</ResourceDictionary.MergedDictionaries>
+			<Style x:Key="Glowing" TargetType="Border">
+				<Setter Property="suisei:TestGlow.Radius" Value="4" />
+				<Setter Property="Canvas.Left">
+					<Setter.Value>12</Setter.Value>
+				</Setter>
+			</Style>
+		</ResourceDictionary>
+	</StackPanel.Resources>
+
+	<d:DesignNote Text="Shown only in a designer" />
+	<TextBlock x:Name="Title" Style="{StaticResource BaseText}" Text="Forms" d:Text="Design-time title" />
+
+	<Border x:Name="Card" Style="{StaticResource Glowing}" Background="CornflowerBlue">
+		<Border.Padding>4,8</Border.Padding>
+		<Border.Child>
+			<TextBlock x:Name="CardText" Text="{x:Static local:SampleStrings.CardTitle}" />
+		</Border.Child>
+	</Border>
+
+	<StackPanel x:Name="List">
+		<StackPanel.Children>
+			<TextBlock Text="First" />
+			<TextBlock Text="Second" />
+		</StackPanel.Children>
+	</StackPanel>
+
+	<Canvas Width="100" Height="40">
+		<Border x:Name="Pinned" Width="10" Height="10" Background="{x:Static local:SampleStrings.Accent}">
+			<Canvas.Left>30</Canvas.Left>
+			<suisei:TestGlow.Radius>1.5</suisei:TestGlow.Radius>
+		</Border>
+	</Canvas>
+
+	<local:SampleCaption x:Name="Caption" />
+
+	<Border x:Name="Clipped" Width="20" Height="10" suisei:Clipping.ClipToBounds="True" />
+	<ScrollViewer x:Name="Scroller" Height="20" suisei:Scrolling.WheelScrollAmount="64" />
+	<ItemsControl x:Name="Rows">
+		<ItemsControl.ItemsPanel>
+			<ItemsPanelTemplate>
+				<VirtualizingStackPanel suisei:Virtualization.RowHeight="32" />
+			</ItemsPanelTemplate>
+		</ItemsControl.ItemsPanel>
+	</ItemsControl>
+
+	<suisei:TestBadge x:Name="Badge" Anchor="10,20" Scale="2 3" Offset="1,2,3" Tint="#80FF0000" Halo="{x:Null}"
+					  suisei:TestGlow.Radius="2.5">
+		<suisei:TestBadge.Content>
+			<TextBlock Text="Badge" />
+		</suisei:TestBadge.Content>
+		<VisualStateManager.VisualStateGroups>
+			<VisualStateGroup Name="Glow">
+				<VisualState Name="Off" />
+				<VisualState Name="On">
+					<Storyboard>
+						<DoubleAnimation Storyboard.TargetName="Badge" Storyboard.TargetProperty="(suisei:TestGlow.Radius)"
+										 To="10" Duration="0:0:1" />
+					</Storyboard>
+				</VisualState>
+			</VisualStateGroup>
+		</VisualStateManager.VisualStateGroups>
+	</suisei:TestBadge>
+</StackPanel>

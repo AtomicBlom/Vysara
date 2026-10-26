@@ -1,4 +1,7 @@
 using System.Numerics;
+using SUIsei.Controls;
+using SUIsei.Extensions;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei;
@@ -31,24 +34,10 @@ public abstract class UIElement : DependencyObject
 		DependencyProperty.Register(nameof(IsTabStop),
 			new PropertyMetadata<UIElement, bool> { DefaultValue = false });
 
-	/// <summary>When false the element is skipped by <see cref="FocusManager"/> and rejects
-	/// <see cref="FocusManager.TrySetFocus"/>.</summary>
-	public static readonly DependencyProperty<UIElement, bool> IsEnabledProperty =
-		DependencyProperty.Register(nameof(IsEnabled),
-			new PropertyMetadata<UIElement, bool> { DefaultValue = true });
-
-	/// <summary>Tab-order index within a focus scope. Lower values tab first; equal values use document order.</summary>
+	/// <summary>Tab-order index. Lower values tab first; equal values use document order.</summary>
 	public static readonly DependencyProperty<UIElement, int> TabIndexProperty =
 		DependencyProperty.Register(nameof(TabIndex),
 			new PropertyMetadata<UIElement, int> { DefaultValue = int.MaxValue });
-
-	/// <summary>When true, this element acts as a focus scope boundary: Tab navigation wraps within it rather than
-	/// escaping to the parent scope (e.g. a dialog or popup).</summary>
-	public static readonly DependencyProperty<UIElement, bool> IsFocusScopeProperty =
-		DependencyProperty.Register(nameof(IsFocusScope),
-			new PropertyMetadata<UIElement, bool> { DefaultValue = false });
-
-	public bool IsFocusScope { get => GetValue(IsFocusScopeProperty); set => SetValue(IsFocusScopeProperty, value); }
 
 	/// <summary>Group opacity (animatable — drives the composition <see cref="Visual.Opacity"/>).</summary>
 	public float Opacity { get => GetValue(OpacityProperty); set => SetValue(OpacityProperty, value); }
@@ -60,23 +49,22 @@ public abstract class UIElement : DependencyObject
 	public bool IsHitTestVisible { get => GetValue(IsHitTestVisibleProperty); set => SetValue(IsHitTestVisibleProperty, value); }
 
 	public bool IsTabStop { get => GetValue(IsTabStopProperty); set => SetValue(IsTabStopProperty, value); }
-	public bool IsEnabled { get => GetValue(IsEnabledProperty); set => SetValue(IsEnabledProperty, value); }
 	public int TabIndex { get => GetValue(TabIndexProperty); set => SetValue(TabIndexProperty, value); }
 
 	// --- Pointer routed events ---
 	// Preview events tunnel root→target; the paired bubble events fire after if Preview is unhandled.
 
-	public static readonly RoutedEvent PreviewPointerPressedEvent = RoutedEvent.Register(nameof(PreviewPointerPressed), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PreviewPointerReleasedEvent = RoutedEvent.Register(nameof(PreviewPointerReleased), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PreviewPointerMovedEvent = RoutedEvent.Register(nameof(PreviewPointerMoved), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PointerPressedEvent = RoutedEvent.Register(nameof(PointerPressed), RoutingStrategy.Bubble);
-	public static readonly RoutedEvent PointerReleasedEvent = RoutedEvent.Register(nameof(PointerReleased), RoutingStrategy.Bubble);
-	public static readonly RoutedEvent PointerMovedEvent = RoutedEvent.Register(nameof(PointerMoved), RoutingStrategy.Bubble);
-	public static readonly RoutedEvent PointerEnteredEvent = RoutedEvent.Register(nameof(PointerEntered), RoutingStrategy.Direct);
-	public static readonly RoutedEvent PointerExitedEvent = RoutedEvent.Register(nameof(PointerExited), RoutingStrategy.Direct);
-	public static readonly RoutedEvent PointerCaptureLostEvent = RoutedEvent.Register(nameof(PointerCaptureLost), RoutingStrategy.Direct);
-	public static readonly RoutedEvent PreviewPointerWheelChangedEvent = RoutedEvent.Register(nameof(PreviewPointerWheelChanged), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PointerWheelChangedEvent = RoutedEvent.Register(nameof(PointerWheelChanged), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PreviewPointerPressedEvent = RoutedEvent.RegisterInput(nameof(PreviewPointerPressed), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PreviewPointerReleasedEvent = RoutedEvent.RegisterInput(nameof(PreviewPointerReleased), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PreviewPointerMovedEvent = RoutedEvent.RegisterInput(nameof(PreviewPointerMoved), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PointerPressedEvent = RoutedEvent.RegisterInput(nameof(PointerPressed), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PointerReleasedEvent = RoutedEvent.RegisterInput(nameof(PointerReleased), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PointerMovedEvent = RoutedEvent.RegisterInput(nameof(PointerMoved), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PointerEnteredEvent = RoutedEvent.RegisterInput(nameof(PointerEntered), RoutingStrategy.Direct);
+	public static readonly RoutedEvent PointerExitedEvent = RoutedEvent.RegisterInput(nameof(PointerExited), RoutingStrategy.Direct);
+	public static readonly RoutedEvent PointerCaptureLostEvent = RoutedEvent.RegisterInput(nameof(PointerCaptureLost), RoutingStrategy.Direct);
+	public static readonly RoutedEvent PreviewPointerWheelChangedEvent = RoutedEvent.RegisterInput(nameof(PreviewPointerWheelChanged), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PointerWheelChangedEvent = RoutedEvent.RegisterInput(nameof(PointerWheelChanged), RoutingStrategy.Bubble);
 
 	public event RoutedEventHandler PreviewPointerPressed { add => AddHandler(PreviewPointerPressedEvent, value); remove => RemoveHandler(PreviewPointerPressedEvent, value); }
 	public event RoutedEventHandler PreviewPointerReleased { add => AddHandler(PreviewPointerReleasedEvent, value); remove => RemoveHandler(PreviewPointerReleasedEvent, value); }
@@ -92,11 +80,11 @@ public abstract class UIElement : DependencyObject
 
 	// --- Keyboard routed events ---
 
-	public static readonly RoutedEvent PreviewKeyDownEvent = RoutedEvent.Register(nameof(PreviewKeyDown), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent PreviewKeyUpEvent = RoutedEvent.Register(nameof(PreviewKeyUp), RoutingStrategy.Tunnel);
-	public static readonly RoutedEvent KeyDownEvent = RoutedEvent.Register(nameof(KeyDown), RoutingStrategy.Bubble);
-	public static readonly RoutedEvent KeyUpEvent = RoutedEvent.Register(nameof(KeyUp), RoutingStrategy.Bubble);
-	public static readonly RoutedEvent CharacterReceivedEvent = RoutedEvent.Register(nameof(CharacterReceived), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent PreviewKeyDownEvent = RoutedEvent.RegisterInput(nameof(PreviewKeyDown), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent PreviewKeyUpEvent = RoutedEvent.RegisterInput(nameof(PreviewKeyUp), RoutingStrategy.Tunnel);
+	public static readonly RoutedEvent KeyDownEvent = RoutedEvent.RegisterInput(nameof(KeyDown), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent KeyUpEvent = RoutedEvent.RegisterInput(nameof(KeyUp), RoutingStrategy.Bubble);
+	public static readonly RoutedEvent CharacterReceivedEvent = RoutedEvent.RegisterInput(nameof(CharacterReceived), RoutingStrategy.Bubble);
 
 	public event RoutedEventHandler PreviewKeyDown { add => AddHandler(PreviewKeyDownEvent, value); remove => RemoveHandler(PreviewKeyDownEvent, value); }
 	public event RoutedEventHandler PreviewKeyUp { add => AddHandler(PreviewKeyUpEvent, value); remove => RemoveHandler(PreviewKeyUpEvent, value); }
@@ -119,9 +107,10 @@ public abstract class UIElement : DependencyObject
 	/// <summary>A local render transform, composed under layout placement (animatable later).</summary>
 	public Matrix3x2 RenderTransform { get; set; } = Matrix3x2.Identity;
 
-	/// <summary>When true, the composition node clips its subtree to the element's layout bounds (applied in
-	/// <see cref="SyncVisual"/>). Takes effect on the next arrange.</summary>
-	public bool ClipToBounds { get; set; }
+	/// <summary>Whether this element always clips its subtree to its layout bounds, as a control that needs it
+	/// (ScrollViewer, TextBox) sets it. Markup asks for the same with <see cref="Clipping.ClipToBoundsProperty"/>; the
+	/// clip applies when either is set (in <see cref="SyncVisual"/>).</summary>
+	internal bool ClipToBounds { get; set; }
 
 	/// <summary>The result of the last <see cref="Measure"/> (intrinsic + margin), in DIPs.</summary>
 	public Size DesiredSize { get; protected set; }
@@ -236,9 +225,20 @@ public abstract class UIElement : DependencyObject
 	private bool _hasAnimatedTranslate;
 	private HdrColor? _animatedFill;
 
-	/// <summary>The animation-overridden brush, if any; a content-bearing control's <see cref="BuildContent"/> prefers
+	/// <summary>The animation-overridden brush, if any; a content-bearing control's <see cref="UpdateContent"/> prefers
 	/// it over its background so a colour animation drives the brush on the no-relayout visual path.</summary>
 	private protected HdrColor? AnimatedFill => _animatedFill;
+
+	/// <summary>The colour this element paints now: the animated fill if one is running, else its own
+	/// (<see cref="BaseFill"/>), else transparent. Where a colour animation with no <c>From</c> starts.</summary>
+	internal HdrColor CurrentFill => _animatedFill ?? BaseFill ?? HdrColor.Transparent;
+
+	/// <summary>The colour the animated fill overrides — a control's background, a text block's foreground — or null
+	/// for an element that paints none.</summary>
+	private protected virtual HdrColor? BaseFill => null;
+
+	/// <summary>The offset an animation currently adds to the render transform; zero when none is running.</summary>
+	internal Vector2 AnimatedTranslate => _animatedTranslate;
 
 	/// <summary>The element's effective composition transform: render transform, plus any animated translate, placed
 	/// at the layout position. Used by both <see cref="SyncVisual"/> and the translate animation so they agree.</summary>
@@ -272,11 +272,11 @@ public abstract class UIElement : DependencyObject
 	/// <summary>Clear the animated brush, reverting to the element's own background.</summary>
 	internal void ClearAnimatedFill() { _animatedFill = null; InvalidateContent(); }
 
-	/// <summary>Re-evaluate just this element's drawn content (a brush/background change) against the current
-	/// <see cref="LayoutRect"/> — no relayout. Marks the visual dirty for the next composite.</summary>
+	/// <summary>Bring just this element's drawn content up to date in place (a brush/background change) against the
+	/// current <see cref="LayoutRect"/> — no relayout. Marks the visual dirty for the next composite.</summary>
 	protected void InvalidateContent()
 	{
-		Visual.Content = BuildContent();
+		Visual.Content = UpdateContent();
 		Visual.MarkDirty();
 	}
 
@@ -296,20 +296,52 @@ public abstract class UIElement : DependencyObject
 	{
 		Visual.Transform = ComposeTransform();
 		Visual.Opacity = Opacity;
-		Visual.Clip = ClipToBounds ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
-		Visual.Content = BuildContent();
-		Visual.Clear();
+		Visual.Clip = ClipToBounds || Clipping.GetClipToBounds(this) ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
+		Visual.Content = UpdateContent();
 		// A collapsed element's children were never re-arranged this pass (Arrange short-circuits ArrangeCore above),
 		// so their LayoutRect/transform are stale leftovers from when the element was last visible. Detaching them
 		// from the visual tree here (rather than only zeroing this element's own size) keeps "Collapsed contributes
 		// zero to layout" true for rendering too — otherwise stale descendants would still draw at their old position.
-		if (Visibility != Visibility.Collapsed)
-			foreach (var child in VisualChildren)
-				Visual.Add(child.Visual);
+		SyncVisualChildren(Visibility == Visibility.Collapsed ? [] : VisualChildren);
 		Visual.MarkDirty();
 	}
 
-	private protected virtual VisualContent? BuildContent() => null;
+	// Mirror the element children's visuals into this visual's child list. An arrange usually leaves the children as
+	// they were, so the list is compared first and relinked only when the set or its order changed.
+	private void SyncVisualChildren(IReadOnlyList<UIElement> children)
+	{
+		var visuals = Visual.Children;
+		if (visuals.Count == children.Count)
+		{
+			var same = true;
+			for (var i = 0; same && i < children.Count; i++)
+				same = ReferenceEquals(visuals[i], children[i].Visual);
+			if (same)
+				return;
+		}
+
+		Visual.Clear();
+		for (var i = 0; i < children.Count; i++)
+			Visual.Add(children[i].Visual);
+	}
+
+	/// <summary>
+	/// Bring this element's drawn content up to date with its properties and <see cref="LayoutRect"/>, and return it,
+	/// or null when the element draws nothing. An element keeps its content object and updates it in place, so this
+	/// allocates only the first time an element draws.
+	/// </summary>
+	private protected virtual VisualContent? UpdateContent() => null;
+
+	// The rect content of an element in the rect family (a background, a border), kept across updates.
+	private RectContent? _rectContent;
+
+	/// <summary>This element's retained <see cref="RectContent"/>, updated to its layout size and the given paint.</summary>
+	private protected RectContent RetainedRect(HdrColor? fill, float cornerRadius = 0f, HdrColor? borderBrush = null, float borderThickness = 0f)
+	{
+		var content = _rectContent ??= new RectContent();
+		content.Update(new Vector2(LayoutRect.Width, LayoutRect.Height), fill, cornerRadius, borderBrush, borderThickness);
+		return content;
+	}
 
 	// --- Explicit pointer capture ---
 
@@ -401,46 +433,100 @@ public abstract class UIElement : DependencyObject
 	{
 		if (_handlers is null || args.RoutedEvent is null || !_handlers.TryGetValue(args.RoutedEvent.Id, out var slot))
 			return;
+		// A disabled control handles no input on itself; the event still routes on to its ancestors.
+		if (args.RoutedEvent.IsInput && this is Control { CanHandleInput: false })
+			return;
 		args.Source = this;
 		if (!args.Handled)
 			slot.Normal?.Invoke(this, args);
 		slot.HandledToo?.Invoke(this, args);
 	}
 
-	// --- 2D hit-testing: reverse-z, respects IsHitTestVisible/Visibility/RenderTransform ---
-
 	/// <summary>
-	/// Return the top-most descendant (or this element) hit by <paramref name="point"/>, expressed in this element's
-	/// local space (origin at this element's top-left, pre-<see cref="RenderTransform"/>). Children are tested
-	/// front-to-back; an element is a hit only where it actually draws (its visual has content), so transparent
-	/// panels let clicks fall through. Pure + side-effect-free — asserted directly in tests.
+	/// Return the top-most element of this subtree drawn at <paramref name="surfacePoint"/> (surface pixels). The walk
+	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Visual.Transform"/>
+	/// is composed onto <paramref name="parentWorld"/>, so render transforms, animated translates and layout scale all
+	/// count, and each visual's clip is intersected into <paramref name="clip"/> as its surface-space bounds, the same
+	/// bound the compositor clips with, so a point is hittable exactly where something can be seen. Children are tested
+	/// front-to-back before the element's own content, and an element is a hit only where its content draws
+	/// (<see cref="ContentContains"/>), so transparent panels let the point through. Allocation-free.
 	/// </summary>
-	internal UIElement? HitTest(Vector2 point)
+	internal UIElement? HitTest(Vector2 surfacePoint, in Matrix3x2 parentWorld, Rect clip)
 	{
 		if (!IsHitTestVisible || Visibility != Visibility.Visible)
 			return null;
 
-		var local = point;
-		if (RenderTransform != Matrix3x2.Identity && Matrix3x2.Invert(RenderTransform, out var inv))
-			local = Vector2.Transform(point, inv);
+		var world = Visual.Transform * parentWorld;
+		if (Visual.Clip is { } localClip)
+			clip = clip.Intersect(localClip.TransformBounds(world));
+		if (!clip.Contains(surfacePoint))
+			return null;
 
 		var children = VisualChildren;
 		for (var i = children.Count - 1; i >= 0; i--)
 		{
-			var c = children[i];
-			var hit = c.HitTest(local - new Vector2(c.LayoutRect.X, c.LayoutRect.Y));
-			if (hit is not null)
+			if (children[i].HitTest(surfacePoint, world, clip) is { } hit)
 				return hit;
 		}
 
-		var bounds = new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height);
-		return bounds.Contains(local) && Visual.Content is not null ? this : null;
+		return Visual.Content is { } content && Matrix3x2.Invert(world, out var toLocal)
+			&& ContentContains(content, Vector2.Transform(surfacePoint, toLocal), LayoutRect)
+			? this
+			: null;
+	}
+
+	/// <summary>
+	/// Whether <paramref name="content"/>, drawn in an element's local space, covers <paramref name="local"/>: one case
+	/// per content kind, as the compositor draws one per kind. A rect covers its bounds, an image its destination rect
+	/// (not the letterbox around it), and text its element's layout bounds. Exact shape geometry is one more case here.
+	/// </summary>
+	private static bool ContentContains(VisualContent content, Vector2 local, in Rect layoutRect) => content switch
+	{
+		RectContent rect => new Rect(0f, 0f, rect.Size.X, rect.Size.Y).Contains(local),
+		ImageContent image => image.Dest.Contains(local),
+		_ => new Rect(0f, 0f, layoutRect.Width, layoutRect.Height).Contains(local),
+	};
+
+	/// <summary>The transform from this element's local space to its root's DIP space: the visual transforms composed up
+	/// the parent chain, as drawn. With the root, also the top element it reached, which identifies the tree.</summary>
+	internal Matrix3x2 TransformToRoot(out UIElement top)
+	{
+		var m = Matrix3x2.Identity;
+		top = this;
+		for (UIElement? e = this; e is not null; e = e.Parent)
+		{
+			m *= e.Visual.Transform;
+			top = e;
+		}
+		return m;
+	}
+
+	/// <summary>
+	/// A transform from this element's local space to <paramref name="visual"/>'s, or to the root's DIP space when it is
+	/// null, as WinUI's <c>UIElement.TransformToVisual</c>. It goes through the composed visual transforms, so render
+	/// transforms, animated translates and scroll offsets count. Valid until either element moves.
+	/// </summary>
+	/// <exception cref="ArgumentException"><paramref name="visual"/> is not in the same tree as this element.</exception>
+	public GeneralTransform TransformToVisual(UIElement? visual)
+	{
+		var toRoot = TransformToRoot(out var top);
+		if (visual is null)
+			return new MatrixGeneralTransform(toRoot);
+
+		var otherToRoot = visual.TransformToRoot(out var otherTop);
+		var sameTree = ReferenceEquals(top, otherTop) || (AttachedRoot is not null && ReferenceEquals(AttachedRoot, visual.AttachedRoot));
+		if (!sameTree)
+			throw new ArgumentException("The element is not in the same tree as this one.", nameof(visual));
+		return new MatrixGeneralTransform(Matrix3x2.Invert(otherToRoot, out var rootToOther)
+			? toRoot * rootToOther
+			: new Matrix3x2(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN));
 	}
 
 	internal void AdoptChild(UIElement child)
 	{
 		child.Parent = this;
 		child.SetAttachedRoot(AttachedRoot);
+		child.InheritDisabled(InDisabledControl);
 	}
 
 	internal void DropChild(UIElement child)
@@ -449,6 +535,37 @@ public abstract class UIElement : DependencyObject
 		{
 			child.Parent = null;
 			child.SetAttachedRoot(null);
+			child.InheritDisabled(false);
 		}
+	}
+
+	// --- Control.IsEnabled inheritance ---
+
+	/// <summary>Whether the nearest control at or above this element is disabled: such an element takes no focus, and a
+	/// control adopted beneath it is disabled too.</summary>
+	internal bool InDisabledControl
+	{
+		get
+		{
+			for (var e = this; e is not null; e = e.Parent)
+			{
+				if (e is Control control)
+					return !control.IsEnabled;
+			}
+			return false;
+		}
+	}
+
+	/// <summary>Tell the topmost controls in this subtree whether the control above them is disabled. Each passes the
+	/// change on to its own subtree if its effective <see cref="Control.IsEnabled"/> moves.</summary>
+	internal void InheritDisabled(bool ancestorDisabled)
+	{
+		if (this is Control control)
+		{
+			control.SetAncestorDisabled(ancestorDisabled);
+			return;
+		}
+		foreach (var child in VisualChildren)
+			child.InheritDisabled(ancestorDisabled);
 	}
 }

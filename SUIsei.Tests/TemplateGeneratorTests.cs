@@ -176,7 +176,33 @@ public sealed class TemplateGeneratorTests
 	}
 
 	[Test]
-	public void Items_panel_emits_a_panel_factory()
+	public void Items_panel_emits_a_panel_factory_that_sets_the_panels_attributes()
+	{
+		const string xaml = """
+			<ItemsControl xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			              xmlns:suisei="https://github.com/AtomicBlom/SUIsei/extensions"
+			              x:Class="Demo.V">
+			  <ItemsControl.ItemsPanel>
+			    <ItemsPanelTemplate>
+			      <VirtualizingStackPanel x:Name="Host" suisei:Virtualization.RowHeight="32" Margin="2" />
+			    </ItemsPanelTemplate>
+			  </ItemsControl.ItemsPanel>
+			</ItemsControl>
+			""";
+		var result = XamlGeneratorHarness.Run(xaml, Vm);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain(".ItemsPanel = new global::SUIsei.Controls.ItemsPanelTemplate { Factory = __Template");
+		code.ShouldContain("private static global::SUIsei.Controls.Panel __Template");
+		code.ShouldContain("global::SUIsei.Extensions.Virtualization.SetRowHeight(Host, 32f);");
+		code.ShouldContain("Host.Margin = new global::SUIsei.Thickness(2f);");
+		XamlGeneratorHarness.CompileErrors(xaml, Vm).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_items_panel_that_is_not_a_panel_is_an_error()
 	{
 		const string xaml = """
 			<ItemsControl xmlns="https://github.com/AtomicBlom/SUIsei/ui"
@@ -184,17 +210,12 @@ public sealed class TemplateGeneratorTests
 			              x:Class="Demo.V">
 			  <ItemsControl.ItemsPanel>
 			    <ItemsPanelTemplate>
-			      <VirtualizingStackPanel />
+			      <Border />
 			    </ItemsPanelTemplate>
 			  </ItemsControl.ItemsPanel>
 			</ItemsControl>
 			""";
-		var result = XamlGeneratorHarness.Run(xaml, Vm);
-
-		result.DiagnosticIds().ShouldBeEmpty();
-		result.AllGeneratedText().ShouldContain(
-			".ItemsPanel = new global::SUIsei.Controls.ItemsPanelTemplate { Factory = static () => new global::SUIsei.Controls.VirtualizingStackPanel() }");
-		XamlGeneratorHarness.CompileErrors(xaml, Vm).ShouldBeEmpty();
+		XamlGeneratorHarness.Run(xaml, Vm).DiagnosticIds().ShouldBe(["SUISEI020"]);
 	}
 
 	// --- Style + Resources markup ---

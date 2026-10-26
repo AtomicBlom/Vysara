@@ -24,10 +24,13 @@
   </ItemGroup>
 
   <!-- SUIsei is standalone — only the runtime project is needed (no Loom.Core / Loom.Assets). -->
-  <!-- ReferenceOutputAssembly=true on SourceGen so XamlSourceGenerator is referenceable by CSharpGeneratorDriver tests. -->
+  <!-- ReferenceOutputAssembly=true on SourceGen so XamlSourceGenerator is referenceable by CSharpGeneratorDriver tests.
+       UndefineProperties keeps an AOT publish of this app from AOT-compiling the netstandard2.0 generator (NETSDK1207)
+       or building it for the app's RID, as the analyzer reference in build/SUIsei.targets does. -->
   <ItemGroup>
     <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
-    <ProjectReference Include="..\SUIsei.SourceGen\SUIsei.SourceGen.csproj" ReferenceOutputAssembly="true" />
+    <ProjectReference Include="..\SUIsei.SourceGen\SUIsei.SourceGen.csproj" ReferenceOutputAssembly="true"
+                      UndefineProperties="PublishAot;RuntimeIdentifier;SelfContained" />
     <!-- The CPU reference rasterizer is the headless pixel oracle: it renders DrawListData to RGBA8 with the same
          per-kind math (and the RT-stack layer composite) the GPU runs, so group opacity is asserted at the pixel
          level with no GPU. -->

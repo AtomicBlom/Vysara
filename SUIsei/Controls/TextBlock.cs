@@ -21,8 +21,8 @@ public sealed class TextBlock : FrameworkElement
 	/// <summary>Font size in DIPs.</summary>
 	public float FontSize { get => GetValue(FontSizeProperty); set => SetValue(FontSizeProperty, value); }
 
-	/// <summary>Glyph colour.</summary>
-	public HdrColor Foreground { get; set; } = HdrColor.FromRgb(255, 255, 255);
+	/// <summary>Glyph colour. A colour animation on <c>Foreground</c> overrides it on the visual path, with no relayout.</summary>
+	public HdrColor Foreground { get; set { if (field != value) { field = value; InvalidateContent(); } } } = HdrColor.FromRgb(255, 255, 255);
 
 	protected override Size MeasureOverride(Size available)
 	{
@@ -35,6 +35,18 @@ public sealed class TextBlock : FrameworkElement
 		return new Size(width, height);
 	}
 
-	private protected override VisualContent? BuildContent() =>
-		string.IsNullOrEmpty(Text) ? null : new GlyphRunContent(Text, FontSize, Foreground);
+	// The run this element draws, kept across updates so a recolour or re-arrange allocates nothing.
+	private GlyphRunContent? _glyphRun;
+
+	private protected override HdrColor? BaseFill => Foreground;
+
+	private protected override VisualContent? UpdateContent()
+	{
+		var text = Text;
+		if (string.IsNullOrEmpty(text))
+			return null;
+		var content = _glyphRun ??= new GlyphRunContent();
+		content.Update(text, FontSize, AnimatedFill ?? Foreground);
+		return content;
+	}
 }

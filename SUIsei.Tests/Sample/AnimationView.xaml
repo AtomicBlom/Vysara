@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Storyboard end-to-end fixture. SUIsei.SourceGen turns this into a partial SUIsei.Tests.Sample.AnimationView at build
+	time, so its compilation proves the emitted storyboards are valid C#; AnimationViewTests then runs them. It covers
+	Storyboard.TargetProperty paths to an attached property, an owner-qualified property and a WinUI brush path, plus a
+	keyframe animation with discrete and eased keys.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			x:Class="SUIsei.Tests.Sample.AnimationView"
+			Orientation="Vertical">
+	<Canvas Width="200" Height="40">
+		<Border x:Name="Box" Width="20" Height="20" Background="#FF0000" />
+	</Canvas>
+	<ContentControl x:Name="Host">
+		<VisualStateManager.VisualStateGroups>
+			<VisualStateGroup Name="Motion">
+				<VisualState Name="Rest" />
+				<VisualState Name="Moved">
+					<Storyboard>
+						<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Left)"
+										 To="100" Duration="0:0:1" />
+						<DoubleAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)">
+							<LinearDoubleKeyFrame KeyTime="0:0:0" Value="1" />
+							<DiscreteDoubleKeyFrame KeyTime="0:0:0.5" Value="0.5" />
+							<EasingDoubleKeyFrame KeyTime="0:0:1" Value="0.25">
+								<EasingDoubleKeyFrame.EasingFunction>
+									<CubicEase EasingMode="EaseIn" />
+								</EasingDoubleKeyFrame.EasingFunction>
+							</EasingDoubleKeyFrame>
+						</DoubleAnimationUsingKeyFrames>
+						<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+										To="#0000FF" Duration="0:0:1" />
+					</Storyboard>
+				</VisualState>
+			</VisualStateGroup>
+		</VisualStateManager.VisualStateGroups>
+	</ContentControl>
+</StackPanel>

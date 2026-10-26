@@ -13,6 +13,9 @@ public class ContentPresenter : FrameworkElement
 {
 	private UIElement? _hosted;
 
+	// VisualChildren, rebuilt only when _hosted changes, so reading it allocates nothing.
+	private UIElement[] _hostedList = [];
+
 	public object? Content
 	{
 		get;
@@ -38,13 +41,14 @@ public class ContentPresenter : FrameworkElement
 
 	public HdrColor? Background { get; set { if (field != value) { field = value; InvalidateContent(); } } }
 
-	internal override IReadOnlyList<UIElement> VisualChildren => _hosted is null ? [] : [_hosted];
+	internal override IReadOnlyList<UIElement> VisualChildren => _hostedList;
 
 	private void Rehost()
 	{
 		if (_hosted is not null)
 			DropChild(_hosted);
 		_hosted = ContentTemplate is { } dt ? dt.Factory(Content) : ContentHelper.Wrap(Content);
+		_hostedList = _hosted is null ? [] : [_hosted];
 		if (_hosted is not null)
 			AdoptChild(_hosted);
 		InvalidateMeasure();
@@ -64,6 +68,7 @@ public class ContentPresenter : FrameworkElement
 		return finalSize;
 	}
 
-	private protected override VisualContent? BuildContent() =>
-		Background is { } bg ? new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), bg) : null;
+	private protected override HdrColor? BaseFill => Background;
+
+	private protected override VisualContent? UpdateContent() => Background is { } bg ? RetainedRect(bg) : null;
 }

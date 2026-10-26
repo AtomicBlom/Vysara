@@ -1,4 +1,5 @@
 using SUIsei.Drawing;
+using SUIsei.Markup;
 
 namespace SUIsei;
 
@@ -14,6 +15,23 @@ public readonly record struct HdrColor(float R, float G, float B, float A)
 
 	/// <summary>From 8-bit sRGB-ish channels (0..255) at full alpha — the common HUD authoring shorthand.</summary>
 	public static HdrColor FromRgb(byte r, byte g, byte b, byte a = 255) => new(r / 255f, g / 255f, b / 255f, a / 255f);
+
+	/// <summary>Parse the XAML colour forms: <c>#RRGGBB</c>, <c>#AARRGGBB</c>, or a WinUI named colour such as
+	/// <c>CornflowerBlue</c> (any case). The generator validates XAML colours with the same parser.</summary>
+	public static bool TryParse(string text, out HdrColor color)
+	{
+		if (XamlValueSyntax.TryParseColor(text, out var a, out var r, out var g, out var b))
+		{
+			color = FromRgb(r, g, b, a);
+			return true;
+		}
+		color = default;
+		return false;
+	}
+
+	/// <summary>As <see cref="TryParse"/>, throwing <see cref="FormatException"/> on text that is not a colour.</summary>
+	public static HdrColor Parse(string text) =>
+		TryParse(text, out var color) ? color : throw new FormatException($"'{text}' is not a colour: use #RRGGBB, #AARRGGBB or a named colour.");
 
 	/// <summary>
 	/// Fold in a group/animation opacity and convert to a premultiplied <see cref="PremultipliedHdrColor"/> for the

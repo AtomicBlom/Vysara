@@ -19,7 +19,9 @@ namespace SUIsei.Rasterizer;
 /// command with no bound texture is skipped (counted in <see cref="SkippedCommands"/>). It also honours the
 /// <see cref="UIPrimKind.BeginLayer"/>/<see cref="UIPrimKind.EndLayer"/> group-opacity markers by rendering the
 /// bracketed subtree into an offscreen framebuffer and compositing it back at the group's fade alpha — the CPU twin
-/// of the backend RT stack, so it gives true (non-double-blended) group opacity headlessly.
+/// of the backend RT stack, so it gives true (non-double-blended) group opacity headlessly. A command whose tag is
+/// none of these kinds throws <see cref="ArgumentException"/> before anything is drawn, rather than being shaded as
+/// something it is not.
 /// </summary>
 public sealed class SoftwareRasterizer
 {
@@ -100,6 +102,7 @@ public sealed class SoftwareRasterizer
 		var indices = draw.Indices.Span;
 		var commands = draw.Commands.Span;
 		var hdr = draw.IsHdrTarget;
+		ScanCommands(commands);
 
 		for (var ci = 0; ci < commands.Length; ci++)
 		{
@@ -151,6 +154,7 @@ public sealed class SoftwareRasterizer
 			if (sx0 > sx1 || sy0 > sy1)
 				continue;
 
+			// Indices are 16-bit and relative to the command's VertexOffset, the base vertex every backend draws with.
 			var end = cmd.IndexOffset + cmd.IndexCount;
 			for (var i = cmd.IndexOffset; i + 3 <= end; i += 3)
 			{
@@ -196,7 +200,7 @@ public sealed class SoftwareRasterizer
 		if (rx0 > rx1 || ry0 > ry1)
 			return;
 
-		if (DrawHasLayers(draw))
+		if (ScanCommands(draw.Commands.Span))
 		{
 			// Layers composite through whole-surface offscreen targets, so a region-limited replay isn't valid; do the
 			// full serial pair. (The compositor reports whole-surface damage when layers are present, so the region is
@@ -272,16 +276,29 @@ public sealed class SoftwareRasterizer
 		return triangles;
 	}
 
-	private static bool DrawHasLayers(DrawListData draw)
+	// Check every command's tag before anything is drawn, and report whether the list opens group-opacity layers. A tag
+	// that names no kind this rasterizer draws throws: shading it as some other kind would hide a mismatch between the
+	// producer and the oracle. The tag is matched as the whole uint, because casting it to the byte-sized UIPrimKind first
+	// would alias 256 to Fill.
+	private static bool ScanCommands(ReadOnlySpan<DrawCommand> commands)
 	{
-		var commands = draw.Commands.Span;
+		var layers = false;
 		for (var i = 0; i < commands.Length; i++)
 		{
-			var kind = (UIPrimKind)commands[i].Tag;
-			if (kind is UIPrimKind.BeginLayer or UIPrimKind.EndLayer)
-				return true;
+			switch (commands[i].Tag)
+			{
+				case (uint)UIPrimKind.Fill or (uint)UIPrimKind.RoundedRect or (uint)UIPrimKind.Border
+					or (uint)UIPrimKind.Glyph or (uint)UIPrimKind.Image:
+					break;
+				case (uint)UIPrimKind.BeginLayer or (uint)UIPrimKind.EndLayer:
+					layers = true;
+					break;
+				default:
+					throw new ArgumentException(
+						$"Draw command {i} has tag {commands[i].Tag}, which is not a primitive kind the rasterizer draws.", "draw");
+			}
 		}
-		return false;
+		return layers;
 	}
 
 	/// <summary>
@@ -452,8 +469,11 @@ public sealed class SoftwareRasterizer
 					var inner = Coverage(p, dpdx, dpdy, half - new Vector2(thick), MathF.Max(radius - thick, 0f));
 					return col * Saturate(outer - inner);
 				}
-			default: // Fill — solid premultiplied quad, no SDF, no texture.
+			case UIPrimKind.Fill: // solid premultiplied quad, no SDF, no texture
 				return col;
+			default:
+				// Render validates every tag first, so this is unreachable; it stays loud rather than guessing a fill.
+				throw new InvalidOperationException($"The rasterizer has no shading for primitive kind {kind}.");
 		}
 	}
 

@@ -1,0 +1,27 @@
+namespace SUIsei.Animation;
+
+/// <summary>
+/// Something an animation drives on an object: an animatable dependency property, or one of the element channels
+/// that animate a property which is not a dependency property. Resolved once when an animation begins.
+/// </summary>
+internal interface IAnimationTarget
+{
+	/// <summary>The property's name, for diagnostics.</summary>
+	string Name { get; }
+
+	/// <summary>The name of the value type, for diagnostics.</summary>
+	string ValueTypeName { get; }
+}
+
+/// <summary>An <see cref="IAnimationTarget"/> of value type <typeparamref name="T"/>: read, write and release, unboxed.</summary>
+internal interface IAnimationTarget<T> : IAnimationTarget
+{
+	/// <summary>The value the object shows now, including any animation holding it: where a new animation starts.</summary>
+	T Read(DependencyObject target);
+
+	/// <summary>Write an animated value. It outranks the object's own value until <see cref="Release"/>.</summary>
+	void Write(DependencyObject target, T value);
+
+	/// <summary>Drop the animated value, so the object shows its own value again.</summary>
+	void Release(DependencyObject target);
+}

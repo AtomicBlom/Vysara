@@ -35,7 +35,7 @@ public sealed class DoubleAnimationUsingKeyFrames : AnimationTimeline<double>
 				var loPos = lo.KeyTime.TotalSeconds / d;
 				var span = hiPos - loPos;
 				var local = span > 0 ? (progress - loPos) / span : 1.0;
-				var eased = hi.EasingFunction?.Ease(local) ?? local;
+				var eased = hi.IsDiscrete ? (local >= 1.0 ? 1.0 : 0.0) : hi.EasingFunction?.Ease(local) ?? local;
 				return lo.Value + (hi.Value - lo.Value) * eased;
 			}
 		}
@@ -43,11 +43,5 @@ public sealed class DoubleAnimationUsingKeyFrames : AnimationTimeline<double>
 		return KeyFrames[n - 1].Value;
 	}
 
-	protected override (Action<double> Apply, Action Release) ResolveChannel(UIElement target, string property) => property switch
-	{
-		"Opacity" => (v => target.SetAnimatedValue(UIElement.OpacityProperty, (float)v), () => target.ClearAnimatedValue(UIElement.OpacityProperty)),
-		"RenderTransform.Translate.X" => (v => target.SetAnimatedTranslateX((float)v), target.ClearAnimatedTranslate),
-		"RenderTransform.Translate.Y" => (v => target.SetAnimatedTranslateY((float)v), target.ClearAnimatedTranslate),
-		_ => (static _ => { }, static () => { }),
-	};
+	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => DoubleBinding.TryBind(this, owner, target);
 }

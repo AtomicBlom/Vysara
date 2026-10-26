@@ -11,8 +11,8 @@ namespace SUIsei;
 /// </summary>
 public sealed class DrawListCompositor : IUICompositor
 {
-	private readonly Dictionary<int, DrawListData> _surfaces = [];
-	private readonly Dictionary<int, uint> _revisions = [];
+	// Each surface's builder, kept across composites: it owns the surface's retained buffers and its revision.
+	private readonly Dictionary<int, UIDrawList> _surfaces = [];
 	private readonly FontAtlas _font;
 
 	/// <param name="font">
@@ -30,27 +30,27 @@ public sealed class DrawListCompositor : IUICompositor
 		// Frame-level no-op: once a surface has been composited, a fully-clean visual
 		// tree re-submits the cached draw data with the same Revision — a static frame does zero compositing work
 		// (and the backend can skip re-upload). A visual-only change marks its subtree dirty and forces a rebuild.
-		if (_surfaces.ContainsKey(surface.Value) && !AnyDirty(root))
+		if (!_surfaces.TryGetValue(surface.Value, out var list))
+			_surfaces[surface.Value] = list = new UIDrawList();
+		else if (!AnyDirty(root))
 			return;
 
-		var list = new UIDrawList(root.SurfaceSize);
-		Walk(list, root, Matrix3x2.Identity, 1f, new Rect(0, 0, root.SurfaceSize.X, root.SurfaceSize.Y));
-		var rev = _revisions.TryGetValue(surface.Value, out var r) ? r + 1 : 1u;
-		_revisions[surface.Value] = rev;
-
-		var built = list.Build(root.IsHdrSurface, rev);
-		built.Damage = _surfaces.TryGetValue(surface.Value, out var previous)
-			? ComputeDamage(previous, built, root.SurfaceSize)
-			: new Rect(0, 0, root.SurfaceSize.X, root.SurfaceSize.Y); // first build for this surface → repaint all
-		_surfaces[surface.Value] = built;
+		var surfaceRect = new Rect(0, 0, root.SurfaceSize.X, root.SurfaceSize.Y);
+		list.Begin(root.SurfaceSize);
+		Walk(list, root, Matrix3x2.Identity, 1f, surfaceRect);
+		var built = list.End(root.IsHdrSurface);
+		built.Damage = list.Previous.Revision == 0
+			? surfaceRect // first build for this surface → repaint all
+			: ComputeDamage(list.Previous, list.Current, root.SurfaceSize);
 		CompositeCount++;
 	}
 
 	// The pixel region that differs between two consecutive draw lists of the same surface — the union of the old and
 	// new positions of every vertex whose contents changed (so colour fades, moves, and resizes are all covered). A
 	// structural change (commands added/removed/reordered, or a different vertex count) or any group-opacity layer
-	// expands to the whole surface, since those can affect pixels beyond the literal vertex deltas.
-	private static Rect ComputeDamage(DrawListData previous, DrawListData current, Vector2 surfaceSize)
+	// expands to the whole surface, since those can affect pixels beyond the literal vertex deltas. The previous list
+	// is still intact in the other buffer set, so this compares the two in place.
+	private static Rect ComputeDamage(DrawListBuffers previous, DrawListBuffers current, Vector2 surfaceSize)
 	{
 		var pc = previous.Commands.Span;
 		var cc = current.Commands.Span;
@@ -102,8 +102,11 @@ public sealed class DrawListCompositor : IUICompositor
 		return false;
 	}
 
-	/// <summary>The last <see cref="DrawListData"/> produced for <paramref name="surface"/> (handed to <see cref="UIHost.DrawLists"/>).</summary>
-	public DrawListData LastDraw(DrawListId surface) => _surfaces.TryGetValue(surface.Value, out var d) ? d : DrawListData.Empty;
+	/// <summary>
+	/// The last <see cref="DrawListData"/> produced for <paramref name="surface"/> (handed to <see cref="UIHost.DrawLists"/>).
+	/// It is a view over buffers this compositor reuses: read it this frame, and ask again next frame rather than keeping it.
+	/// </summary>
+	public DrawListData LastDraw(DrawListId surface) => _surfaces.TryGetValue(surface.Value, out var list) ? list.Last : DrawListData.Empty;
 
 	private void Walk(UIDrawList list, Visual v, Matrix3x2 parent, float opacity, Rect clip)
 	{
@@ -111,7 +114,10 @@ public sealed class DrawListCompositor : IUICompositor
 		var matrix = v.Transform * parent;
 		var localClip = clip;
 		if (v.Clip is { } c)
-			localClip = clip.Intersect(TransformRect(c, matrix));
+			localClip = clip.Intersect(c.TransformBounds(matrix));
+
+		// Children are walked by index: a foreach over IReadOnlyList<Visual> would box an enumerator per visual per frame.
+		var children = v.Children;
 
 		// A container that fades a subtree which can overlap (sub-1 opacity with children), or carries a group effect,
 		// must composite as one render-to-texture layer — otherwise overlapping children double-blend against each
@@ -122,16 +128,16 @@ public sealed class DrawListCompositor : IUICompositor
 		{
 			list.BeginLayer(localClip, v.Opacity, v.Effect?.ToParams() ?? Vector4.Zero);
 			EmitContent(list, v, matrix, 1f, localClip);
-			foreach (var child in v.Children)
-				Walk(list, child, matrix, 1f, localClip);
+			for (var i = 0; i < children.Count; i++)
+				Walk(list, children[i], matrix, 1f, localClip);
 			list.EndLayer(clip);
 			return;
 		}
 
 		var alpha = opacity * v.Opacity;
 		EmitContent(list, v, matrix, alpha, localClip);
-		foreach (var child in v.Children)
-			Walk(list, child, matrix, alpha, localClip);
+		for (var i = 0; i < children.Count; i++)
+			Walk(list, children[i], matrix, alpha, localClip);
 	}
 
 	// A subtree needs its own composite layer when it fades a group of children (overlap would double-blend) or
@@ -167,25 +173,5 @@ public sealed class DrawListCompositor : IUICompositor
 				list.AddImage(ic.Dest, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, alpha), ic.Source, localClip);
 				break;
 		}
-	}
-
-	// Axis-aligned bound of a local rect under an affine transform (exact for the translate/scale transforms used
-	// by layout; a conservative AABB for rotation — fine for clipping).
-	private static Rect TransformRect(in Rect r, in Matrix3x2 m)
-	{
-		Span<Vector2> p =
-		[
-			Vector2.Transform(new Vector2(r.X, r.Y), m),
-			Vector2.Transform(new Vector2(r.Right, r.Y), m),
-			Vector2.Transform(new Vector2(r.Right, r.Bottom), m),
-			Vector2.Transform(new Vector2(r.X, r.Bottom), m),
-		];
-		float minX = p[0].X, minY = p[0].Y, maxX = p[0].X, maxY = p[0].Y;
-		for (var i = 1; i < 4; i++)
-		{
-			minX = MathF.Min(minX, p[i].X); minY = MathF.Min(minY, p[i].Y);
-			maxX = MathF.Max(maxX, p[i].X); maxY = MathF.Max(maxY, p[i].Y);
-		}
-		return new Rect(minX, minY, maxX - minX, maxY - minY);
 	}
 }

@@ -1,26 +1,29 @@
-using System.Globalization;
 using System.Text;
 
 namespace SUIsei;
 
-/// <summary>A leaf node that draws <see cref="Content"/> (rect/border now; glyph-run/image later).</summary>
+/// <summary>A leaf node that draws <see cref="Content"/>: a rect with its border, a glyph run, or an image.</summary>
 public sealed class SpriteVisual : Visual
 {
-	public VisualContent? Content { get; set; }
+	/// <summary>
+	/// What this visual draws, or null for nothing. Assigning a different object marks the visual dirty; a change made
+	/// inside the same content object needs <see cref="Visual.MarkDirty"/> from whoever made it.
+	/// </summary>
+	public VisualContent? Content
+	{
+		get;
+		set
+		{
+			if (ReferenceEquals(field, value))
+				return;
+			field = value;
+			MarkDirty();
+		}
+	}
 
 	private protected override void DescribeSelf(StringBuilder sb)
 	{
 		base.DescribeSelf(sb);
-		var c = CultureInfo.InvariantCulture;
-		if (Content is RectContent r)
-		{
-			sb.Append(c, $" rect={r.Size.X:0.###}x{r.Size.Y:0.###}");
-			if (r.Fill is { } f) sb.Append(c, $" fill=({f.R:0.###},{f.G:0.###},{f.B:0.###},{f.A:0.###})");
-			if (r.CornerRadius > 0) sb.Append(c, $" radius={r.CornerRadius:0.###}");
-			if (r.BorderBrush is { } b && r.BorderThickness > 0)
-				sb.Append(c, $" border={r.BorderThickness:0.###}({b.R:0.###},{b.G:0.###},{b.B:0.###},{b.A:0.###})");
-		}
-		else if (Content is GlyphRunContent g)
-			sb.Append(c, $" glyphs=\"{g.Text}\" size={g.FontSizePx:0.###}");
+		Content?.Describe(sb);
 	}
 }

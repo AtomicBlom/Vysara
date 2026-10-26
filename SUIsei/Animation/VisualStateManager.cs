@@ -44,30 +44,42 @@ public static class VisualStateManager
 		if (groups is null)
 			return false;
 
+		// Indexed loops: a state change runs on every hover, and a foreach over the IList would box an enumerator.
 		foreach (var group in groups)
 		{
 			VisualState? target = null;
-			foreach (var state in group.States)
-				if (state.Name == stateName)
+			var states = group.States;
+			for (var i = 0; i < states.Count; i++)
+			{
+				if (states[i].Name == stateName)
 				{
-					target = state;
+					target = states[i];
 					break;
 				}
+			}
 			if (target is null)
 				continue;
 
 			var clock = control.Clock;
-			if (group.CurrentState?.Storyboard is { } previous)
-				clock?.Stop(previous);
-
+			var previous = group.CurrentState?.Storyboard;
 			group.CurrentState = target;
+			var next = target.Storyboard;
 
-			if (target.Storyboard is { } storyboard)
+			if (next is not null && useTransitions && clock is not null)
 			{
-				if (useTransitions && clock is not null)
-					clock.Begin(storyboard);
-				else
-					SnapToEnd(storyboard);
+				// Begin first: an animation with no From starts at the value the previous state's animation is showing, so
+				// the transition hands over smoothly. Then release the previous state.
+				clock.Begin(next);
+				if (previous is not null && !ReferenceEquals(previous, next))
+					clock.Stop(previous);
+			}
+			else
+			{
+				// Release the previous state first, so its release cannot wipe the end values snapped next.
+				if (previous is not null)
+					clock?.Stop(previous);
+				if (next is not null)
+					SnapToEnd(next);
 			}
 			return true;
 		}
@@ -79,11 +91,15 @@ public static class VisualStateManager
 	// detached from a host, so a state change is still observable in headless tests.
 	private static void SnapToEnd(Storyboard storyboard)
 	{
-		foreach (var child in storyboard.Children)
-			if (child is AnimationTimeline anim)
+		var children = storyboard.Children;
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline anim)
 			{
 				anim.EnsureResolved();
+				anim.CaptureStart();
 				anim.ApplyAt(1.0);
 			}
+		}
 	}
 }

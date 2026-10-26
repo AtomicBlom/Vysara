@@ -33,5 +33,21 @@ public readonly record struct Rect(float X, float Y, float Width, float Height)
 		return right <= x || bottom <= y ? Zero : new Rect(x, y, right - x, bottom - y);
 	}
 
+	/// <summary>The axis-aligned bounds of this rect under an affine transform: exact for translate and scale, a
+	/// conservative bound under rotation or skew. The compositor clips with it, and hit-testing uses the same bound so
+	/// a point is hittable exactly where its subtree can draw.</summary>
+	internal Rect TransformBounds(in Matrix3x2 m)
+	{
+		var a = Vector2.Transform(new Vector2(X, Y), m);
+		var b = Vector2.Transform(new Vector2(Right, Y), m);
+		var c = Vector2.Transform(new Vector2(Right, Bottom), m);
+		var d = Vector2.Transform(new Vector2(X, Bottom), m);
+		var minX = MathF.Min(MathF.Min(a.X, b.X), MathF.Min(c.X, d.X));
+		var minY = MathF.Min(MathF.Min(a.Y, b.Y), MathF.Min(c.Y, d.Y));
+		var maxX = MathF.Max(MathF.Max(a.X, b.X), MathF.Max(c.X, d.X));
+		var maxY = MathF.Max(MathF.Max(a.Y, b.Y), MathF.Max(c.Y, d.Y));
+		return new Rect(minX, minY, maxX - minX, maxY - minY);
+	}
+
 	public override string ToString() => $"({X:0.###},{Y:0.###} {Width:0.###}x{Height:0.###})";
 }
