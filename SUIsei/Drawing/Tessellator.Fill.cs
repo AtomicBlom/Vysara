@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Numerics;
 using SUIsei.Media;
 
@@ -27,20 +26,27 @@ public sealed partial class Tessellator
 	private readonly RetainedBuffer<int> _fillTriangles = new(192);
 	private readonly RetainedBuffer<(int Start, int Count)> _holeRings = new(4);
 	private readonly RetainedBuffer<(float MinX, float MaxX, int Contour, int Edge)> _edges = new(64);
+	private readonly RetainedBuffer<Vector2> _inset = new(64);
 	private readonly EarClipper _earClipper = new();
+	private readonly SweepTessellator _sweep = new();
 
 	/// <summary>
 	/// Tessellate the fill of <paramref name="path"/> into <paramref name="output"/> under its fill rule: every filled
-	/// figure, closed or not (an open one is closed by a straight line for filling), with holes where figures nest. The
-	/// interior is inset by half a pixel and each true edge gets a one-pixel fringe straddling it, carrying its distance,
-	/// so the edge's coverage ramp sits exactly on it.
+	/// figure, closed or not (an open one is closed by a straight line for filling). Figures may nest, cross themselves
+	/// and cross each other; the fill rule decides what is inside. The interior is inset by half a pixel and each edge
+	/// of the filled region gets a one-pixel fringe straddling it, carrying its distance, so the edge's coverage ramp sits
+	/// exactly on it.
+	/// <para>
+	/// Figures that neither cross nor touch are ear-clipped. Any others go through a sweep-line tessellator (libtess2's,
+	/// ported): it resolves the crossings into the filled region's boundary under the fill rule, which is inset and
+	/// triangulated in turn, so the fringe runs along the boundary of what is filled, never along an edge inside it.
+	/// </para>
 	/// <para>
 	/// Near-exact rather than exact: at a reflex corner each fringe takes its own edge's ramp, so the notch's
 	/// antialiasing is a little light where the two ramps would combine; features under a pixel wide can fold the inset
 	/// interior over, and corners sharper than about 30° have their fringe cut short.
 	/// </para>
 	/// </summary>
-	/// <exception cref="NotSupportedException">A figure crosses itself or another figure, or two touch.</exception>
 	public void Fill(CompositionPath path, TessellationScale scale, TessellatedPath output)
 	{
 		ArgumentNullException.ThrowIfNull(path);
@@ -54,11 +60,74 @@ public sealed partial class Tessellator
 			output.Finish(0, 0);
 			return;
 		}
-		RequireSimple();
-		ResolveNesting(path.FillRule);
-		ComputeMiters();
+		if (FindCrossing(out _))
+		{
+			SweepBoundaries(path.FillRule);
+			ComputeMiters();
+			SweepInterior(output, margin);
+		}
+		else
+		{
+			ResolveNesting(path.FillRule);
+			ComputeMiters();
+			EarClipInterior(output, margin);
+		}
+		AddFringes(output, margin);
+		output.Finish(0, 0);
+	}
 
-		// The interior: each outer boundary with its holes, triangulated, its corners moved half a pixel in.
+	// Resolve crossing contours under the fill rule into the filled region's boundary, which replaces them: simple
+	// contours, a filled region on the left of each (a positive area round it, negative round a hole).
+	private void SweepBoundaries(FillRule rule)
+	{
+		_sweep.Begin();
+		foreach (var contour in _contours.Span)
+			_sweep.AddContour(_contour.Span.Slice(contour.Start, contour.Count));
+		_sweep.Tessellate(rule == FillRule.Nonzero ? SweepTessellator.WindingRule.Nonzero : SweepTessellator.WindingRule.Odd, boundaryOnly: true);
+
+		_contour.Clear();
+		_contours.Clear();
+		var positions = _sweep.Positions.Span;
+		foreach (var (start, count) in _sweep.Contours.Span)
+		{
+			if (count < 3)
+				continue;
+			var first = _contour.Count;
+			var area = 0f;
+			for (var k = 0; k < count; k++)
+			{
+				var a = positions[start + k];
+				var b = positions[start + (k + 1) % count];
+				_contour.Add(a);
+				area += a.X * b.Y - b.X * a.Y;
+			}
+			_contours.Add(new Contour { Start = first, Count = count, Area = area / 2f, Parent = -1, Owner = -1, Boundary = true, Filled = area > 0 });
+		}
+	}
+
+	// Triangulate the boundary contours inset by half a pixel: outers wind +1 round their regions and holes -1, so the
+	// positive winding rule keeps exactly the inset fill, wherever thin features fold the inset over.
+	private void SweepInterior(TessellatedPath output, float margin)
+	{
+		_sweep.Begin();
+		var points = _contour.Span;
+		foreach (var contour in _contours.Span)
+		{
+			_inset.Clear();
+			for (var k = contour.Start; k < contour.Start + contour.Count; k++)
+				_inset.Add(points[k] + margin * _miters[k]);
+			_sweep.AddContour(_inset.Span);
+		}
+		_sweep.Tessellate(SweepTessellator.WindingRule.Positive, boundaryOnly: false);
+		var positions = _sweep.Positions.Span;
+		var interior = VectorVertex.NoEdges;
+		foreach (var i in _sweep.Triangles.Span)
+			output.Triangles.Add(new VectorVertex(positions[i], interior, 0));
+	}
+
+	// The interior of simple figures: each outer boundary with its holes, ear-clipped, its corners moved half a pixel in.
+	private void EarClipInterior(TessellatedPath output, float margin)
+	{
 		var points = _contour.Span;
 		for (var c = 0; c < _contours.Count; c++)
 		{
@@ -78,9 +147,14 @@ public sealed partial class Tessellator
 			foreach (var i in _fillTriangles.Span)
 				output.Triangles.Add(new VectorVertex(points[i] + margin * _miters[i], interior, 0));
 		}
+	}
 
-		// The fringe: a quad along every boundary edge, from half a pixel inside to half a pixel outside, carrying the
-		// edge's distance. Neighbouring quads share their ends, the miter lines, so the fill is watertight.
+	// The fringe: a quad along every boundary edge, from half a pixel inside to half a pixel outside, carrying the edge's
+	// distance. Neighbouring quads share their ends, the miter lines, and the interior's corners are their inner ends, so
+	// the fill is watertight.
+	private void AddFringes(TessellatedPath output, float margin)
+	{
+		var points = _contour.Span;
 		for (var c = 0; c < _contours.Count; c++)
 		{
 			var contour = _contours[c];
@@ -103,7 +177,6 @@ public sealed partial class Tessellator
 				Vector4 Edge(Vector2 p) => new(Vector2.Dot(p - a, normal), VectorVertex.Unused, VectorVertex.Unused, VectorVertex.Unused);
 			}
 		}
-		output.Finish(0, 0);
 	}
 
 	// Every filled figure with some area becomes a contour, implicitly closed.
@@ -158,9 +231,11 @@ public sealed partial class Tessellator
 		}
 	}
 
-	// Throw if any two edges of any contours cross or touch, other than neighbours meeting at their shared point.
-	private void RequireSimple()
+	// Whether any two edges of any contours cross or touch, other than neighbours meeting at their shared point; if so,
+	// roughly where.
+	private bool FindCrossing(out Vector2 at)
 	{
+		at = default;
 		_edges.Clear();
 		var points = _contour.Span;
 		for (var c = 0; c < _contours.Count; c++)
@@ -181,11 +256,11 @@ public sealed partial class Tessellator
 		{
 			for (var j = i + 1; j < edges.Length && edges[j].MinX <= edges[i].MaxX; j++)
 			{
-				if (Crosses(edges[i].Contour, edges[i].Edge, edges[j].Contour, edges[j].Edge, out var at))
-					throw new NotSupportedException(
-						$"Filling a figure that crosses itself or another figure is not supported: the outline crosses near ({at.X.ToString("0.###", CultureInfo.InvariantCulture)}, {at.Y.ToString("0.###", CultureInfo.InvariantCulture)}).");
+				if (Crosses(edges[i].Contour, edges[i].Edge, edges[j].Contour, edges[j].Edge, out at))
+					return true;
 			}
 		}
+		return false;
 	}
 
 	private bool Crosses(int c1, int k1, int c2, int k2, out Vector2 at)

@@ -7,8 +7,8 @@ namespace SUIsei.Tests;
 /// <summary>
 /// The tessellator's invariants: fills are watertight and fill what their rule says with holes where figures nest;
 /// every antialiased edge carries its true signed distance, half a pixel either side; strokes have WinUI's joins, caps
-/// and dash lengths, and every vertex its arc length; a self-crossing fill is refused; and re-tessellating allocates
-/// nothing once warm.
+/// and dash lengths, and every vertex its arc length; and re-tessellating allocates nothing once warm. Fills of
+/// crossing figures are in <see cref="SweepFillTests"/>.
 /// </summary>
 public sealed class TessellatorTests
 {
@@ -182,17 +182,6 @@ public sealed class TessellatorTests
 		// The shape (700) outset by half a pixel: its perimeter (160) times the margin, plus a margin squared at each of six
 		// convex corners, less one at each of two reflex ones.
 		TotalArea(path.Vertices).ShouldBe(700f + 160f * M + (6 - 2) * M * M, 1e-2f);
-	}
-
-	[Test]
-	[Arguments("M 0,0 L 10,10 L 10,0 L 0,10 Z")]                                           // a bow tie
-	[Arguments("M 0,0 L 20,0 20,20 0,20 Z M 10,10 L 30,10 30,30 10,30 Z")]                   // two overlapping squares
-	[Arguments("M 0,0 L 10,0 10,10 0,10 Z M 10,0 L 20,0 20,10 10,10 Z")]                     // two touching along an edge
-	[Arguments("M 0,0 L 10,0 L 10,10 L 10,0 L 20,0 L 20,20 L 0,20 Z")]                      // a fold back along itself
-	public void A_self_crossing_fill_throws_rather_than_filling_wrongly(string markup)
-	{
-		var ex = Should.Throw<NotSupportedException>(() => Fill(markup));
-		ex.Message.ShouldContain("crosses itself or another figure");
 	}
 
 	[Test]
