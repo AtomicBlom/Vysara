@@ -81,6 +81,22 @@ public sealed class UIRoot
 	/// <summary>The overlay elements above content (bottom-to-top) — read by hit-testing (top-most first).</summary>
 	internal IReadOnlyList<(UIElement Element, Vector2 Position, bool FullSurface)> Overlays => _overlays;
 
+	/// <summary>The top-most element drawn at <paramref name="surfacePoint"/> (surface pixels): overlays top-most first,
+	/// then content, each hit-tested through the root visual's DIP→pixel scale and clipped to the surface, as they are
+	/// composited. Null outside the surface or where nothing hittable draws.</summary>
+	internal UIElement? HitTest(Vector2 surfacePoint)
+	{
+		var surface = new Rect(0f, 0f, Visual.SurfaceSize.X, Visual.SurfaceSize.Y);
+		if (!surface.Contains(surfacePoint))
+			return null;
+		for (var i = _overlays.Count - 1; i >= 0; i--)
+		{
+			if (_overlays[i].Element.HitTest(surfacePoint, Visual.Transform, surface) is { } hit)
+				return hit;
+		}
+		return Content?.HitTest(surfacePoint, Visual.Transform, surface);
+	}
+
 	/// <summary>Measure + arrange the element tree against the surface (in pixels), then sync the composition tree.
 	/// Layout happens in DIPs (<c>pixels / LayoutScale</c>); the root visual carries the DIP→pixel scale.</summary>
 	public void LayoutPass(Size availablePixels)

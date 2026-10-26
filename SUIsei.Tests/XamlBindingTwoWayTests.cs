@@ -109,8 +109,47 @@ public sealed class XamlBindingTwoWayTests
 		var result = XamlGeneratorHarness.Run(xaml, codeBehind);
 		result.Diagnostics.ShouldBeEmpty();
 		var text = result.AllGeneratedText();
-		text.ShouldContain("N/A");
-		text.ShouldContain("??");
+		// Converted for the target's type like any other value: a string literal, not the raw text.
+		text.ShouldContain("?? (\"N/A\")");
+		XamlGeneratorHarness.CompileErrors(xaml, codeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void FallbackValue_converts_for_a_non_string_target()
+	{
+		const string xaml = """
+			<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			            x:Class="SUIsei.Tests.FallbackView3">
+			    <Border x:Name="Box" Background="{x:Bind ViewModel.Tint, FallbackValue=CornflowerBlue}" />
+			</StackPanel>
+			""";
+
+		const string codeBehind = """
+			using System.ComponentModel;
+			namespace SUIsei.Tests
+			{
+			    partial class FallbackView3
+			    {
+			        public FallbackViewModel3 ViewModel { get; } = new();
+			    }
+			    class FallbackViewModel3 : INotifyPropertyChanged
+			    {
+			        public SUIsei.HdrColor? Tint { get; set; }
+			        public event PropertyChangedEventHandler? PropertyChanged;
+			    }
+			}
+			""";
+
+		var result = XamlGeneratorHarness.Run(xaml, codeBehind);
+		result.Diagnostics.ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain("global::SUIsei.HdrColor.FromRgb(100, 149, 237)");
+		XamlGeneratorHarness.CompileErrors(xaml, codeBehind).ShouldBeEmpty();
+
+		// A value the target type cannot hold is a SUISEI012 at the binding, not a C# error in generated code.
+		var bad = XamlGeneratorHarness.Run(xaml.Replace("CornflowerBlue", "N/A"), codeBehind);
+		bad.DiagnosticIds().ShouldBe(["SUISEI012"]);
+		bad.Diagnostics[0].Location.GetLineSpan().StartLinePosition.Line.ShouldBe(3);
 	}
 
 	[Test]
@@ -143,8 +182,9 @@ public sealed class XamlBindingTwoWayTests
 		var result = XamlGeneratorHarness.Run(xaml, codeBehind);
 		result.Diagnostics.ShouldBeEmpty();
 		var text = result.AllGeneratedText();
-		text.ShouldContain("empty");
-		text.ShouldContain("error");
+		text.ShouldContain("\"empty\"");
+		text.ShouldContain("\"error\"");
+		XamlGeneratorHarness.CompileErrors(xaml, codeBehind).ShouldBeEmpty();
 	}
 
 	[Test]

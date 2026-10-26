@@ -22,4 +22,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- Value syntax shared with the runtime, linked as source: what the generator accepts at compile time is what the
+       runtime parses, with one implementation. Everything in SUIsei/Markup must compile for netstandard2.0 too. -->
+  <ItemGroup>
+    <Compile Include="..\SUIsei\Markup\*.cs" Link="Shared\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

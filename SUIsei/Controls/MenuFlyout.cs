@@ -35,8 +35,10 @@ public sealed class MenuFlyout
 			return;
 		Hide();
 
-		var position = AbsolutePosition(target);
-		var menuTop = position.Y + target.LayoutRect.Height;
+		// Under the target as drawn: its bounds in root DIPs, through its composed transforms.
+		var anchor = target.TransformToVisual(null).TransformBounds(new Rect(0f, 0f, target.LayoutRect.Width, target.LayoutRect.Height));
+		var position = new Vector2(anchor.X, anchor.Y);
+		var menuTop = anchor.Bottom;
 		var panel = new StackPanel { Orientation = Orientation.Vertical };
 		foreach (var item in Items)
 		{
@@ -96,15 +98,5 @@ public sealed class MenuFlyout
 	{
 		Hide();
 		e.Handled = true;
-	}
-
-	// The element's position in surface DIPs, summing layout offsets up the parent chain (affine transforms are
-	// ignored — sufficient for the translate/scale layout flyouts anchor against).
-	private static Vector2 AbsolutePosition(UIElement element)
-	{
-		var position = Vector2.Zero;
-		for (UIElement? e = element; e is not null; e = e.Parent)
-			position += new Vector2(e.LayoutRect.X, e.LayoutRect.Y);
-		return position;
 	}
 }

@@ -11,42 +11,6 @@ namespace SUIsei.SourceGen;
 
 partial class XamlSourceGenerator
 {
-	// A plain (non-markup) attribute value: an HdrColor (#RRGGBB / #AARRGGBB), a Thickness (uniform / "h,v" /
-	// "l,t,r,b"), or the literal/enum/numeric subset. Nullable value types are unwrapped first.
-	private static LiteralStatus TryAttributeValue(ITypeSymbol type, string raw, out string code)
-	{
-		code = "";
-		var unwrapped = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n ? n.TypeArguments[0] : type;
-		if (unwrapped.Name == "HdrColor")
-			return TryParseColor(raw, out code) ? LiteralStatus.Ok : LiteralStatus.BadValue;
-		if (unwrapped.Name == "Thickness")
-			return TryThickness(raw, out code) ? LiteralStatus.Ok : LiteralStatus.BadValue;
-		return TryLiteral(unwrapped, raw, out code);
-	}
-
-	// Parse a WinUI thickness: "u" (uniform), "h,v", or "l,t,r,b".
-	private static bool TryThickness(string raw, out string code)
-	{
-		code = "";
-		var parts = raw.Split(',');
-		var nums = new string[parts.Length];
-		for (var i = 0; i < parts.Length; i++)
-		{
-			var part = parts[i].Trim();
-			if (!float.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-				return false;
-			nums[i] = part + "f";
-		}
-		code = parts.Length switch
-		{
-			1 => $"new global::SUIsei.Thickness({nums[0]})",
-			2 => $"new global::SUIsei.Thickness({nums[0]}, {nums[1]})",
-			4 => $"new global::SUIsei.Thickness({nums[0]}, {nums[1]}, {nums[2]}, {nums[3]})",
-			_ => "",
-		};
-		return code.Length > 0;
-	}
-
 	// Coalescing for a binding read: FallbackValue / TargetNullValue, then string/null-value-type defaults.
 	private static string CoalesceRead(string read, ITypeSymbol leafType, string? fallback, string? targetNull)
 	{
@@ -72,16 +36,19 @@ partial class XamlSourceGenerator
 		return true;
 	}
 
-	// Resolve an x:DataType / TargetType string to a type symbol: a fully-qualified metadata name, else (after
-	// stripping any xmlns prefix) a SUIsei control/type by simple name.
-	private static INamedTypeSymbol? ResolveTypeName(Gen gen, string? raw)
+	// A type named in an attribute value (x:DataType, TargetType, an x:Static owner): `prefix:Name` resolves through the
+	// prefix's XML namespace in scope at `context`; otherwise a full CLR name, then a name in the default namespace.
+	private static INamedTypeSymbol? ResolveTypeName(Gen gen, XElement context, string? raw)
 	{
 		if (string.IsNullOrWhiteSpace(raw))
 			return null;
 		var name = raw!.Trim();
 		var colon = name.IndexOf(':');
 		if (colon >= 0)
-			name = name.Substring(colon + 1);
+		{
+			var ns = context.GetNamespaceOfPrefix(name.Substring(0, colon));
+			return ns is null ? null : ResolveType(gen.Compilation, ns, name.Substring(colon + 1));
+		}
 		return gen.Compilation.GetTypeByMetadataName(name) ?? ResolveType(gen.Compilation, name);
 	}
 
@@ -111,6 +78,11 @@ partial class XamlSourceGenerator
 		}
 		return null;
 	}
+
+	// The value type of a dependency-property field declared as DependencyProperty<TOwner, TValue>; null when it is
+	// declared as the untyped base, whose value type the generator cannot see.
+	private static ITypeSymbol? DependencyValueType(IFieldSymbol field) =>
+		field.Type is INamedTypeSymbol { Name: "DependencyProperty", TypeArguments.Length: 2 } typed ? typed.TypeArguments[1] : null;
 
 	private static bool NeedsField(INamedTypeSymbol type, XElement el)
 	{
@@ -204,38 +176,6 @@ partial class XamlSourceGenerator
 	private static string Quote(string s) => SyntaxFactory.Literal(s).ToString();
 
 	private static string Fmt(double value) => value.ToString("R", CultureInfo.InvariantCulture);
-
-	// "Forever" or "Nx" (a finite iteration count) → a RepeatBehavior expression.
-	private static string RepeatBehaviorExpr(string raw)
-	{
-		var s = raw.Trim();
-		if (string.Equals(s, "Forever", StringComparison.OrdinalIgnoreCase))
-			return "global::SUIsei.Animation.RepeatBehavior.Forever";
-		var n = s.EndsWith("x", StringComparison.OrdinalIgnoreCase) ? s.Substring(0, s.Length - 1) : s;
-		return double.TryParse(n, NumberStyles.Float, CultureInfo.InvariantCulture, out var count)
-			? $"global::SUIsei.Animation.RepeatBehavior.Times({Fmt(count)})"
-			: "global::SUIsei.Animation.RepeatBehavior.Once";
-	}
-
-	// "#RRGGBB" / "#AARRGGBB" → HdrColor.FromRgb(...). Returns false for anything else.
-	private static bool TryParseColor(string raw, out string code)
-	{
-		code = "";
-		var s = raw.Trim();
-		if (s.StartsWith("#", StringComparison.Ordinal))
-			s = s.Substring(1);
-		if (s.Length == 6 && IsHex(s))
-		{
-			code = $"global::SUIsei.HdrColor.FromRgb({Hex(s, 0)}, {Hex(s, 2)}, {Hex(s, 4)})";
-			return true;
-		}
-		if (s.Length == 8 && IsHex(s))
-		{
-			code = $"global::SUIsei.HdrColor.FromRgb({Hex(s, 2)}, {Hex(s, 4)}, {Hex(s, 6)}, {Hex(s, 0)})";
-			return true;
-		}
-		return false;
-	}
 
 	private static bool IsHex(string s)
 	{
@@ -366,8 +306,59 @@ partial class XamlSourceGenerator
 		return false;
 	}
 
-	private static INamedTypeSymbol? ResolveType(Compilation c, string localName) =>
-		c.GetTypeByMetadataName($"SUIsei.Controls.{localName}") ?? c.GetTypeByMetadataName($"SUIsei.{localName}");
+	// The CLR namespaces the default XAML namespace maps to, searched in order, as WinUI's maps Microsoft.UI.Xaml and its
+	// .Controls, .Media, .Shapes, .Documents and .Media.Animation namespaces.
+	private static readonly string[] UiNamespaces =
+		["SUIsei.Controls", "SUIsei", "SUIsei.Media", "SUIsei.Shapes", "SUIsei.Documents", "SUIsei.Animation"];
+
+	// The CLR namespace the extension XAML namespace maps to: SUIsei-only attached properties and types.
+	private const string ExtensionsNamespace = "SUIsei.Extensions";
+
+	private const string UsingScheme = "using:";
+
+	// A type named in markup under XML namespace `ns`: the default namespace searches UiNamespaces, the extension
+	// namespace SUIsei.Extensions, and a `using:Some.Namespace` declaration that CLR namespace. Null otherwise.
+	private static INamedTypeSymbol? ResolveType(Compilation c, XNamespace ns, string name)
+	{
+		if (ns == Ui || ns == XNamespace.None)
+		{
+			foreach (var clr in UiNamespaces)
+			{
+				if (c.GetTypeByMetadataName($"{clr}.{name}") is { } type)
+					return type;
+			}
+			return null;
+		}
+		if (ns == ExtensionNs)
+			return c.GetTypeByMetadataName($"{ExtensionsNamespace}.{name}");
+		return ns.NamespaceName.StartsWith(UsingScheme, StringComparison.Ordinal)
+			? c.GetTypeByMetadataName($"{ns.NamespaceName.Substring(UsingScheme.Length)}.{name}")
+			: null;
+	}
+
+	// Whether markup in `ns` is ignorable where `context` sits: the markup-compatibility namespace itself, or one whose
+	// prefix an mc:Ignorable on `context` or an ancestor lists (typically the d: design-time namespace).
+	private static bool IsIgnorable(XElement context, XNamespace ns)
+	{
+		if (ns == MarkupCompatibility)
+			return true;
+		for (var el = context; el is not null; el = el.Parent)
+		{
+			if (el.Attribute(MarkupCompatibility + "Ignorable") is not { } ignorable)
+				continue;
+			foreach (var prefix in ignorable.Value.Split(Whitespace, StringSplitOptions.RemoveEmptyEntries))
+			{
+				if (el.GetNamespaceOfPrefix(prefix) == ns)
+					return true;
+			}
+		}
+		return false;
+	}
+
+	private static readonly char[] Whitespace = [' ', '\t', '\r', '\n'];
+
+	// A type named in the default XAML namespace.
+	private static INamedTypeSymbol? ResolveType(Compilation c, string name) => ResolveType(c, Ui, name);
 
 	private static IPropertySymbol? FindProperty(INamedTypeSymbol type, string name)
 	{
@@ -431,58 +422,46 @@ partial class XamlSourceGenerator
 			t.GetMembers("Add").OfType<IMethodSymbol>().Any(m => m is { MethodKind: MethodKind.Ordinary, Parameters.Length: 1 });
 	}
 
-	// An attached property (`Grid.Row="0"`): resolve the owner type's static `Set<Prop>(element, value)` and emit the
-	// call with the literal/enum value parsed against the setter's value type. Returns false (so the caller warns) if
-	// the owner/setter does not resolve or the value is not a supported literal.
-	private static bool TryEmitAttachedProperty(Gen gen, Scope scope, string targetVar, XAttribute attr)
+	// An attached property set as an attribute — `Grid.Row="0"`, or `suisei:Owner.Prop="…"` from the extension namespace:
+	// a call to the owner type's static Set<Prop>(element, value), the value converted for the setter's parameter type or
+	// produced by a value markup extension. Anything that does not resolve is reported as an error.
+	private static void EmitAttachedProperty(Gen gen, Scope scope, string targetVar, XAttribute attr)
 	{
-		var localName = attr.Name.LocalName;
-		var dot = localName.IndexOf('.');
-		var owner = ResolveType(gen.Compilation, localName.Substring(0, dot));
-		if (owner is null)
-			return false;
-		var setter = owner.GetMembers("Set" + localName.Substring(dot + 1))
-			.OfType<IMethodSymbol>()
-			.FirstOrDefault(m => m is { IsStatic: true, Parameters.Length: 2 });
-		if (setter is null || TryLiteral(setter.Parameters[1].Type, attr.Value, out var code) != LiteralStatus.Ok)
-			return false;
-		scope.Emit($"{Fq(owner)}.{setter.Name}({targetVar}, {code});");
-		return true;
+		var ns = attr.Name.Namespace == XNamespace.None ? Ui : attr.Name.Namespace;
+		var local = attr.Name.LocalName;
+		var dot = local.IndexOf('.');
+		var ownerName = dot > 0 ? local.Substring(0, dot) : local;
+		var property = dot > 0 ? local.Substring(dot + 1) : "";
+		if (FindAttachedSetter(gen, ns, ownerName, property, out var owner) is not { } setter)
+		{
+			if (ns == ExtensionNs)
+				gen.Report(UnknownExtensionMember, attr, local);
+			else if (owner is null)
+				gen.Report(UnknownElement, attr, ownerName);
+			else
+				gen.Report(UnknownProperty, attr, owner.ToDisplayString(), property);
+			return;
+		}
+
+		var valueType = setter.Parameters[1].Type;
+		string? code;
+		if (!IsMarkup(attr.Value, out var inner))
+			code = ConvertOrReport(gen, attr, valueType, attr.Value, local);
+		else if (!TryMarkupValue(gen, scope, attr, targetVar, inner, valueType, local, out code))
+		{
+			gen.Report(UnsupportedMarkup, attr, attr.Value.Trim());
+			return;
+		}
+		if (code is not null)
+			scope.Emit($"{Fq(owner!)}.{setter.Name}({targetVar}, {code});");
 	}
 
-	private static LiteralStatus TryLiteral(ITypeSymbol type, string raw, out string code)
+	// The static Set<Prop>(target, value) an attached property `Owner.Prop` is set through, with the owner resolved in XML
+	// namespace `ns`; null when either does not resolve, with `owner` null when the type itself is unknown.
+	private static IMethodSymbol? FindAttachedSetter(Gen gen, XNamespace ns, string ownerName, string property, out INamedTypeSymbol? owner)
 	{
-		code = "";
-		var value = raw.Trim();
-		if (type.TypeKind == TypeKind.Enum)
-		{
-			if (!type.GetMembers(value).OfType<IFieldSymbol>().Any())
-				return LiteralStatus.BadValue;
-			code = $"{type.ToDisplayString()}.{value}";
-			return LiteralStatus.Ok;
-		}
-		switch (type.SpecialType)
-		{
-			case SpecialType.System_String:
-			case SpecialType.System_Object:
-				code = SyntaxFactory.Literal(raw).ToString();
-				return LiteralStatus.Ok;
-			case SpecialType.System_Boolean:
-				if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)) { code = "true"; return LiteralStatus.Ok; }
-				if (string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)) { code = "false"; return LiteralStatus.Ok; }
-				return LiteralStatus.BadValue;
-			case SpecialType.System_Single:
-				if (float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _)) { code = $"{value}f"; return LiteralStatus.Ok; }
-				return LiteralStatus.BadValue;
-			case SpecialType.System_Double:
-				if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _)) { code = $"{value}d"; return LiteralStatus.Ok; }
-				return LiteralStatus.BadValue;
-			case SpecialType.System_Int32:
-				if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)) { code = value; return LiteralStatus.Ok; }
-				return LiteralStatus.BadValue;
-			default:
-				return LiteralStatus.UnsupportedType;
-		}
+		owner = property.Length > 0 ? ResolveType(gen.Compilation, ns, ownerName) : null;
+		return owner?.GetMembers("Set" + property).OfType<IMethodSymbol>().FirstOrDefault(m => m is { IsStatic: true, Parameters.Length: 2 });
 	}
 
 	private static bool TryValidateName(Gen gen, Scope scope, XAttribute? nameAttr)
@@ -557,50 +536,67 @@ partial class XamlSourceGenerator
 		_ => 0,
 	};
 
-	// Fingerprint of the public type surface the generator depends on. Excludes method bodies,
-	// private members, and non-SUIsei external types, so only structural changes (new property,
-	// renamed type, added enum member) invalidate the incremental cache.
+	private static readonly SymbolDisplayFormat SurfaceFormat = new(
+		globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+		typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+		genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters | SymbolDisplayGenericsOptions.IncludeTypeConstraints,
+		memberOptions: SymbolDisplayMemberOptions.IncludeAccessibility | SymbolDisplayMemberOptions.IncludeModifiers
+			| SymbolDisplayMemberOptions.IncludeType | SymbolDisplayMemberOptions.IncludeParameters | SymbolDisplayMemberOptions.IncludeRef,
+		parameterOptions: SymbolDisplayParameterOptions.IncludeType | SymbolDisplayParameterOptions.IncludeParamsRefOut,
+		propertyStyle: SymbolDisplayPropertyStyle.ShowReadWriteDescriptor,
+		miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+	// Fingerprint of the type surface the generator depends on: each type's non-private members with their full
+	// signatures, so a changed property type or a new overload invalidates the cache as surely as a new member does.
+	// Excludes method bodies and private members, so a body-only edit re-emits nothing.
 	private static string ComputeFingerprint(Compilation c, CancellationToken ct)
 	{
 		var sb = new StringBuilder();
 
-		// Current assembly: page classes, ViewModels, code-behind types. Changes here affect
-		// {x:Bind} path resolution and event-handler signature checks.
-		foreach (var type in GetPublicTypes(c.Assembly.GlobalNamespace, ct).OrderBy(static t => t.ToDisplayString(), StringComparer.Ordinal))
-		{
-			ct.ThrowIfCancellationRequested();
-			sb.Append(type.ToDisplayString()).Append('{');
-			foreach (var m in type.GetMembers()
-				.Where(static m => m.DeclaredAccessibility == Accessibility.Public)
-				.OrderBy(static m => m.Name, StringComparer.Ordinal))
-				sb.Append(m.Name).Append(';');
-			sb.AppendLine("}");
-		}
+		// Current assembly: page classes, ViewModels, code-behind and extension types — public or internal, since the
+		// generated partial reaches both. Changes here affect {x:Bind} path resolution, event-handler signature checks
+		// and the types markup names.
+		foreach (var type in GetVisibleTypes(c.Assembly.GlobalNamespace, includeInternal: true, ct).OrderBy(static t => t.ToDisplayString(), StringComparer.Ordinal))
+			AppendSurface(sb, type, ct);
 
 		// SUIsei assemblies: control types and their properties, used by ResolveType + FindProperty.
 		foreach (var type in GetSuiseiTypes(c, ct).OrderBy(static t => t.ToDisplayString(), StringComparer.Ordinal))
-		{
-			ct.ThrowIfCancellationRequested();
-			sb.Append(type.ToDisplayString()).Append('{');
-			foreach (var m in type.GetMembers()
-				.Where(static m => m.DeclaredAccessibility == Accessibility.Public)
-				.OrderBy(static m => m.Name, StringComparer.Ordinal))
-				sb.Append(m.Name).Append(';');
-			sb.AppendLine("}");
-		}
+			AppendSurface(sb, type, ct);
 
 		return sb.ToString();
 	}
 
-	private static IEnumerable<INamedTypeSymbol> GetPublicTypes(INamespaceOrTypeSymbol root, CancellationToken ct)
+	// One type's surface: its shape (base, interfaces, abstract/static), then each non-private member with its
+	// accessibility, type, parameters and accessors. A property that gains a setter, changes type or becomes
+	// internal changes the generated code, so each of those changes the fingerprint.
+	private static void AppendSurface(StringBuilder sb, INamedTypeSymbol type, CancellationToken ct)
 	{
 		ct.ThrowIfCancellationRequested();
-		if (root is INamedTypeSymbol ts && ts.DeclaredAccessibility == Accessibility.Public)
+		sb.Append(type.ToDisplayString(SurfaceFormat)).Append(':').Append(type.BaseType?.ToDisplayString(SurfaceFormat));
+		foreach (var iface in type.AllInterfaces.Select(static i => i.ToDisplayString(SurfaceFormat)).OrderBy(static s => s, StringComparer.Ordinal))
+			sb.Append(',').Append(iface);
+		sb.Append(type.IsAbstract ? " abstract" : "").Append(type.IsStatic ? " static" : "").Append('{');
+		foreach (var member in type.GetMembers()
+			.Where(static m => m.DeclaredAccessibility is not (Accessibility.Private or Accessibility.NotApplicable))
+			.Select(static m => m.ToDisplayString(SurfaceFormat))
+			.OrderBy(static s => s, StringComparer.Ordinal))
+			sb.Append(member).Append(';');
+		sb.AppendLine("}");
+	}
+
+	private static IEnumerable<INamedTypeSymbol> GetVisibleTypes(INamespaceOrTypeSymbol root, bool includeInternal, CancellationToken ct)
+	{
+		ct.ThrowIfCancellationRequested();
+		if (root is INamedTypeSymbol ts && (ts.DeclaredAccessibility == Accessibility.Public || (includeInternal && ts.DeclaredAccessibility == Accessibility.Internal)))
 			yield return ts;
 		foreach (var member in root.GetMembers())
+		{
 			if (member is INamespaceOrTypeSymbol child)
-				foreach (var t in GetPublicTypes(child, ct))
+			{
+				foreach (var t in GetVisibleTypes(child, includeInternal, ct))
 					yield return t;
+			}
+		}
 	}
 
 	private static IEnumerable<INamedTypeSymbol> GetSuiseiTypes(Compilation c, CancellationToken ct)
@@ -609,7 +605,7 @@ partial class XamlSourceGenerator
 			foreach (var asm in module.ReferencedAssemblySymbols)
 			{
 				if (!asm.Name.StartsWith("SUIsei", StringComparison.Ordinal)) continue;
-				foreach (var t in GetPublicTypes(asm.GlobalNamespace, ct))
+				foreach (var t in GetVisibleTypes(asm.GlobalNamespace, includeInternal: false, ct))
 					yield return t;
 			}
 	}

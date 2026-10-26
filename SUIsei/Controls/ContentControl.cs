@@ -14,6 +14,9 @@ public class ContentControl : Control
 {
 	private UIElement? _hosted;
 
+	// VisualChildren without a template, rebuilt only when _hosted changes, so reading it allocates nothing.
+	private UIElement[] _hostedList = [];
+
 	public object? Content
 	{
 		get;
@@ -32,6 +35,7 @@ public class ContentControl : Control
 				if (_hosted is not null)
 					DropChild(_hosted);
 				_hosted = ContentHelper.Wrap(value);
+				_hostedList = _hosted is null ? [] : [_hosted];
 				if (_hosted is not null)
 					AdoptChild(_hosted);
 				InvalidateMeasure();
@@ -47,8 +51,7 @@ public class ContentControl : Control
 
 	public HdrColor? Background { get; set { if (field != value) { field = value; InvalidateContent(); } } }
 
-	internal override IReadOnlyList<UIElement> VisualChildren =>
-		Template is not null ? base.VisualChildren : (_hosted is null ? [] : [_hosted]);
+	internal override IReadOnlyList<UIElement> VisualChildren => Template is not null ? base.VisualChildren : _hostedList;
 
 	protected override Size MeasureOverride(Size available)
 	{
@@ -70,8 +73,7 @@ public class ContentControl : Control
 		return finalSize;
 	}
 
-	private protected override VisualContent? BuildContent() =>
-		Template is null && (AnimatedFill ?? Background) is { } bg
-			? new RectContent(new Vector2(LayoutRect.Width, LayoutRect.Height), bg)
-			: null;
+	private protected override HdrColor? BaseFill => Background;
+
+	private protected override VisualContent? UpdateContent() => Template is null && (AnimatedFill ?? Background) is { } bg ? RetainedRect(bg) : null;
 }

@@ -1,13 +1,13 @@
 namespace SUIsei.Animation;
 
 /// <summary>
-/// Animates a scalar from <see cref="From"/> to <see cref="To"/> (or by <see cref="By"/>) over the duration
-/// A null <see cref="From"/> starts at zero; a null <see cref="To"/> with a
-/// <see cref="By"/> ends at <c>From + By</c>.
+/// Animates a scalar from <see cref="From"/> to <see cref="To"/> (or by <see cref="By"/>) over the duration. A null
+/// <see cref="From"/> starts at the target's value when the animation begins; a null <see cref="To"/> with a
+/// <see cref="By"/> ends at <c>From + By</c>. Drives a float or double property.
 /// </summary>
 public sealed class DoubleAnimation : AnimationTimeline<double>
 {
-	/// <summary>The start value (null ⇒ 0).</summary>
+	/// <summary>The start value (null ⇒ the target's value when the animation begins).</summary>
 	public double? From { get; set; }
 
 	/// <summary>The end value (null with <see cref="By"/> ⇒ <c>From + By</c>).</summary>
@@ -21,17 +21,11 @@ public sealed class DoubleAnimation : AnimationTimeline<double>
 
 	public override double ValueAt(double progress)
 	{
-		var from = From ?? 0.0;
+		var from = From ?? StartValue;
 		var to = To ?? (By is { } by ? from + by : from);
 		var eased = EasingFunction?.Ease(progress) ?? progress;
 		return from + (to - from) * eased;
 	}
 
-	protected override (Action<double> Apply, Action Release) ResolveChannel(UIElement target, string property) => property switch
-	{
-		"Opacity" => (v => target.SetAnimatedValue(UIElement.OpacityProperty, (float)v), () => target.ClearAnimatedValue(UIElement.OpacityProperty)),
-		"RenderTransform.Translate.X" => (v => target.SetAnimatedTranslateX((float)v), target.ClearAnimatedTranslate),
-		"RenderTransform.Translate.Y" => (v => target.SetAnimatedTranslateY((float)v), target.ClearAnimatedTranslate),
-		_ => (static _ => { }, static () => { }),
-	};
+	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => DoubleBinding.TryBind(this, owner, target);
 }

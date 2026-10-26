@@ -1,4 +1,5 @@
 using SUIsei.Animation;
+using SUIsei.Extensions;
 using SUIsei.Input;
 using SUIsei.RoutedEvents;
 
@@ -24,6 +25,8 @@ public sealed class ScrollViewer : FrameworkElement
 	private const float ThumbMargin = 2f;
 
 	private readonly Border _vThumb = new() { Background = ThumbRest, CornerRadius = ThumbThickness / 2f };
+	// VisualChildren (the content, then the thumb), rebuilt only when Content changes, so reading it allocates nothing.
+	private UIElement[] _visualChildren;
 	private readonly ColorAnimation _thumbFade;
 	private readonly Storyboard _thumbFadeStory;
 	private HdrColor _thumbColor = ThumbRest; // the thumb's last target colour (the From of the next transition)
@@ -37,6 +40,7 @@ public sealed class ScrollViewer : FrameworkElement
 	public ScrollViewer()
 	{
 		ClipToBounds = true;
+		_visualChildren = [_vThumb];
 		AdoptChild(_vThumb);
 		AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged);
 		AddHandler(KeyDownEvent, OnKeyDown);
@@ -60,9 +64,6 @@ public sealed class ScrollViewer : FrameworkElement
 		_vThumb.AddHandler(PointerCaptureLostEvent, OnThumbCaptureLost);
 	}
 
-	// The host's DIP→pixel scale: pointer positions arrive in surface pixels, but the scroll offsets are in DIPs.
-	private float Scale => AttachedRoot?.LayoutScale is { } s and > 0f ? s : 1f;
-
 	public UIElement? Content
 	{
 		get;
@@ -73,14 +74,12 @@ public sealed class ScrollViewer : FrameworkElement
 			if (field is not null)
 				DropChild(field);
 			field = value;
+			_visualChildren = value is null ? [_vThumb] : [value, _vThumb];
 			if (value is not null)
 				AdoptChild(value);
 			InvalidateMeasure();
 		}
 	}
-
-	/// <summary>Pixels scrolled per unit of wheel delta (and per arrow-key press).</summary>
-	public float WheelScrollAmount { get; set; } = 48f;
 
 	public float VerticalOffset { get; private set; }
 	public float HorizontalOffset { get; private set; }
@@ -117,7 +116,7 @@ public sealed class ScrollViewer : FrameworkElement
 		InvalidateArrange();
 	}
 
-	internal override IReadOnlyList<UIElement> VisualChildren => Content is null ? [_vThumb] : [Content, _vThumb];
+	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
 
 	protected override Size MeasureOverride(Size available)
 	{
@@ -214,7 +213,7 @@ public sealed class ScrollViewer : FrameworkElement
 		if (e is not PointerRoutedEventArgs p || ScrollableHeight <= 0f)
 			return;
 		_draggingThumb = true;
-		_dragStartPointerY = p.Pointer.Position.Y / Scale;
+		_dragStartPointerY = p.GetCurrentPoint(this).Position.Y;
 		_dragStartOffset = VerticalOffset;
 		_vThumb.CapturePointer(0);
 		UpdateThumbVisual();
@@ -225,7 +224,7 @@ public sealed class ScrollViewer : FrameworkElement
 	{
 		if (!_draggingThumb || e is not PointerRoutedEventArgs p)
 			return;
-		var dy = p.Pointer.Position.Y / Scale - _dragStartPointerY;
+		var dy = p.GetCurrentPoint(this).Position.Y - _dragStartPointerY;
 		if (_thumbTravel > 0f)
 			SetVerticalOffset(_dragStartOffset + dy * ScrollableHeight / _thumbTravel);
 		e.Handled = true;
@@ -252,7 +251,7 @@ public sealed class ScrollViewer : FrameworkElement
 		if (e is not PointerRoutedEventArgs pointer)
 			return;
 		// Wheel up (positive delta) scrolls toward the top (offset decreases).
-		SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * WheelScrollAmount);
+		SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * Scrolling.GetWheelScrollAmount(this));
 		e.Handled = true;
 	}
 
@@ -266,8 +265,8 @@ public sealed class ScrollViewer : FrameworkElement
 			case VirtualKey.PageUp: SetVerticalOffset(VerticalOffset - ViewportHeight); e.Handled = true; break;
 			case VirtualKey.Home: SetVerticalOffset(0f); e.Handled = true; break;
 			case VirtualKey.End: SetVerticalOffset(ScrollableHeight); e.Handled = true; break;
-			case VirtualKey.Down: SetVerticalOffset(VerticalOffset + WheelScrollAmount); e.Handled = true; break;
-			case VirtualKey.Up: SetVerticalOffset(VerticalOffset - WheelScrollAmount); e.Handled = true; break;
+			case VirtualKey.Down: SetVerticalOffset(VerticalOffset + Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
+			case VirtualKey.Up: SetVerticalOffset(VerticalOffset - Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
 		}
 	}
 }

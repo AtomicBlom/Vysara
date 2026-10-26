@@ -6,7 +6,7 @@ namespace SUIsei.Animation;
 /// </summary>
 public sealed class ColorAnimation : AnimationTimeline<HdrColor>
 {
-	/// <summary>The start colour (null ⇒ transparent).</summary>
+	/// <summary>The start colour (null ⇒ the target's colour when the animation begins).</summary>
 	public HdrColor? From { get; set; }
 
 	/// <summary>The end colour.</summary>
@@ -17,19 +17,11 @@ public sealed class ColorAnimation : AnimationTimeline<HdrColor>
 
 	public override HdrColor ValueAt(double progress)
 	{
-		var from = From ?? HdrColor.Transparent;
+		var from = From ?? StartValue;
 		var to = To ?? from;
 		var t = (float)(EasingFunction?.Ease(progress) ?? progress);
-		return new HdrColor(
-			from.R + (to.R - from.R) * t,
-			from.G + (to.G - from.G) * t,
-			from.B + (to.B - from.B) * t,
-			from.A + (to.A - from.A) * t);
+		return Lerps.Color(from, to, t);
 	}
 
-	protected override (Action<HdrColor> Apply, Action Release) ResolveChannel(UIElement target, string property) => property switch
-	{
-		"Background" or "Foreground" or "Fill" => (target.SetAnimatedFill, target.ClearAnimatedFill),
-		_ => (static _ => { }, static () => { }),
-	};
+	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => BindDirect(owner, target);
 }

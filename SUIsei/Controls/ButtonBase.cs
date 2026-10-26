@@ -38,7 +38,7 @@ public abstract class ButtonBase : ContentControl
 	}
 
 	/// <summary>A command invoked (with <see cref="CommandParameter"/>) on click. While a command is set, the
-	/// control's <see cref="UIElement.IsEnabled"/> tracks <see cref="ICommand.CanExecute"/>.</summary>
+	/// control's <see cref="Control.IsEnabled"/> tracks <see cref="ICommand.CanExecute"/>.</summary>
 	public ICommand? Command
 	{
 		get => GetValue(CommandProperty);
@@ -60,8 +60,12 @@ public abstract class ButtonBase : ContentControl
 	}
 
 	/// <summary>Click the control as if by input (public for headless tests so a click can be driven without the
-	/// pointer stack).</summary>
-	public void PerformClick() => OnClick();
+	/// pointer stack). Like input, it does nothing while the control is disabled.</summary>
+	public void PerformClick()
+	{
+		if (IsEnabled)
+			OnClick();
+	}
 
 	/// <summary>The single click override point: raises <see cref="Click"/>, then executes <see cref="Command"/> if
 	/// it can. Override to add behaviour (e.g. a toggle), calling <c>base.OnClick()</c>.</summary>
@@ -91,29 +95,34 @@ public abstract class ButtonBase : ContentControl
 			IsEnabled = command.CanExecute(CommandParameter);
 	}
 
-	private void GoToState(string state) => VisualStateManager.GoToState(this, state, useTransitions: true);
+	private protected override string CommonVisualState =>
+		!IsEnabled ? "Disabled" : _isPressed ? "Pressed" : _isPointerOver ? "PointerOver" : "Normal";
 
+	// A disabled button sees no input, so a press or hover in progress could never end: drop both.
+	private protected override void OnIsEnabledChanged(bool isEnabled)
+	{
+		_isPressed = false;
+		_isPointerOver = false;
+	}
+
+	// The handlers below run only while the button is enabled: a disabled control's input handlers are skipped.
 	private void OnPointerEntered(object sender, RoutedEventArgs e)
 	{
-		if (!IsEnabled)
-			return;
 		_isPointerOver = true;
-		GoToState("PointerOver");
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnPointerExited(object sender, RoutedEventArgs e)
 	{
 		_isPointerOver = false;
 		_isPressed = false;
-		GoToState("Normal");
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnPointerPressed(object sender, RoutedEventArgs e)
 	{
-		if (!IsEnabled)
-			return;
 		_isPressed = true;
-		GoToState("Pressed");
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnPointerReleased(object sender, RoutedEventArgs e)
@@ -123,13 +132,11 @@ public abstract class ButtonBase : ContentControl
 			_isPressed = false;
 			OnClick();
 		}
-		GoToState(_isPointerOver ? "PointerOver" : "Normal");
+		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnKeyDown(object sender, RoutedEventArgs e)
 	{
-		if (!IsEnabled)
-			return;
 		if (e is KeyRoutedEventArgs key && key.Key is VirtualKey.Enter or VirtualKey.Space)
 			OnClick();
 	}

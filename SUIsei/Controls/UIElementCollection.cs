@@ -11,7 +11,10 @@ public sealed class UIElementCollection
 
 	public int Count => _items.Count;
 	public UIElement this[int index] => _items[index];
-	internal IReadOnlyList<UIElement> Items => _items;
+	// The children, typed as the List they are so a panel's layout loop gets List's struct enumerator: a foreach over
+	// IReadOnlyList<T> boxes one on every measure and arrange. Changes go through the methods below, which keep
+	// parenting and invalidation in step.
+	internal List<UIElement> Items => _items;
 
 	public void Add(UIElement child)
 	{
