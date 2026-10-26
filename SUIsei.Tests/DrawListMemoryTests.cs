@@ -42,7 +42,8 @@ public sealed class DrawListMemoryTests
 
 		allocated.ShouldBe(0L);
 		host.DrawLists[0].Data.Revision.ShouldBe((uint)(warm + measured)); // every frame really recomposited
-		host.DrawLists[0].Data.Images.Count.ShouldBe(1);
+		host.DrawLists[0].Data.TextureSlots.Count.ShouldBe(3); // the white texel, the glyph atlas page and the image
+		host.DrawLists[0].Data.TextureRevision.ShouldBe(1u);   // frames that only move geometry keep the same textures
 
 		void Frame(int i)
 		{
@@ -79,7 +80,7 @@ public sealed class DrawListMemoryTests
 		Should.Throw<InvalidOperationException>(() => first.Vertices);
 		Should.Throw<InvalidOperationException>(() => first.Indices);
 		Should.Throw<InvalidOperationException>(() => first.Commands);
-		Should.Throw<InvalidOperationException>(() => first.Images);
+		Should.Throw<InvalidOperationException>(() => first.TextureSlots);
 		Should.Throw<InvalidOperationException>(() => first.Dump());
 
 		// The lists whose buffers are still current read normally.

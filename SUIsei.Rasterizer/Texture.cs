@@ -25,8 +25,8 @@ public sealed class Texture
 		_rgba = rgba;
 	}
 
-	/// <summary>Wrap a decoded <see cref="AtlasImage"/> (the neutral RGBA8 page <see cref="FontAtlas.Image"/> exposes).</summary>
-	public static Texture FromAtlas(AtlasImage atlas) => new(atlas.Width, atlas.Height, atlas.Pixels.ToArray());
+	/// <summary>Copy a <see cref="TextureSource"/>'s RGBA8 texels: a glyph atlas page, an image, or the white texel.</summary>
+	public static Texture FromSource(TextureSource source) => new(source.Width, source.Height, source.Pixels.ToArray());
 
 	/// <summary>Bilinear sample at <paramref name="uv"/> (0..1, v=0 at the top), clamp addressing. Linear RGBA in 0..1.</summary>
 	public Vector4 Sample(Vector2 uv)

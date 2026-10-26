@@ -24,16 +24,13 @@ internal sealed class GalleryRenderer
 	private readonly UIView _view;
 	private readonly GalleryView _gallery = new();
 	private readonly FontAtlas _font = BuildShapedFont();
-	private readonly Texture _fontPage;
 	private readonly Vector4 _clear = GalleryView.PageBackground.ToPremultiplied().ToVector4();
-	private readonly HashSet<int> _boundImages = [];
 	private SoftwareRasterizer? _rasterizer;
 	private double _lastSeconds;
 	private double _tickMs, _composeMs;
 
 	public GalleryRenderer(Action onQuit)
 	{
-		_fontPage = Texture.FromAtlas(_font.Image);
 		_gallery.Quit = onQuit;
 		// Composite against the glyph-id atlas so its HarfBuzz shaper drives every glyph run (ligatures included).
 		_view = _host.CreateRoot(UILayer.Default, interactive: true, compositor: new DrawListCompositor(_font));
@@ -114,7 +111,6 @@ internal sealed class GalleryRenderer
 	public PixelRect PresentTo(byte[] bgra, bool forceFull)
 	{
 		var r = _rasterizer!;
-		BindImages(r);
 		var region = forceFull ? PixelRect.Full(r.Width, r.Height) : DamageRegion(r.Width, r.Height);
 
 		var t0 = Stopwatch.GetTimestamp();
@@ -173,7 +169,6 @@ internal sealed class GalleryRenderer
 	public byte[] RasterizeSerialRgba()
 	{
 		var r = _rasterizer!;
-		BindImages(r);
 		r.Clear(_clear);
 		foreach (var (_, data) in _host.DrawLists)
 			r.Render(data);
@@ -186,7 +181,6 @@ internal sealed class GalleryRenderer
 	public byte[] RasterizeParallelRgba()
 	{
 		var r = _rasterizer!;
-		BindImages(r);
 		var cleared = false;
 		foreach (var (_, data) in _host.DrawLists)
 		{
@@ -201,22 +195,6 @@ internal sealed class GalleryRenderer
 		if (_rasterizer is { } r && r.Width == width && r.Height == height)
 			return;
 		_rasterizer = new SoftwareRasterizer(width, height);
-		_rasterizer.BindTexture(1, _fontPage); // glyph runs sample TextureIndex 1
-		_boundImages.Clear();                  // the new rasterizer has no image bindings yet
-	}
-
-	// Upload any Image source referenced this frame to its texture index (once per rasterizer instance), so
-	// UIPrimKind.Image commands have a texture to sample.
-	private void BindImages(SoftwareRasterizer r)
-	{
-		foreach (var (_, data) in _host.DrawLists)
-		{
-			foreach (var image in data.Images)
-			{
-				if (_boundImages.Add(image.TextureIndex))
-					r.BindTexture(image.TextureIndex, Texture.FromAtlas(image.Pixels));
-			}
-		}
 	}
 
 	private static double Ms(long start, long end) => Stopwatch.GetElapsedTime(start, end).TotalMilliseconds;

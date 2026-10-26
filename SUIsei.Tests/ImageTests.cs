@@ -33,7 +33,8 @@ public sealed class ImageTests
 		root.LayoutPass(new Size(32f, 16f));
 		var draw = root.Render();
 
-		draw.Images.ShouldContain(source);
-		draw.Commands.ToArray().ShouldContain(c => (UIPrimKind)c.Tag == UIPrimKind.Image && c.TextureIndex == source.TextureIndex);
+		var slot = draw.TextureSlots.ToList().IndexOf(source);
+		slot.ShouldBeGreaterThan(0); // slot 0 is the white texel
+		draw.Commands.ToArray().ShouldContain(c => (UIPrimKind)c.Tag == UIPrimKind.Image && c.TextureIndex == slot);
 	}
 }

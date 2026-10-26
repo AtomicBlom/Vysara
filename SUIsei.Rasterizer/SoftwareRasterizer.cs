@@ -15,8 +15,8 @@ namespace SUIsei.Rasterizer;
 ///
 /// Covers all five drawable kinds: <see cref="UIPrimKind.Fill"/>/<see cref="UIPrimKind.RoundedRect"/>/<see cref="UIPrimKind.Border"/>
 /// (analytic) plus <see cref="UIPrimKind.Glyph"/> (MTSDF) and <see cref="UIPrimKind.Image"/> (tinted blit), which
-/// sample a <see cref="Texture"/> bound to their <c>TextureIndex</c> via <see cref="BindTexture"/>. A glyph/image
-/// command with no bound texture is skipped (counted in <see cref="SkippedCommands"/>). It also honours the
+/// sample the texture in their <c>TextureIndex</c> slot of the list's <see cref="DrawListData.TextureSlots"/>. A glyph/image
+/// command whose slot the list lacks is skipped (counted in <see cref="SkippedCommands"/>). It also honours the
 /// <see cref="UIPrimKind.BeginLayer"/>/<see cref="UIPrimKind.EndLayer"/> group-opacity markers by rendering the
 /// bracketed subtree into an offscreen framebuffer and compositing it back at the group's fade alpha — the CPU twin
 /// of the backend RT stack, so it gives true (non-double-blended) group opacity headlessly. A command whose tag is
@@ -37,8 +37,13 @@ public sealed class SoftwareRasterizer
 	// positions), so the composite is a straight per-pixel premultiplied alpha-over of the whole buffer.
 	private readonly Stack<(Vector4[] Fb, float Alpha)> _layers = new();
 
-	// Textures bound per draw command's TextureIndex (the atlas page for glyphs, an image source for images).
-	private readonly Dictionary<int, Texture> _textures = [];
+	// The textures of the list being drawn, by slot: its TextureSlots resolved through _textureCache. Rebound at the
+	// start of each Render, so a command's TextureIndex always means a slot of the list it came from.
+	private Texture?[] _slots = [];
+	private int _slotCount;
+
+	// Each source's texels copied into a Texture once per Version, kept across lists and frames.
+	private readonly Dictionary<TextureSource, (uint Version, Texture Texture)> _textureCache = new(ReferenceEqualityComparer.Instance);
 
 	public SoftwareRasterizer(int width, int height)
 	{
@@ -53,7 +58,7 @@ public sealed class SoftwareRasterizer
 	/// <summary>Triangles rasterized by the last <see cref="Render"/> call (perf-shape instrumentation).</summary>
 	public int TrianglesDrawn { get; private set; }
 
-	/// <summary>Glyph/Image commands skipped in the last <see cref="Render"/> call because no texture was bound.</summary>
+	/// <summary>Glyph/Image commands skipped in the last <see cref="Render"/> call because their slot was missing.</summary>
 	public int SkippedCommands { get; private set; }
 
 	/// <summary>Group-opacity layers composited back in the last <see cref="Render"/> call (EndLayer markers).</summary>
@@ -62,8 +67,30 @@ public sealed class SoftwareRasterizer
 	// The framebuffer draws currently target: the open layer on top of the stack, else the base framebuffer.
 	private Vector4[] ActiveTarget => _layers.Count > 0 ? _layers.Peek().Fb : _fb;
 
-	/// <summary>Bind a texture to a command <c>TextureIndex</c> (e.g. index 1 → the font atlas page for glyph runs).</summary>
-	public void BindTexture(int index, Texture texture) => _textures[index] = texture;
+	// Bind a list's slot table: slot i samples the texels of slots[i], copied once per source and version, as a host
+	// uploads each source once and replaces it when its version moves.
+	private void BindSlots(IReadOnlyList<TextureSource> slots)
+	{
+		if (_slots.Length < slots.Count)
+			_slots = new Texture?[slots.Count];
+		_slotCount = slots.Count;
+		for (var i = 0; i < slots.Count; i++)
+		{
+			var source = slots[i];
+			if (!_textureCache.TryGetValue(source, out var cached) || cached.Version != source.Version)
+			{
+				cached = (source.Version, Texture.FromSource(source));
+				_textureCache[source] = cached;
+			}
+			_slots[i] = cached.Texture;
+		}
+	}
+
+	private bool TryGetSlot(int index, out Texture? texture)
+	{
+		texture = (uint)index < (uint)_slotCount ? _slots[index] : null;
+		return texture is not null;
+	}
 
 	/// <summary>Fill the whole framebuffer with one linear-premultiplied colour (the cleared backbuffer). Chunked
 	/// across threads for large surfaces — a constant fill, so the result is identical to a serial fill.</summary>
@@ -103,6 +130,7 @@ public sealed class SoftwareRasterizer
 		var commands = draw.Commands.Span;
 		var hdr = draw.IsHdrTarget;
 		ScanCommands(commands);
+		BindSlots(draw.TextureSlots);
 
 		for (var ci = 0; ci < commands.Length; ci++)
 		{
@@ -135,9 +163,9 @@ public sealed class SoftwareRasterizer
 				continue;
 			}
 
-			// Texture-sampling kinds need their page bound; skip (and count) if it is missing.
+			// Texture-sampling kinds need their slot; skip (and count) a command whose slot the list doesn't have.
 			Texture? tex = null;
-			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !_textures.TryGetValue(cmd.TextureIndex, out tex))
+			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !TryGetSlot(cmd.TextureIndex, out tex))
 			{
 				SkippedCommands++;
 				continue;
@@ -211,6 +239,7 @@ public sealed class SoftwareRasterizer
 			return;
 		}
 
+		BindSlots(draw.TextureSlots);
 		var hdr = draw.IsHdrTarget;
 		var verts = draw.Vertices;
 		var indices = draw.Indices;
@@ -252,7 +281,7 @@ public sealed class SoftwareRasterizer
 			var kind = (UIPrimKind)cmd.Tag;
 
 			Texture? tex = null;
-			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !_textures.TryGetValue(cmd.TextureIndex, out tex))
+			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !TryGetSlot(cmd.TextureIndex, out tex))
 				continue;
 
 			var clip = cmd.ClipRect;

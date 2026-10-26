@@ -3,38 +3,36 @@ using StbImageSharp;
 namespace SUIsei.Drawing;
 
 /// <summary>
-/// A decoded RGBA8 image an <see cref="Controls.Image"/> draws. SUIsei stays GPU-free: the
-/// source holds neutral pixels (decoded with StbImageSharp, the same decoder as <see cref="FontAtlas"/>) and a
-/// stable <see cref="TextureIndex"/>; the engine glue uploads it once and binds it by that index, the same texture
-/// channel the white texel (0) and glyph atlas (1) ride. Indices start at 2 so they never collide with those two.
+/// A decoded RGBA8 image an <see cref="Controls.Image"/> draws. SUIsei stays GPU-free: the source holds neutral pixels
+/// (decoded with StbImageSharp, the same decoder as <see cref="FontAtlas"/>), and as a <see cref="TextureSource"/> it
+/// reaches the host through the slot table of every draw list that draws it; the host uploads it once and binds it by
+/// slot.
 /// </summary>
-public sealed class ImageSource
+public sealed class ImageSource : TextureSource
 {
-	private static int _next = 1; // 0 = white texel, 1 = glyph atlas — reserved by the painter; images start at 2.
+	private readonly byte[] _rgba;
 
-	private ImageSource(AtlasImage pixels)
+	private ImageSource(int width, int height, byte[] rgba)
 	{
-		Pixels = pixels;
-		TextureIndex = Interlocked.Increment(ref _next);
+		Width = width;
+		Height = height;
+		_rgba = rgba;
 	}
 
-	/// <summary>The texture-channel index this image binds to (≥ 2; stable for the source's lifetime).</summary>
-	public int TextureIndex { get; }
+	public override int Width { get; }
+
+	public override int Height { get; }
 
 	/// <summary>The decoded RGBA8 pixels.</summary>
-	public AtlasImage Pixels { get; }
-
-	public int Width => Pixels.Width;
-
-	public int Height => Pixels.Height;
+	public override ReadOnlyMemory<byte> Pixels => _rgba;
 
 	/// <summary>Wrap already-decoded RGBA8 pixels (e.g. a procedural or test image).</summary>
-	public static ImageSource FromRgba8(int width, int height, byte[] rgba) => new(new AtlasImage(width, height, rgba));
+	public static ImageSource FromRgba8(int width, int height, byte[] rgba) => new(width, height, rgba);
 
 	/// <summary>Decode an encoded image (PNG/JPG/…) to RGBA8 with StbImageSharp.</summary>
 	public static ImageSource FromBytes(ReadOnlySpan<byte> encoded)
 	{
 		var result = ImageResult.FromMemory(encoded.ToArray(), ColorComponents.RedGreenBlueAlpha);
-		return new ImageSource(new AtlasImage(result.Width, result.Height, result.Data));
+		return new ImageSource(result.Width, result.Height, result.Data);
 	}
 }
