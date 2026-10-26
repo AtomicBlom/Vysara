@@ -93,5 +93,5 @@ public abstract class GradientBrush : Brush, ISubPropertyListener
 			Changed();
 	}
 
-	void ISubPropertyListener.OnSubPropertyChanged(DependencyObject source) => SyncStops();
+	void ISubPropertyListener.OnSubPropertyChanged(object source) => SyncStops();
 }

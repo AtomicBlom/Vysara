@@ -111,7 +111,10 @@ public sealed class XamlSubsetContractTests
 		("XML namespaces: suisei: and using:", """<local:Item2Host /><Border suisei:Glow.Radius="2" />"""),
 		("mc:Ignorable design-time markup", """<Border d:Width="100" Width="10"><d:Border.Padding>4</d:Border.Padding></Border>"""),
 		("suisei: property path owner", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(suisei:Glow.Radius)" To="5" />""")),
-		("the runtime's suisei: extensions", """<Border suisei:Clipping.ClipToBounds="True" /><ScrollViewer suisei:Scrolling.WheelScrollAmount="64" /><ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel suisei:Virtualization.RowHeight="32" /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>"""),
+		("UIElement.Clip", """<Border><Border.Clip><RectangleGeometry Rect="0,0,10,10" /></Border.Clip></Border>"""),
+		("geometry elements", """<local:Shape2><local:Shape2.Data><GeometryGroup FillRule="Nonzero"><PathGeometry><PathFigure StartPoint="0,0" IsClosed="True"><LineSegment Point="1,0" /><PolyLineSegment Points="1,1 0,1" /><BezierSegment Point1="0,0" Point2="1,1" Point3="2,0" /><PolyBezierSegment Points="0,0 1,1 2,0" /><QuadraticBezierSegment Point1="1,1" Point2="2,0" /><PolyQuadraticBezierSegment Points="1,1 2,0" /><ArcSegment Point="3,3" Size="2,2" RotationAngle="10" IsLargeArc="True" SweepDirection="Clockwise" /></PathFigure></PathGeometry><RectangleGeometry Rect="0,0,2,2" /><EllipseGeometry Center="1,1" RadiusX="1" RadiusY="2" /><LineGeometry StartPoint="0,0" EndPoint="1,1" /></GeometryGroup></local:Shape2.Data></local:Shape2>"""),
+		("path markup, point and number lists", """<local:Shape2 Data="F1 M 0,0 L 10,0 10,10 H 0 V 5 C 1,1 2,2 3,3 S 4,4 5,5 Q 1,1 2,2 T 3,3 A 2,2 0 0 1 4,4 Z m 1,1 l 1,1 z" Points="0,0 1,1" Dashes="2 1" />"""),
+		("the runtime's suisei: extensions","""<Border suisei:Clipping.ClipToBounds="True" /><ScrollViewer suisei:Scrolling.WheelScrollAmount="64" /><ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel suisei:Virtualization.RowHeight="32" /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>"""),
 	];
 
 	// Planning §4 "Planned": named in the contract but not implemented yet. Each must be reported, not ignored.
@@ -152,8 +155,18 @@ public sealed class XamlSubsetContractTests
 		}
 	}
 
-	// A control in the using: namespace, for the XML-namespace form.
+	// Controls in the using: namespace: one for the XML-namespace form, and one with the geometry value types for the
+	// geometry forms, which no runtime element takes yet.
 	private const string ExtraTypes = """
-		namespace Demo { public sealed class Item2Host : SUIsei.Controls.ContentControl { } }
+		namespace Demo
+		{
+			public sealed class Item2Host : SUIsei.Controls.ContentControl { }
+			public sealed class Shape2 : SUIsei.Controls.ContentControl
+			{
+				public SUIsei.Media.Geometry? Data { get; set; }
+				public SUIsei.Media.PointCollection Points { get; set; } = new();
+				public SUIsei.Media.DoubleCollection Dashes { get; set; } = new();
+			}
+		}
 		""";
 }

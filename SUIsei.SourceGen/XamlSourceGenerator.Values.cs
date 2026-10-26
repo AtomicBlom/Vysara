@@ -28,6 +28,11 @@ partial class XamlSourceGenerator
 		["SUIsei.CornerRadius"] = (ConvertCornerRadius, "one or four numbers"),
 		["System.Numerics.Matrix3x2"] = (ConvertMatrix, "six numbers, 'M11,M12,M21,M22,OffsetX,OffsetY'"),
 		["SUIsei.Point"] = (ConvertPoint, "two numbers, 'x,y'"),
+		["SUIsei.Size"] = (ConvertSize, "two numbers of 0 or more, 'width,height'"),
+		["SUIsei.Rect"] = (ConvertRect, "four numbers, 'x,y,width,height', with a width and height of 0 or more"),
+		["SUIsei.Media.Geometry"] = (ConvertGeometry, PathMarkup.Syntax),
+		["SUIsei.Media.PointCollection"] = (ConvertPointCollection, "pairs of numbers, 'x1,y1 x2,y2 …'"),
+		["SUIsei.Media.DoubleCollection"] = (ConvertDoubleCollection, "numbers separated by commas or spaces"),
 		["System.Numerics.Vector2"] = (ConvertVector2, "two numbers, 'x,y'"),
 		["System.Numerics.Vector3"] = (ConvertVector3, "three numbers, 'x,y,z'"),
 		["SUIsei.GridLength"] = (ConvertGridLength, "Auto, *, N* or a number"),
@@ -38,9 +43,7 @@ partial class XamlSourceGenerator
 	// Convert attribute text for a value of `type`. `expected` names the accepted syntax for a diagnostic.
 	private static LiteralStatus TryConvertValue(ITypeSymbol type, string raw, out string code, out string expected)
 	{
-		var unwrapped = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n
-			? n.TypeArguments[0]
-			: type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+		var unwrapped = ConverterType(type);
 		if (Converters.TryGetValue(unwrapped.ToDisplayString(), out var converter))
 		{
 			expected = converter.Syntax;
@@ -57,6 +60,13 @@ partial class XamlSourceGenerator
 			};
 		return TryLiteral(unwrapped, raw, out code);
 	}
+
+	// The type a value converts as: Nullable<T> as T, and a nullable reference type as the type itself, so `Geometry?`
+	// finds the same table entry as `Geometry`.
+	private static ITypeSymbol ConverterType(ITypeSymbol type) =>
+		type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n
+			? n.TypeArguments[0]
+			: type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
 	// The literal subset by type kind: an enum member, a string, bool, int, float or double.
 	private static LiteralStatus TryLiteral(ITypeSymbol type, string raw, out string code)
@@ -102,7 +112,11 @@ partial class XamlSourceGenerator
 			case LiteralStatus.Ok:
 				return code;
 			case LiteralStatus.BadValue:
-				gen.Report(InvalidLiteral, node, raw.Trim(), propertyName, type.ToDisplayString(), expected);
+				// Path markup has a grammar of its own, so its diagnostic says where the markup went wrong.
+				if (ConverterType(type).ToDisplayString() == "SUIsei.Media.Geometry" && !PathMarkup.TryParse(raw, null, out var markupError))
+					gen.Report(InvalidPathMarkup, node, raw.Trim(), propertyName, markupError);
+				else
+					gen.Report(InvalidLiteral, node, raw.Trim(), propertyName, type.ToDisplayString(), expected);
 				return null;
 			default:
 				gen.Report(UnsupportedProperty, node, propertyName, type.ToDisplayString());
@@ -170,6 +184,63 @@ partial class XamlSourceGenerator
 		var n = XamlValueSyntax.ParseNumbers(raw);
 		code = n?.Length == 2 ? $"new global::SUIsei.Point({F(n[0])}, {F(n[1])})" : "";
 		return code.Length > 0;
+	}
+
+	private static bool ConvertSize(string raw, out string code)
+	{
+		var n = XamlValueSyntax.ParseNumbers(raw);
+		code = n is { Length: 2 } && n[0] >= 0 && n[1] >= 0 ? $"new global::SUIsei.Size({F(n[0])}, {F(n[1])})" : "";
+		return code.Length > 0;
+	}
+
+	// WinUI rect: "x,y,width,height", with no negative size.
+	private static bool ConvertRect(string raw, out string code)
+	{
+		var n = XamlValueSyntax.ParseNumbers(raw);
+		code = n is { Length: 4 } && n[2] >= 0 && n[3] >= 0
+			? $"new global::SUIsei.Rect({F(n[0])}, {F(n[1])}, {F(n[2])}, {F(n[3])})"
+			: "";
+		return code.Length > 0;
+	}
+
+	// Path markup is checked here by the parser the runtime uses, and parsed again by it when the view is built.
+	private static bool ConvertGeometry(string raw, out string code)
+	{
+		code = PathMarkup.TryParse(raw, null, out _) ? $"global::SUIsei.Media.Geometry.Parse({SyntaxFactory.Literal(raw)})" : "";
+		return code.Length > 0;
+	}
+
+	// "x1,y1 x2,y2 …"; empty text is an empty collection.
+	private static bool ConvertPointCollection(string raw, out string code)
+	{
+		code = "";
+		if (string.IsNullOrWhiteSpace(raw))
+		{
+			code = "new global::SUIsei.Media.PointCollection()";
+			return true;
+		}
+		if (XamlValueSyntax.ParseNumbers(raw) is not { } n || n.Length % 2 != 0)
+			return false;
+		var sb = new StringBuilder("new global::SUIsei.Media.PointCollection {");
+		for (var i = 0; i < n.Length; i += 2)
+			sb.Append(i == 0 ? " " : ", ").Append($"new global::SUIsei.Point({F(n[i])}, {F(n[i + 1])})");
+		code = sb.Append(" }").ToString();
+		return true;
+	}
+
+	// Numbers separated by commas or whitespace; empty text is an empty collection.
+	private static bool ConvertDoubleCollection(string raw, out string code)
+	{
+		code = "";
+		if (string.IsNullOrWhiteSpace(raw))
+		{
+			code = "new global::SUIsei.Media.DoubleCollection()";
+			return true;
+		}
+		if (XamlValueSyntax.ParseNumbers(raw) is not { } n)
+			return false;
+		code = "new global::SUIsei.Media.DoubleCollection { " + string.Join(", ", n.Select(v => v.ToString("R", CultureInfo.InvariantCulture) + "d")) + " }";
+		return true;
 	}
 
 	private static bool ConvertVector2(string raw, out string code)

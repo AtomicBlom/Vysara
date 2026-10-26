@@ -86,6 +86,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"Storyboard.TargetProperty '{0}' {1}; write the WinUI path '{2}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor UnknownExtensionMember = new("SUISEI022", "Unknown extension member",
 		"'{0}' is not a member of the SUIsei extension namespace (SUIsei.Extensions)", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor InvalidPathMarkup = new("SUISEI024", "Invalid path markup",
+		"'{0}' is not valid path markup for property '{1}', {2}", "SUIsei", DiagnosticSeverity.Error, true);
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{

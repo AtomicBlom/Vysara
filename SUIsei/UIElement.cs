@@ -17,7 +17,7 @@ namespace SUIsei;
 /// reaches it on the visual path, with no layout; it stops listening when it leaves, so they do not keep it alive.
 /// </para>
 /// </summary>
-public abstract class UIElement : DependencyObject, ISubPropertyListener
+public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 {
 	// --- Dependency properties ---
 
@@ -148,9 +148,11 @@ public abstract class UIElement : DependencyObject, ISubPropertyListener
 		}
 	}
 
-	/// <summary>Whether this element always clips its subtree to its layout bounds, as a control that needs it
-	/// (ScrollViewer, TextBox) sets it. Markup asks for the same with <see cref="Clipping.ClipToBoundsProperty"/>; the
-	/// clip applies when either is set (in <see cref="SyncVisual"/>).</summary>
+	/// <summary>
+	/// Whether this element always clips its subtree to its layout bounds, as a control that needs it (ScrollViewer,
+	/// TextBox) sets it. Markup asks for the same with <see cref="Clipping.ClipToBoundsProperty"/>; the clip applies
+	/// when either is set, intersected with <see cref="Clip"/> (in <see cref="EffectiveClip"/>).
+	/// </summary>
 	internal bool ClipToBounds { get; set; }
 
 	/// <summary>The result of the last <see cref="Measure"/> (intrinsic + margin), in DIPs.</summary>
@@ -181,15 +183,20 @@ public abstract class UIElement : DependencyObject, ISubPropertyListener
 	}
 
 	/// <summary>
-	/// The element joined (<paramref name="attached"/>) or left a live tree: start or stop listening to the brushes and
-	/// transform it shows. An override registers its own brush properties through <see cref="Listen(Brush, bool)"/> and calls the
-	/// base. Joining also marks the visual dirty, since a shared brush may have changed while the element was away.
+	/// The element joined (<paramref name="attached"/>) or left a live tree: start or stop listening to the brushes,
+	/// transform and clip geometry it shows. An override registers its own brush properties through
+	/// <see cref="Listen(Brush, bool)"/> and calls the base. Joining also re-applies the clip and marks the visual dirty,
+	/// since a shared brush or geometry may have changed while the element was away.
 	/// </summary>
 	private protected virtual void OnLiveTreeChanged(bool attached)
 	{
 		Listen(RenderTransform, attached);
+		Listen(Clip, attached);
 		if (attached)
+		{
+			ApplyClip(); // the clip geometry may have changed while the element was away
 			Visual.MarkDirty();
+		}
 	}
 
 	/// <summary>Start or stop listening to <paramref name="brush"/>.</summary>
@@ -235,12 +242,14 @@ public abstract class UIElement : DependencyObject, ISubPropertyListener
 		ApplyTransform();
 	}
 
-	void ISubPropertyListener.OnSubPropertyChanged(DependencyObject source)
+	void ISubPropertyListener.OnSubPropertyChanged(object source)
 	{
-		// A transform moved: recompose the visual's transform. A brush changed its paint in place: the content already
-		// holds that paint, so the visual only needs recompositing.
+		// A transform moved: recompose the visual's transform. The clip geometry moved: re-clip, with no layout. A brush
+		// changed its paint in place: the content already holds that paint, so the visual only needs recompositing.
 		if (source is Transform)
 			ApplyTransform();
+		else if (ReferenceEquals(source, Clip))
+			ApplyClip();
 		else
 			Visual.MarkDirty();
 	}
@@ -438,7 +447,7 @@ public abstract class UIElement : DependencyObject, ISubPropertyListener
 	{
 		Visual.Transform = ComposeTransform();
 		Visual.Opacity = Opacity;
-		Visual.Clip = ClipToBounds || Clipping.GetClipToBounds(this) ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
+		Visual.Clip = EffectiveClip();
 		Visual.Content = UpdateContent();
 		// A collapsed element's children were never re-arranged this pass (Arrange short-circuits ArrangeCore above),
 		// so their LayoutRect/transform are stale leftovers from when the element was last visible. Detaching them

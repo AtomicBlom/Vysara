@@ -1,0 +1,50 @@
+namespace SUIsei.Media;
+
+/// <summary>
+/// Several geometries drawn as one, as WinUI's <c>GeometryGroup</c>: their figures together, filled by the group's own
+/// <see cref="FillRule"/> (the children's fill rules are not used), so overlapping children cut holes under
+/// <see cref="FillRule.EvenOdd"/> and merge under <see cref="FillRule.Nonzero"/>.
+/// </summary>
+[ContentProperty(Name = nameof(Children))]
+public sealed class GeometryGroup : Geometry
+{
+	public static readonly DependencyProperty<GeometryGroup, GeometryCollection?> ChildrenProperty =
+		DependencyProperty.Register(nameof(Children), new PropertyMetadata<GeometryGroup, GeometryCollection?>
+		{
+			PropertyChanged = static (group, oldValue, newValue) =>
+			{
+				oldValue?.RemoveListener(group);
+				newValue?.AddListener(group);
+				group.Changed();
+			},
+		});
+
+	public static readonly DependencyProperty<GeometryGroup, FillRule> FillRuleProperty =
+		DependencyProperty.Register(nameof(FillRule), new PropertyMetadata<GeometryGroup, FillRule> { PropertyChanged = OnChanged });
+
+	/// <summary>The geometries drawn together.</summary>
+	public GeometryCollection Children
+	{
+		get
+		{
+			if (GetValue(ChildrenProperty) is { } children)
+				return children;
+			children = [];
+			SetValue(ChildrenProperty, children);
+			return children;
+		}
+		set => SetValue(ChildrenProperty, value);
+	}
+
+	/// <summary>How the children's overlaps decide what is inside. <see cref="FillRule.EvenOdd"/> by default.</summary>
+	public FillRule FillRule { get => GetValue(FillRuleProperty); set => SetValue(FillRuleProperty, value); }
+
+	private protected override void BuildPath(CompositionPath path)
+	{
+		path.FillRule = FillRule;
+		if (GetValue(ChildrenProperty) is not { } children)
+			return;
+		for (var i = 0; i < children.Count; i++)
+			path.Append(children[i].CompositionPath);
+	}
+}

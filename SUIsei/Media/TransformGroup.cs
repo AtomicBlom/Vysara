@@ -29,5 +29,5 @@ public sealed class TransformGroup : Transform, ISubPropertyListener
 	/// <summary>The list or a child changed.</summary>
 	internal void ChildrenChanged() => Changed();
 
-	void ISubPropertyListener.OnSubPropertyChanged(DependencyObject source) => Changed();
+	void ISubPropertyListener.OnSubPropertyChanged(object source) => Changed();
 }

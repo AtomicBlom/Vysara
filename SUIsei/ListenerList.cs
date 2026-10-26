@@ -18,7 +18,7 @@ internal struct ListenerList
 
 	/// <summary>Tell every listener that <paramref name="source"/> changed. A listener may add or remove listeners while
 	/// it is told.</summary>
-	public readonly void Notify(DependencyObject source)
+	public readonly void Notify(object source)
 	{
 		if (_items is null)
 			return;
