@@ -78,16 +78,38 @@ public sealed class TextBox : Control
 
 	public HdrColor BorderBrush { get; set; } = HdrColor.FromRgb(90, 90, 105);
 
-	/// <summary>The caret position (also the moving end of a selection).</summary>
-	public int CaretIndex
+	/// <summary>The caret position (also the moving end of a selection). Code outside places the caret with
+	/// <see cref="Select"/> or <see cref="SelectionStart"/>, as in WinUI.</summary>
+	internal int CaretIndex
 	{
 		get => _caret;
 		set => MoveCaret(value, extend: false);
 	}
 
-	public int SelectionStart => Math.Min(_anchor, _caret);
+	/// <summary>Where the selection starts. Setting it moves the selection and keeps its length.</summary>
+	public int SelectionStart
+	{
+		get => Math.Min(_anchor, _caret);
+		set => Select(value, SelectionLength);
+	}
 
-	public int SelectionLength => Math.Abs(_caret - _anchor);
+	/// <summary>How many characters are selected. Setting it keeps the selection's start.</summary>
+	public int SelectionLength
+	{
+		get => Math.Abs(_caret - _anchor);
+		set => Select(SelectionStart, value);
+	}
+
+	/// <summary>Select <paramref name="length"/> characters from <paramref name="start"/>, leaving the caret at the end of
+	/// the selection; a length of 0 just places the caret. Both are clamped to the text.</summary>
+	/// <exception cref="ArgumentOutOfRangeException"><paramref name="start"/> or <paramref name="length"/> is negative.</exception>
+	public void Select(int start, int length)
+	{
+		ArgumentOutOfRangeException.ThrowIfNegative(start);
+		ArgumentOutOfRangeException.ThrowIfNegative(length);
+		MoveCaret(start, extend: false);
+		MoveCaret(start + length, extend: true);
+	}
 
 	public event EventHandler? TextChanged;
 

@@ -8,7 +8,8 @@ namespace SUIsei;
 /// Per-host focus state machine. Tracks the focused element, raises the four focus
 /// routed events (GettingFocus/LosingFocus tunnel, GotFocus/LostFocus bubble), and drives Tab/Shift-Tab
 /// navigation across a set of <see cref="UIView"/>s respecting <see cref="UIElement.IsTabStop"/>,
-/// <see cref="UIElement.IsEnabled"/>, <see cref="UIElement.TabIndex"/>, and focus scopes.
+/// <see cref="UIElement.IsEnabled"/> and <see cref="UIElement.TabIndex"/>. Tab order runs across all the views as one
+/// sequence: no subtree keeps focus within itself, and <see cref="Controls.Control.TabFocusNavigation"/> is not read.
 /// </summary>
 public sealed class FocusManager
 {
@@ -95,7 +96,7 @@ public sealed class FocusManager
 	}
 
 	/// <summary>
-	/// Move focus to the next or previous tab stop within the active focus scope.
+	/// Move focus to the next or previous tab stop across <paramref name="views"/>, wrapping at either end.
 	/// Returns false when no focusable elements exist in <paramref name="views"/>.
 	/// </summary>
 	public bool MoveFocus(FocusNavigationDirection dir, IReadOnlyList<UIView> views)

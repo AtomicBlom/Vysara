@@ -1,11 +1,14 @@
+using SUIsei.Extensions;
+
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A vertical items panel that realizes only the containers intersecting its viewport. It
-/// assumes a uniform <see cref="RowHeight"/>, so the visible window is pure arithmetic from <see cref="VerticalOffset"/>;
-/// containers that scroll out are recycled back to the <see cref="IItemContainerSource"/>. It reports the full extent
-/// (<c>ItemCount × RowHeight</c>) so an outer scroller sees the true size. Variable-height virtualization, a scroll
-/// chrome, and wheel/scrollbar input are later refinements; the offset is set directly.
+/// A vertical items panel that realizes only the containers intersecting its viewport. It assumes one uniform row
+/// height (<see cref="Virtualization.RowHeightProperty"/>, <c>suisei:Virtualization.RowHeight</c> in XAML), so the
+/// visible window is pure arithmetic from <see cref="VerticalOffset"/>; containers that scroll out are recycled back to
+/// the <see cref="IItemContainerSource"/>. It reports the full extent (<c>ItemCount × row height</c>) so an outer
+/// scroller sees the true size. It has no variable-height virtualization, scroll chrome, or wheel and scrollbar input:
+/// the offset is set directly.
 /// </summary>
 public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 {
@@ -13,13 +16,10 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 	private readonly Dictionary<int, UIElement> _realized = [];
 	private UIElement[] _ordered = [];
 
-	/// <summary>The uniform per-item height the visible window is computed against.</summary>
-	public float RowHeight { get; set { if (field != value) { field = value; InvalidateMeasure(); } } } = 24f;
-
 	/// <summary>The vertical scroll position, in pixels.</summary>
 	public float VerticalOffset { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
 
-	/// <summary>The full content height (<c>ItemCount × RowHeight</c>), computed at measure — what an outer scroller
+	/// <summary>The full content height (<c>ItemCount × row height</c>), computed at measure — what an outer scroller
 	/// reads for its scroll range. <see cref="UIElement.DesiredSize"/> itself is capped to the viewport by layout.</summary>
 	public float ExtentHeight { get; private set; }
 
@@ -45,7 +45,7 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 			return Size.Zero;
 
 		var count = _source.ItemCount;
-		var rowHeight = MathF.Max(1f, RowHeight);
+		var rowHeight = MathF.Max(1f, Virtualization.GetRowHeight(this));
 
 		// The window of item indices intersecting the viewport (+1 for the partially-scrolled row at the bottom).
 		var first = count == 0 ? 0 : Math.Clamp((int)MathF.Floor(VerticalOffset / rowHeight), 0, count - 1);
@@ -89,7 +89,7 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 
 	protected override Size ArrangeOverride(Size finalSize)
 	{
-		var rowHeight = MathF.Max(1f, RowHeight);
+		var rowHeight = MathF.Max(1f, Virtualization.GetRowHeight(this));
 		foreach (var (index, container) in _realized)
 			container.Arrange(new Rect(0f, index * rowHeight - VerticalOffset, finalSize.Width, rowHeight));
 		return finalSize;

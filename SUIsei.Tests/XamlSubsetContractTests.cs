@@ -105,6 +105,7 @@ public sealed class XamlSubsetContractTests
 		("XML namespaces: suisei: and using:", """<local:Item2Host /><Border suisei:Glow.Radius="2" />"""),
 		("mc:Ignorable design-time markup", """<Border d:Width="100" Width="10"><d:Border.Padding>4</d:Border.Padding></Border>"""),
 		("suisei: property path owner", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(suisei:Glow.Radius)" To="5" />""")),
+		("the runtime's suisei: extensions", """<Border suisei:Clipping.ClipToBounds="True" /><ScrollViewer suisei:Scrolling.WheelScrollAmount="64" /><ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel suisei:Virtualization.RowHeight="32" /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>"""),
 	];
 
 	// Planning §4 "Planned": named in the contract but not implemented yet. Each must be reported, not ignored.

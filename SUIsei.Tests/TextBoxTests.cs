@@ -135,6 +135,29 @@ public sealed class TextBoxTests
 	}
 
 	[Test]
+	public void Select_and_SelectionStart_place_the_selection_as_in_WinUI()
+	{
+		var (host, box) = Focused();
+		Type(host, "hello world");
+
+		box.Select(6, 5);
+		box.SelectionStart.ShouldBe(6);
+		box.SelectionLength.ShouldBe(5);
+		box.CaretIndex.ShouldBe(11);
+
+		box.SelectionStart = 0;                  // keeps the length
+		box.SelectionLength.ShouldBe(5);
+		box.SelectionStart.ShouldBe(0);
+
+		box.SelectionLength = 0;                 // keeps the start: just a caret
+		box.CaretIndex.ShouldBe(0);
+
+		box.Select(3, 100);                      // clamped to the text
+		box.SelectionLength.ShouldBe(8);
+		Should.Throw<ArgumentOutOfRangeException>(() => box.Select(-1, 0));
+	}
+
+	[Test]
 	public void Caret_does_not_blink_while_unfocused()
 	{
 		var host = new UIHost();

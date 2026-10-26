@@ -20,10 +20,10 @@ public class ItemsControl : Control, IItemContainerSource
 	private INotifyCollectionChanged? _incc;
 
 	/// <summary>Containers realized so far (instrumentation for the virtualization tests).</summary>
-	public int RealizeCount { get; private set; }
+	internal int RealizeCount { get; private set; }
 
 	/// <summary>Containers recycled so far (instrumentation for the virtualization tests).</summary>
-	public int RecycleCount { get; private set; }
+	internal int RecycleCount { get; private set; }
 
 	public IEnumerable? ItemsSource
 	{

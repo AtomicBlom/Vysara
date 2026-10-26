@@ -1,6 +1,7 @@
 using System.Linq;
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Extensions;
 
 namespace SUIsei.Tests;
 
@@ -15,7 +16,15 @@ public sealed class VirtualizationTests
 	{
 		var ic = new ItemsControl
 		{
-			ItemsPanel = new ItemsPanelTemplate { Factory = () => new VirtualizingStackPanel { RowHeight = rowHeight } },
+			ItemsPanel = new ItemsPanelTemplate
+			{
+				Factory = () =>
+				{
+					var panel = new VirtualizingStackPanel();
+					Virtualization.SetRowHeight(panel, rowHeight);
+					return panel;
+				},
+			},
 			ItemsSource = Enumerable.Range(0, count).Select(i => $"item{i}").ToArray(),
 		};
 		var root = new UIRoot(new DrawListId(0)) { Content = ic };

@@ -26,8 +26,8 @@ public sealed class MarkupFormsTests
 	{
 		var view = Build();
 
-		// Title, Card, List, the Canvas, Caption and Badge: the d:DesignNote element is not built.
-		view.Root.Children.Count.ShouldBe(6);
+		// Title, Card, List, the Canvas, Caption, Clipped, Scroller, Rows and Badge: the d:DesignNote element is not built.
+		view.Root.Children.Count.ShouldBe(9);
 		view.Title.Text.ShouldBe("Forms");
 	}
 
@@ -85,6 +85,21 @@ public sealed class MarkupFormsTests
 
 		// No From: halfway from the current 2.5 to 10.
 		TestGlow.GetRadius(view.Badge).ShouldBe(6.25f, 1e-4f);
+	}
+
+	[Test]
+	public void The_runtimes_extensions_are_set_from_markup()
+	{
+		var view = Build();
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = view.Root;
+		host.Tick(0.016, 0f, new Vector2(400f, 600f));
+
+		Clipping.GetClipToBounds(view.Clipped).ShouldBeTrue();
+		view.Clipped.Visual.Clip.ShouldBe(new Rect(0f, 0f, 20f, 10f));
+		Scrolling.GetWheelScrollAmount(view.Scroller).ShouldBe(64f);
+		// Set on the panel the ItemsPanelTemplate builds, not dropped with the rest of its attributes.
+		Virtualization.GetRowHeight(view.Rows.ItemsHost.ShouldBeOfType<VirtualizingStackPanel>()).ShouldBe(32f);
 	}
 
 	[Test]

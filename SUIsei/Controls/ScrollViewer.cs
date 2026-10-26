@@ -1,4 +1,5 @@
 using SUIsei.Animation;
+using SUIsei.Extensions;
 using SUIsei.Input;
 using SUIsei.RoutedEvents;
 
@@ -82,9 +83,6 @@ public sealed class ScrollViewer : FrameworkElement
 			InvalidateMeasure();
 		}
 	}
-
-	/// <summary>Pixels scrolled per unit of wheel delta (and per arrow-key press).</summary>
-	public float WheelScrollAmount { get; set; } = 48f;
 
 	public float VerticalOffset { get; private set; }
 	public float HorizontalOffset { get; private set; }
@@ -256,7 +254,7 @@ public sealed class ScrollViewer : FrameworkElement
 		if (e is not PointerRoutedEventArgs pointer)
 			return;
 		// Wheel up (positive delta) scrolls toward the top (offset decreases).
-		SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * WheelScrollAmount);
+		SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * Scrolling.GetWheelScrollAmount(this));
 		e.Handled = true;
 	}
 
@@ -270,8 +268,8 @@ public sealed class ScrollViewer : FrameworkElement
 			case VirtualKey.PageUp: SetVerticalOffset(VerticalOffset - ViewportHeight); e.Handled = true; break;
 			case VirtualKey.Home: SetVerticalOffset(0f); e.Handled = true; break;
 			case VirtualKey.End: SetVerticalOffset(ScrollableHeight); e.Handled = true; break;
-			case VirtualKey.Down: SetVerticalOffset(VerticalOffset + WheelScrollAmount); e.Handled = true; break;
-			case VirtualKey.Up: SetVerticalOffset(VerticalOffset - WheelScrollAmount); e.Handled = true; break;
+			case VirtualKey.Down: SetVerticalOffset(VerticalOffset + Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
+			case VirtualKey.Up: SetVerticalOffset(VerticalOffset - Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
 		}
 	}
 }

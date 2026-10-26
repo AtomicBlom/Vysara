@@ -202,6 +202,8 @@ partial class XamlSourceGenerator
 		scope.Emit($"{ownerVar}.{targetProp} = new global::SUIsei.Controls.DataTemplate {{ Factory = {method} }};");
 	}
 
+	// <X.ItemsPanel><ItemsPanelTemplate><SomePanel …/></ItemsPanelTemplate></X.ItemsPanel> → a static factory that builds
+	// the panel with its attributes, as any template root is built.
 	private static void EmitItemsPanelProperty(Gen gen, Scope scope, string ownerVar, XElement propEl)
 	{
 		var tmplEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ItemsPanelTemplate");
@@ -209,11 +211,21 @@ partial class XamlSourceGenerator
 		if (panelEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
 		var panelType = ResolveType(gen.Compilation, panelEl.Name.Namespace, panelEl.Name.LocalName);
 		if (panelType is null) { gen.Report(UnknownElement, panelEl, panelEl.Name.LocalName); return; }
-		scope.Emit($"{ownerVar}.ItemsPanel = new global::SUIsei.Controls.ItemsPanelTemplate {{ Factory = static () => new {Fq(panelType)}() }};");
+		if (gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Panel") is not { } panel || !IsAssignableTo(panelType, panel))
+		{
+			gen.Report(BadPropertyElement, panelEl, $"ItemsPanelTemplate (its root must be a Panel; '{panelType.Name}' is not)");
+			return;
+		}
+		var method = EmitTemplateFactory(gen, tmplEl!, isControlTemplate: false,
+			paramDecl: "", castLocal: null, dataRootExpr: "", dataRootType: null, returnType: "global::SUIsei.Controls.Panel");
+		if (method is not null)
+			scope.Emit($"{ownerVar}.ItemsPanel = new global::SUIsei.Controls.ItemsPanelTemplate {{ Factory = {method} }};");
 	}
 
-	// Emit a static factory method that news the template subtree and returns its root, then return its name.
-	private static string? EmitTemplateFactory(Gen gen, XElement templateEl, bool isControlTemplate, string paramDecl, string? castLocal, string dataRootExpr, INamedTypeSymbol? dataRootType)
+	// Emit a static factory method that news the template subtree and returns its root as `returnType`, then return its
+	// name.
+	private static string? EmitTemplateFactory(Gen gen, XElement templateEl, bool isControlTemplate, string paramDecl, string? castLocal, string dataRootExpr, INamedTypeSymbol? dataRootType,
+		string returnType = "global::SUIsei.FrameworkElement")
 	{
 		var rootChild = templateEl.Elements().FirstOrDefault(e => !e.Name.LocalName.Contains('.'));
 		if (rootChild is null) { gen.Report(BadPropertyElement, templateEl, templateEl.Name.LocalName); return null; }
@@ -237,7 +249,7 @@ partial class XamlSourceGenerator
 		if (rootVar is null)
 			return null;
 
-		gen.Methods.AppendLine($"\tprivate static global::SUIsei.FrameworkElement {method}({paramDecl})");
+		gen.Methods.AppendLine($"\tprivate static {returnType} {method}({paramDecl})");
 		gen.Methods.AppendLine("\t{");
 		gen.Methods.Append(body);
 		gen.Methods.AppendLine($"\t\treturn {rootVar};");

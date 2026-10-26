@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Extensions;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei;
@@ -37,18 +38,10 @@ public abstract class UIElement : DependencyObject
 		DependencyProperty.Register(nameof(IsEnabled),
 			new PropertyMetadata<UIElement, bool> { DefaultValue = true });
 
-	/// <summary>Tab-order index within a focus scope. Lower values tab first; equal values use document order.</summary>
+	/// <summary>Tab-order index. Lower values tab first; equal values use document order.</summary>
 	public static readonly DependencyProperty<UIElement, int> TabIndexProperty =
 		DependencyProperty.Register(nameof(TabIndex),
 			new PropertyMetadata<UIElement, int> { DefaultValue = int.MaxValue });
-
-	/// <summary>When true, this element acts as a focus scope boundary: Tab navigation wraps within it rather than
-	/// escaping to the parent scope (e.g. a dialog or popup).</summary>
-	public static readonly DependencyProperty<UIElement, bool> IsFocusScopeProperty =
-		DependencyProperty.Register(nameof(IsFocusScope),
-			new PropertyMetadata<UIElement, bool> { DefaultValue = false });
-
-	public bool IsFocusScope { get => GetValue(IsFocusScopeProperty); set => SetValue(IsFocusScopeProperty, value); }
 
 	/// <summary>Group opacity (animatable — drives the composition <see cref="Visual.Opacity"/>).</summary>
 	public float Opacity { get => GetValue(OpacityProperty); set => SetValue(OpacityProperty, value); }
@@ -119,9 +112,10 @@ public abstract class UIElement : DependencyObject
 	/// <summary>A local render transform, composed under layout placement (animatable later).</summary>
 	public Matrix3x2 RenderTransform { get; set; } = Matrix3x2.Identity;
 
-	/// <summary>When true, the composition node clips its subtree to the element's layout bounds (applied in
-	/// <see cref="SyncVisual"/>). Takes effect on the next arrange.</summary>
-	public bool ClipToBounds { get; set; }
+	/// <summary>Whether this element always clips its subtree to its layout bounds, as a control that needs it
+	/// (ScrollViewer, TextBox) sets it. Markup asks for the same with <see cref="Clipping.ClipToBoundsProperty"/>; the
+	/// clip applies when either is set (in <see cref="SyncVisual"/>).</summary>
+	internal bool ClipToBounds { get; set; }
 
 	/// <summary>The result of the last <see cref="Measure"/> (intrinsic + margin), in DIPs.</summary>
 	public Size DesiredSize { get; protected set; }
@@ -307,7 +301,7 @@ public abstract class UIElement : DependencyObject
 	{
 		Visual.Transform = ComposeTransform();
 		Visual.Opacity = Opacity;
-		Visual.Clip = ClipToBounds ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
+		Visual.Clip = ClipToBounds || Clipping.GetClipToBounds(this) ? new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height) : null;
 		Visual.Content = UpdateContent();
 		// A collapsed element's children were never re-arranged this pass (Arrange short-circuits ArrangeCore above),
 		// so their LayoutRect/transform are stale leftovers from when the element was last visible. Detaching them
