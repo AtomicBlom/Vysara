@@ -184,7 +184,7 @@ partial class XamlSourceGenerator
 		var raw = attr.Value.Trim();
 		if (raw is "RenderTransform.Translate.X" or "RenderTransform.Translate.Y")
 		{
-			gen.Report(PreBrushAnimationPath, attr, raw, "is an old SUIsei shorthand for a translation, and RenderTransform is now a Transform",
+			gen.Report(BrushOrTransformShorthand, attr, raw, "names no property: RenderTransform holds a Transform, whose own property the animation drives",
 				$"(UIElement.RenderTransform).(TranslateTransform.{raw[raw.Length - 1]})");
 			return false;
 		}
@@ -236,12 +236,12 @@ partial class XamlSourceGenerator
 
 			if (i == steps.Count - 1)
 			{
-				// A colour animation aimed at a brush property is the form from before brushes: point it at the brush's colour.
+				// A colour animation aimed at a brush property: the colour it means is the brush's, through the WinUI path.
 				if (kind == AnimationKind.Color && IsBrush(gen, valueType))
 				{
 					var before = string.Join(".", steps.Take(i).Select(static s => s.ToString()));
 					var last = step.Owner is null ? $"({(current ?? declaring).Name}.{step.Property})" : step.ToString();
-					gen.Report(PreBrushAnimationPath, attr, raw, $"names {declaring.Name}.{step.Property}, which holds a {valueType.Name} rather than a colour",
+					gen.Report(BrushOrTransformShorthand, attr, raw, $"names {declaring.Name}.{step.Property}, which holds a {valueType.Name} rather than a colour",
 						$"{(before.Length > 0 ? before + "." : "")}{last}.(SolidColorBrush.Color)");
 					return false;
 				}

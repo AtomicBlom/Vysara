@@ -352,6 +352,6 @@ public sealed class HitTestTests
 
 		Sweep();
 		Sweep();
-		Allocations.Measure(Sweep).ShouldBe(0L);
+		Allocations.ShouldAllocateNothing(Sweep);
 	}
 }

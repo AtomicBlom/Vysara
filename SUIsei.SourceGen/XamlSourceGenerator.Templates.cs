@@ -302,7 +302,9 @@ partial class XamlSourceGenerator
 				$"{scope.DataRootType?.Name ?? "the templated control"} has no dependency property '{sourceProp}Property'");
 			return;
 		}
-		scope.Emit($"{scope.DataRootExpr}.RegisterTemplateBinding({Fq(dp.ContainingType!)}.{dp.Name}, __v => {targetVar}.{prop.Name} = ({Fq(prop.Type)})__v);");
+		// The cast keeps a nullable reference target nullable (a Brush? background), so pushing null is no warning.
+		var castType = prop.Type is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated } ? Fq(prop.Type) + "?" : Fq(prop.Type);
+		scope.Emit($"{scope.DataRootExpr}.RegisterTemplateBinding({Fq(dp.ContainingType!)}.{dp.Name}, __v => {targetVar}.{prop.Name} = ({castType})__v);");
 	}
 
 	// --- Resources + Style markup ---

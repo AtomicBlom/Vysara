@@ -4,25 +4,25 @@ namespace SUIsei.Tests;
 internal static class Allocations
 {
 	/// <summary>
-	/// The bytes <paramref name="window"/> allocates on this thread, measured over a run with no garbage collection in it.
-	/// Under a busy parallel suite another thread's allocations can trigger a gen-0 collection mid-window, which resets
-	/// this thread's allocation context, and the count can then include part of an unused allocation quantum (a few KB)
-	/// that nothing allocated. A window that ran through a collection is measured again, up to
-	/// <paramref name="attempts"/> times; real allocations show in every window, so the smallest count is returned.
+	/// Assert that <paramref name="window"/> allocates nothing on this thread in the steady state. The window is run up to
+	/// <paramref name="attempts"/> times and passes on the first that allocates nothing: an allocation the work makes
+	/// every frame recurs in every window and fails. Under the full parallel suite a single window has occasionally
+	/// counted a one-off few KB that the same window, run alone or again, does not, and that a collection on another
+	/// thread does not explain; a failure lists every window's count and the gen-0 collections that ran during it.
 	/// </summary>
-	public static long Measure(Action window, int attempts = 5)
+	public static void ShouldAllocateNothing(Action window, int attempts = 5)
 	{
-		var smallest = long.MaxValue;
+		var log = new (long Bytes, int Collections)[attempts];
 		for (var i = 0; i < attempts; i++)
 		{
 			var collections = GC.CollectionCount(0);
 			var before = GC.GetAllocatedBytesForCurrentThread();
 			window();
-			var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-			smallest = Math.Min(smallest, allocated);
-			if (GC.CollectionCount(0) == collections)
-				return allocated;
+			log[i] = (GC.GetAllocatedBytesForCurrentThread() - before, GC.CollectionCount(0) - collections);
+			if (log[i].Bytes == 0)
+				return;
 		}
-		return smallest;
+		throw new ShouldAssertException("Every window allocated: " + string.Join(", ",
+			log.Select(static a => $"{a.Bytes} B ({a.Collections} gen-0 collection(s))")));
 	}
 }

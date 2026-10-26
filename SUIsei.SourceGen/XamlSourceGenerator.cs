@@ -82,7 +82,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"Property element '{0}' is outside the supported XAML subset", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BadPropertyPath = new("SUISEI021", "Unresolved property path",
 		"Property path '{0}' does not resolve: {1}", "SUIsei", DiagnosticSeverity.Error, true);
-	private static readonly DiagnosticDescriptor PreBrushAnimationPath = new("SUISEI023", "Animation path from before brushes and transforms",
+	private static readonly DiagnosticDescriptor BrushOrTransformShorthand = new("SUISEI023", "Animation shorthand for a brush or a transform",
 		"Storyboard.TargetProperty '{0}' {1}; write the WinUI path '{2}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor UnknownExtensionMember = new("SUISEI022", "Unknown extension member",
 		"'{0}' is not a member of the SUIsei extension namespace (SUIsei.Extensions)", "SUIsei", DiagnosticSeverity.Error, true);

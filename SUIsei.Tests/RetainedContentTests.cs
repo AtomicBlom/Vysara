@@ -106,14 +106,13 @@ public sealed class RetainedContentTests
 		var revisionBefore = host.DrawLists[0].Data.Revision;
 
 		var windows = 0u;
-		var allocated = Allocations.Measure(() =>
+		Allocations.ShouldAllocateNothing(() =>
 		{
 			windows++;
 			for (var i = 0; i < measured; i++)
 				Frame(i);
 		});
 
-		allocated.ShouldBe(0L);
 		// The same content and paint were recoloured in place every frame, the paint versioning the change, and every
 		// frame recomposited.
 		animated.Visual.Content.ShouldBeSameAs(content);
