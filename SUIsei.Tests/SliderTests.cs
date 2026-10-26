@@ -8,7 +8,8 @@ namespace SUIsei.Tests;
 /// <summary>
 /// <see cref="Slider"/>: <see cref="Slider.Value"/> is coerced into range; a track press maps
 /// the pointer position to a snapped value and enters the <c>Pressed</c> visual state; dragging tracks the captured
-/// pointer; the keyboard nudges the value; and releasing leaves the pressed state.
+/// pointer; the keyboard nudges the value; releasing leaves the pressed state; and the initial state applies without a
+/// transition.
 /// </summary>
 public sealed class SliderTests
 {
@@ -101,6 +102,23 @@ public sealed class SliderTests
 		host.Tick(0.016, 0f, Framebuffer);
 
 		CommonStates(slider).CurrentState!.Name.ShouldNotBe("Pressed");
+	}
+
+	[Test]
+	public void The_initial_state_applies_without_a_transition()
+	{
+		var (host, slider) = Laid();
+		var thumb = (Border)((Panel)slider.GetTemplateRoot()!).Children[2];
+		var normal = HdrColor.FromRgb(90, 150, 230); // the Normal thumb colour
+
+		// Entering Normal from the template snaps to it; a transition here would fade the thumb in from the PointerOver
+		// colour, a hover flash on every freshly shown slider.
+		CommonStates(slider).CurrentState!.Name.ShouldBe("Normal");
+		host.Clock.HasActiveClocks.ShouldBeFalse();
+		thumb.Visual.Content.ShouldBeOfType<RectContent>().Fill.ShouldBe(normal);
+
+		host.Tick(0.016, 0.016f, Framebuffer);
+		thumb.Visual.Content.ShouldBeOfType<RectContent>().Fill.ShouldBe(normal);
 	}
 
 	[Test]

@@ -1,3 +1,4 @@
+using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
 
@@ -5,7 +6,8 @@ namespace SUIsei.Tests;
 
 /// <summary>
 /// <see cref="ToggleButton"/> / <see cref="CheckBox"/>: click cycles the checked state
-/// (two- and three-state), raises the matching routed events, and the check-box template realizes and renders.
+/// (two- and three-state), raises the matching routed events, the check-box template realizes and renders, and a
+/// template realized under a live host snaps to the current check state rather than transitioning into it.
 /// </summary>
 public sealed class ToggleButtonTests
 {
@@ -92,6 +94,41 @@ public sealed class ToggleButtonTests
 
 		toggle.PerformClick();                // -> unchecked: accent back to hidden
 		accent.Opacity.ShouldBe(0f, 0.01f);
+	}
+
+	[Test]
+	public void The_initial_check_state_applies_without_a_transition()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		var toggle = new ToggleButton { Content = "Power" };
+		view.Root.Content = toggle;
+		host.Tick(0.016, 0f, new Vector2(200f, 100f)); // the first layout realizes the template under the host's clock
+
+		// Entering Unchecked from the template snaps; a transition would keep the clock running a no-op fade.
+		host.Clock.HasActiveClocks.ShouldBeFalse();
+		toggle.GetTemplateRoot()!.VisualChildren[1].Opacity.ShouldBe(0f, 0.01f); // [baseBorder, accent, presenter]
+	}
+
+	[Test]
+	public void Reapplying_the_template_shows_a_checked_accent_at_once()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		var toggle = new ToggleButton { Content = "Power", IsChecked = true };
+		view.Root.Content = toggle;
+		var size = new Vector2(200f, 100f);
+		host.Tick(0.016, 0f, size);
+
+		// Swap the template out and back in, as a style or hot reload does: the next layout realizes a fresh tree under
+		// the host's clock while checked, and its accent overlay must show at once rather than fade in from hidden.
+		var template = toggle.Template;
+		toggle.Template = null;
+		toggle.Template = template;
+		host.Tick(0.016, 0.016f, size);
+
+		host.Clock.HasActiveClocks.ShouldBeFalse();
+		toggle.GetTemplateRoot()!.VisualChildren[1].Opacity.ShouldBe(1f, 0.01f); // [baseBorder, accent, presenter]
 	}
 
 	[Test]

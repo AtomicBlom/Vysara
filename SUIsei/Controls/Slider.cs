@@ -102,7 +102,9 @@ public sealed class Slider : Control
 		AddHandler(PointerExitedEvent, OnPointerExited);
 		AddHandler(KeyDownEvent, OnKeyDown);
 
-		GoToCommonState(useTransitions: true);
+		// Snap to the initial state: every state's storyboard fades in from a neighbouring state's colour, so a
+		// transition here would flash the thumb at that colour on first show.
+		GoToCommonState(useTransitions: false);
 	}
 
 	private void OnValueChanged()
