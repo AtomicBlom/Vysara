@@ -17,7 +17,8 @@ public sealed class DrawListCompositor : IUICompositor
 
 	/// <param name="font">
 	/// The atlas glyph runs lay out against; defaults to <see cref="FontAtlas.Default"/> (the embedded default font).
-	/// Must be the same atlas the renderer uploaded via <c>EnableUI(font.Texture)</c> so UVs line up.
+	/// Its page reaches the renderer through each list's <see cref="DrawListData.TextureSlots"/>, so the renderer always
+	/// binds the atlas the glyphs were laid out against.
 	/// </param>
 	public DrawListCompositor(FontAtlas? font = null) => _font = font ?? FontAtlas.Default;
 
@@ -29,11 +30,15 @@ public sealed class DrawListCompositor : IUICompositor
 	{
 		// Frame-level no-op: once a surface has been composited, a fully-clean visual
 		// tree re-submits the cached draw data with the same Revision — a static frame does zero compositing work
-		// (and the backend can skip re-upload). A visual-only change marks its subtree dirty and forces a rebuild.
+		// (and the backend can skip re-upload). A visual-only change marks its subtree dirty and forces a rebuild. A
+		// texture source whose texels changed still moves the cached list's TextureRevision, so the host re-uploads it.
 		if (!_surfaces.TryGetValue(surface.Value, out var list))
 			_surfaces[surface.Value] = list = new UIDrawList();
 		else if (!AnyDirty(root))
+		{
+			list.RefreshTextureRevision();
 			return;
+		}
 
 		var surfaceRect = new Rect(0, 0, root.SurfaceSize.X, root.SurfaceSize.Y);
 		list.Begin(root.SurfaceSize);

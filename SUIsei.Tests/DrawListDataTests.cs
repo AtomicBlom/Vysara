@@ -17,7 +17,8 @@ public sealed class DrawListDataTests
 	{
 		const string nl = "\n";
 		var expected =
-			"DrawListData (rev 0, coords 0x0, hdr=False)" + nl +
+			"DrawListData (rev 0, texrev 0, coords 0x0, hdr=False)" + nl +
+			"  Textures (0):" + nl +
 			"  Vertices (0):" + nl +
 			"  Indices (0):" + nl +
 			"  Commands (0):" + nl;
@@ -33,7 +34,9 @@ public sealed class DrawListDataTests
 		var draw = BuildQuad(revision: 7);
 		var dump = draw.Dump().ReplaceLineEndings("\n");
 
-		dump.ShouldContain("DrawListData (rev 7, coords 1920x1080, hdr=False)");
+		dump.ShouldContain("DrawListData (rev 7, texrev 2, coords 1920x1080, hdr=False)");
+		// The slot table: each slot's source, its size and its version.
+		dump.ShouldContain("Textures (1):\n    [0] White 1x1 v0\n");
 		dump.ShouldContain("Vertices (4):");
 		// State-run batching collapses the quad to one index run; the index stream dumps in submission order.
 		dump.ShouldContain("Indices (6): 0 1 2 0 2 3");
@@ -87,6 +90,8 @@ public sealed class DrawListDataTests
 			Commands = commands,
 			CoordinateSize = new Vector2(1920, 1080),
 			Revision = revision,
+			TextureSlots = [TextureSource.White],
+			TextureRevision = 2,
 		};
 	}
 }

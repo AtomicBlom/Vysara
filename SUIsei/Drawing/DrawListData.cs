@@ -13,7 +13,7 @@ namespace SUIsei.Drawing;
 /// <para>
 /// A list a <see cref="DrawListCompositor"/> produced is a view over buffers the compositor keeps and refills. It
 /// stays readable through the next composite of its surface, which fills a second set of buffers, and its streams
-/// (<see cref="Vertices"/>, <see cref="Indices"/>, <see cref="Commands"/>, <see cref="Images"/>, <see cref="Dump"/>)
+/// (<see cref="Vertices"/>, <see cref="Indices"/>, <see cref="Commands"/>, <see cref="TextureSlots"/>, <see cref="Dump"/>)
 /// throw <see cref="InvalidOperationException"/> once a later composite refills its own set. Memory and spans taken
 /// from it share that lifetime but are not checked. The compositor also reuses the view objects, so a reference kept
 /// for four or more composites can be rebound to a newer list: read the surface's current list each frame rather
@@ -27,7 +27,8 @@ public sealed class DrawListData
 	private ReadOnlyMemory<OverlayVertex> _vertices;
 	private ReadOnlyMemory<ushort> _indices;
 	private ReadOnlyMemory<DrawCommand> _commands;
-	private IReadOnlyList<ImageSource> _images = [];
+	private IReadOnlyList<TextureSource> _textureSlots = [];
+	private uint _textureRevision;
 	private Vector2 _coordinateSize;
 	private bool _isHdrTarget;
 	private uint _revision;
@@ -71,17 +72,31 @@ public sealed class DrawListData
 		init => _commands = value;
 	}
 
-	/// <summary>The images referenced by <see cref="UIPrimKind.Image"/> commands this frame (by
-	/// <see cref="ImageSource.TextureIndex"/>) — the engine glue uploads + binds each before submitting.</summary>
-	public IReadOnlyList<ImageSource> Images
+	/// <summary>
+	/// The list's texture slot table: a command's <see cref="DrawCommand.TextureIndex"/> is an index into it. Slot 0
+	/// is always <see cref="TextureSource.White"/>, which untextured commands sample; the others are the sources the
+	/// list's glyph and image commands sample (glyph atlas pages, images), each once, numbered densely in the order the
+	/// list first uses them. The host uploads each source and binds them by slot; slots belong to this list only. Every
+	/// command's <see cref="DrawCommand.TextureIndex"/> is below <c>TextureSlots.Count</c>, so a host can treat one
+	/// outside the table as a broken list.
+	/// </summary>
+	public IReadOnlyList<TextureSource> TextureSlots
 	{
 		get
 		{
 			ThrowIfStale();
-			return _images;
+			return _textureSlots;
 		}
-		init => _images = value;
+		init => _textureSlots = value;
 	}
+
+	/// <summary>
+	/// Moves when <see cref="TextureSlots"/> names different sources, puts them in different slots, or one of them
+	/// changes its texels (<see cref="TextureSource.Version"/>), including on a frame that keeps the same
+	/// <see cref="Revision"/>. A host rebinds and re-uploads textures only when it moves; a geometry-only change
+	/// leaves it alone.
+	/// </summary>
+	public uint TextureRevision { get => _textureRevision; init => _textureRevision = value; }
 
 	/// <summary>The pixel size of the coordinate space the geometry is authored in.</summary>
 	public Vector2 CoordinateSize { get => _coordinateSize; init => _coordinateSize = value; }
@@ -105,18 +120,23 @@ public sealed class DrawListData
 	/// From then on it reads that set's live arrays and goes stale when the set is refilled. <see cref="Damage"/> is
 	/// cleared for the compositor to stamp.
 	/// </summary>
-	internal void Bind(DrawListBuffers source, Vector2 coordinateSize, bool isHdrTarget)
+	internal void Bind(DrawListBuffers source, Vector2 coordinateSize, bool isHdrTarget, uint textureRevision)
 	{
 		_source = source;
 		_revision = source.Revision;
 		_vertices = source.Vertices.Memory;
 		_indices = source.Indices.Memory;
 		_commands = source.Commands.Memory;
-		_images = source.ImagesView;
+		_textureSlots = source.SlotsView;
 		_coordinateSize = coordinateSize;
 		_isHdrTarget = isHdrTarget;
+		_textureRevision = textureRevision;
 		Damage = default;
 	}
+
+	/// <summary>Move the texture revision of the list the compositor is re-submitting unchanged, when a source it
+	/// samples has changed its texels.</summary>
+	internal void StampTextureRevision(uint textureRevision) => _textureRevision = textureRevision;
 
 	/// <summary>
 	/// A deterministic, human-readable text snapshot of the whole draw list — the "golden draw-list" a producer's
@@ -128,9 +148,18 @@ public sealed class DrawListData
 		var vertices = Vertices.Span;
 		var indices = Indices.Span;
 		var commands = Commands.Span;
+		var slots = TextureSlots;
 
 		var sb = new StringBuilder();
-		sb.Append(c, $"DrawListData (rev {Revision}, coords {CoordinateSize.X:0.###}x{CoordinateSize.Y:0.###}, hdr={IsHdrTarget})\n");
+		sb.Append(c, $"DrawListData (rev {Revision}, texrev {TextureRevision}, coords {CoordinateSize.X:0.###}x{CoordinateSize.Y:0.###}, hdr={IsHdrTarget})\n");
+
+		sb.Append(c, $"  Textures ({slots.Count}):\n");
+		for (var i = 0; i < slots.Count; i++)
+		{
+			var source = slots[i];
+			var name = ReferenceEquals(source, TextureSource.White) ? "White" : source.GetType().Name;
+			sb.Append(c, $"    [{i}] {name} {source.Width}x{source.Height} v{source.Version}\n");
+		}
 
 		sb.Append(c, $"  Vertices ({vertices.Length}):\n");
 		for (var i = 0; i < vertices.Length; i++)

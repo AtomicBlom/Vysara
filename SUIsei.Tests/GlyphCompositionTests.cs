@@ -26,7 +26,7 @@ public sealed class GlyphCompositionTests
 		draw.Commands.Length.ShouldBe(1);
 		var cmd = draw.Commands.Span[0];
 		cmd.Tag.ShouldBe((uint)UIPrimKind.Glyph);
-		cmd.TextureIndex.ShouldBe(1); // the atlas page, not the white texel (0)
+		cmd.TextureIndex.ShouldBe(1); // the atlas page's slot: the first source after the white texel in slot 0
 
 		// Two visible glyphs ⇒ two quads ⇒ 8 vertices / 12 indices, all collapsed into the one command.
 		draw.Vertices.Length.ShouldBe(8);

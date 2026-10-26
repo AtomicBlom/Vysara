@@ -34,7 +34,6 @@ Console.WriteLine(draw.Dump());
 
 var clear = HdrColor.FromRgb(245, 245, 247).ToPremultiplied().ToVector4(); // linear, premultiplied
 var rast = new SoftwareRasterizer(W, H);
-rast.BindTexture(1, Texture.FromAtlas(FontAtlas.Default.Image)); // glyph runs sample TextureIndex 1
 
 // Warm once, then time a steady-state repaint loop to show the perf shape.
 rast.Clear(clear);

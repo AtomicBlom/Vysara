@@ -5,7 +5,7 @@ namespace SUIsei;
 
 /// <summary>
 /// A surface's retained draw-list builder — the analog of ImGui's <c>ImDrawList</c>. Bakes the composed transform
-/// into vertex positions and merges consecutive primitives that share <c>(kind, textureId, clip)</c> into one indexed
+/// into vertex positions and merges consecutive primitives that share <c>(kind, texture slot, clip)</c> into one indexed
 /// draw command (atlas-everything + state-run batching).
 /// <para>
 /// It keeps two <see cref="DrawListBuffers"/> sets and fills them in turn, so the list it built last stays readable
@@ -36,6 +36,14 @@ internal sealed class UIDrawList
 	private readonly List<ShapedGlyph> _glyphBuf = [];
 	private DrawListBuffers _set; // the set this composite fills
 	private Vector2 _surfaceSize;
+
+	// Each texture source's slot in the list being built: one lookup per primitive, so a list with many images or
+	// pages assigns its slots without searching the table. Cleared per composite, keeping its storage.
+	private readonly Dictionary<TextureSource, int> _slotOf = new(ReferenceEqualityComparer.Instance);
+
+	// The surface's texture revision: moves when a list's slot table differs from the one before it, or when a source
+	// in the current list changes its texels.
+	private uint _textureRevision;
 
 	// The first vertex of the current index window: every command emitted in it carries this as its VertexOffset.
 	private int _windowStart;
@@ -71,24 +79,55 @@ internal sealed class UIDrawList
 		_surfaceSize = surfaceSize;
 		_windowStart = 0;
 		_open = false;
+		_slotOf.Clear();
+		SlotFor(TextureSource.White); // slot 0, what untextured commands sample
 	}
 
-	/// <summary>Close the composite and hand out its list.</summary>
+	/// <summary>Close the composite and hand out its list. Its texture revision moves only when its slot table differs
+	/// from the previous list's: different sources or slots, or a source whose texels have changed since.</summary>
 	public DrawListData End(bool hdr)
 	{
 		Flush();
+		if (Previous.Revision == 0 || !_set.SameTextures(Previous))
+			_textureRevision++;
 		var view = _views[Revision % ViewCount];
-		view.Bind(_set, _surfaceSize, hdr);
+		view.Bind(_set, _surfaceSize, hdr, _textureRevision);
 		Last = view;
 		return view;
 	}
 
+	/// <summary>
+	/// For a frame that reuses the current list unchanged: move its texture revision if a source it samples has
+	/// changed its texels since the list recorded them, so the host re-uploads it although the geometry is the same.
+	/// Allocation-free; one version comparison per slot.
+	/// </summary>
+	public void RefreshTextureRevision()
+	{
+		if (Revision == 0 || !_set.RefreshVersions())
+			return;
+		_textureRevision++;
+		Last.StampTextureRevision(_textureRevision);
+	}
+
+	// The slot `source` holds in the list being built, assigning it the next one on first use, so slots are dense and
+	// numbered in the order the walk first samples each source.
+	private int SlotFor(TextureSource source)
+	{
+		if (_slotOf.TryGetValue(source, out var slot))
+			return slot;
+		slot = _set.Slots.Count;
+		_set.Slots.Add(source);
+		_set.SlotVersions.Add(source.Version);
+		_slotOf.Add(source, slot);
+		return slot;
+	}
+
 	/// <summary>Append a transformed quad (the corners are baked through <paramref name="matrix"/>).</summary>
-	public void AddRect(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int textureId = 0)
+	public void AddRect(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int slot = 0)
 	{
 		if (clip.IsEmpty)
 			return;
-		EnsureRun(kind, textureId, clip);
+		EnsureRun(kind, slot, clip);
 
 		var first = ReserveVertices(4);
 		AddVertex(new Vector2(local.X, local.Y), new Vector2(0, 0), matrix, color, @params);
@@ -98,15 +137,13 @@ internal sealed class UIDrawList
 		AddQuadIndices(first);
 	}
 
-	/// <summary>Append a tinted image quad sampling <paramref name="source"/> across its full UV. The source is
-	/// recorded so the list can hand the engine glue the table of images to upload + bind by index.</summary>
+	/// <summary>Append a tinted image quad sampling <paramref name="source"/> across its full UV, through the source's
+	/// slot in this list's slot table.</summary>
 	public void AddImage(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor tint, ImageSource source, in Rect clip)
 	{
 		if (clip.IsEmpty)
 			return;
-		if (!_set.Images.Contains(source))
-			_set.Images.Add(source);
-		AddRect(local, matrix, tint, UIPrimKind.Image, Vector4.Zero, clip, source.TextureIndex);
+		AddRect(local, matrix, tint, UIPrimKind.Image, Vector4.Zero, clip, SlotFor(source));
 	}
 
 	/// <summary>
@@ -116,12 +153,13 @@ internal sealed class UIDrawList
 	/// first line's ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by
 	/// <paramref name="fontSizePx"/>) with its atlas UV and the shared per-run <c>screenPxRange</c> in
 	/// <see cref="OverlayVertex.Custom"/>.x; all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw.
+	/// The atlas page is an ordinary texture source: the glyphs sample it through its slot in this list.
 	/// </summary>
-	public void AddGlyphRun(string text, float fontSizePx, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip, int textureId = 1)
+	public void AddGlyphRun(string text, float fontSizePx, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip)
 	{
 		if (clip.IsEmpty || string.IsNullOrEmpty(text))
 			return;
-		EnsureRun(UIPrimKind.Glyph, textureId, clip);
+		EnsureRun(UIPrimKind.Glyph, SlotFor(font.Image), clip);
 
 		var @params = new Vector4(font.ScreenPxRange(fontSizePx), 0f, 0f, 0f);
 		var baselineY = -font.Ascender * fontSizePx; // ascender is negative (y-down), so the top sits near y=0
