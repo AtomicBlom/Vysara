@@ -192,7 +192,7 @@ public sealed class LayoutPropertyTests
 		var border = new Border();
 		var shrink = StoryboardOf(new DoubleAnimation { To = 50.0, Target = border, TargetProperty = FrameworkElement.MaxWidthProperty });
 
-		Should.Throw<InvalidOperationException>(() => new AnimationClock().Begin(shrink)).Message.ShouldContain("is ∞: give it a From");
+		Should.Throw<InvalidOperationException>(() => new AnimationClock().Begin(shrink)).Message.ShouldContain("is Infinity: give it a From");
 	}
 
 	[Test]

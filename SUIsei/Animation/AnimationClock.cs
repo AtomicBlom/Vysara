@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace SUIsei.Animation;
@@ -202,9 +203,9 @@ public sealed class AnimationClock
 	{
 		if (typeof(T) == typeof(float) ? !float.IsFinite(Unsafe.As<T, float>(ref from))
 			: typeof(T) == typeof(double) && !double.IsFinite(Unsafe.As<T, double>(ref from)))
-			throw new InvalidOperationException(
+			throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture,
 				$"A tween starts from {property?.Name ?? "the property"}'s value now, which is {from}" +
-				$"{(from is float.NaN or double.NaN ? " (Auto, for a size)" : "")}: set it to a number first.");
+				$"{(from is float.NaN or double.NaN ? " (Auto, for a size)" : "")}: set it to a number first."));
 	}
 
 	// One running tween: its timing and easing here, its target and values in a typed subclass. Subclasses are pooled

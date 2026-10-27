@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SUIsei.Animation;
 
 /// <summary>
@@ -44,9 +46,9 @@ public sealed class DoubleAnimation : AnimationTimeline<double>
 	{
 		base.CaptureStart();
 		if (From is null && !double.IsFinite(StartValue))
-			throw new InvalidOperationException(
+			throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture,
 				$"A {nameof(DoubleAnimation)} with no From starts from its target's value, and {TargetProperty?.ToString() ?? "its target"} " +
-				$"{(Target is null ? "" : $"on a {Target.GetType().Name} ")}is {StartValue}{(double.IsNaN(StartValue) ? " (Auto, for a size)" : "")}: give it a From.");
+				$"{(Target is null ? "" : $"on a {Target.GetType().Name} ")}is {StartValue}{(double.IsNaN(StartValue) ? " (Auto, for a size)" : "")}: give it a From."));
 	}
 
 	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => DoubleBinding.TryBind(this, owner, target);
