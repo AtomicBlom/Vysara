@@ -69,14 +69,31 @@ public static class HotReload
 		}
 	}
 
+	// The host registry serves diagnostics as well as hot reload, so it is kept while either is on.
 	internal static void TrackHost(UIHost host)
 	{
-		if (!Enabled)
+		if (!Enabled && !Diagnostics.Enabled)
 			return;
 		lock (Sync)
 		{
 			PruneHosts();
 			Hosts.Add(new WeakReference<UIHost>(host));
+		}
+	}
+
+	/// <summary>The hosts still alive, in the order they were built; empty unless hot reload or diagnostics are on.</summary>
+	internal static UIHost[] LiveHosts()
+	{
+		lock (Sync)
+		{
+			PruneHosts();
+			var hosts = new List<UIHost>(Hosts.Count);
+			foreach (var wr in Hosts)
+			{
+				if (wr.TryGetTarget(out var host))
+					hosts.Add(host);
+			}
+			return [.. hosts];
 		}
 	}
 

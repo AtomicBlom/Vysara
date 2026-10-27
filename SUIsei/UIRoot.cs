@@ -18,6 +18,8 @@ public sealed class UIRoot
 	// Overlay elements composited above Content (popups/flyouts), bottom-to-top. A full-surface entry (a light-dismiss
 	// layer) fills the surface; a positioned entry takes its desired size at its offset.
 	private readonly List<(UIElement Element, Vector2 Position, bool FullSurface)> _overlays = [];
+	// How many entries at the end of _overlays are diagnostics overlays, which stay above every other overlay.
+	private int _diagnosticOverlays;
 
 	public UIRoot(DrawListId surface, IUICompositor? compositor = null)
 	{
@@ -61,19 +63,59 @@ public sealed class UIRoot
 	public float LayoutScale { get; set; } = 1f;
 
 	/// <summary>Add an overlay element composited above <see cref="Content"/> (a popup/flyout, or its full-surface
-	/// light-dismiss layer), positioned in DIPs. Marks the tree dirty so the next composite shows it.</summary>
+	/// light-dismiss layer), positioned in DIPs. It goes above the other overlays but below any diagnostics overlay, which
+	/// stays top-most. Marks the tree dirty so the next composite shows it.</summary>
 	internal void AddOverlay(UIElement element, Vector2 position, bool fullSurface = false)
 	{
 		element.SetAttachedRoot(this);
-		_overlays.Add((element, position, fullSurface));
+		_overlays.Insert(_overlays.Count - _diagnosticOverlays, (element, position, fullSurface));
 		Visual.MarkDirty();
 	}
 
-	/// <summary>Remove a previously-added overlay element. Marks the tree dirty so it disappears on the next composite.</summary>
+	/// <summary>Add a diagnostics overlay: a full-surface entry above every other overlay, kept there as popups open
+	/// beneath it, and left out of <see cref="Diagnostics"/> tree walks and picks.</summary>
+	internal void AddDiagnosticOverlay(UIElement element)
+	{
+		element.SetAttachedRoot(this);
+		_overlays.Add((element, Vector2.Zero, true));
+		_diagnosticOverlays++;
+		Visual.MarkDirty();
+	}
+
+	/// <summary>Whether <paramref name="element"/> is one of this root's diagnostics overlays.</summary>
+	internal bool IsDiagnosticOverlay(UIElement element)
+	{
+		for (var i = _overlays.Count - _diagnosticOverlays; i < _overlays.Count; i++)
+		{
+			if (ReferenceEquals(_overlays[i].Element, element))
+				return true;
+		}
+		return false;
+	}
+
+	/// <summary>The elements at the top of this root's tree: <see cref="Content"/>, then the overlays bottom-to-top,
+	/// without the diagnostics overlays.</summary>
+	internal UIElement[] TopLevelElements()
+	{
+		var count = _overlays.Count - _diagnosticOverlays;
+		var result = new List<UIElement>(count + 1);
+		if (Content is not null)
+			result.Add(Content);
+		for (var i = 0; i < count; i++)
+			result.Add(_overlays[i].Element);
+		return [.. result];
+	}
+
+	/// <summary>Remove a previously-added overlay element, a diagnostics overlay included. Marks the tree dirty so it
+	/// disappears on the next composite.</summary>
 	internal void RemoveOverlay(UIElement element)
 	{
-		if (_overlays.RemoveAll(o => ReferenceEquals(o.Element, element)) == 0)
+		var index = _overlays.FindIndex(o => ReferenceEquals(o.Element, element));
+		if (index < 0)
 			return;
+		if (index >= _overlays.Count - _diagnosticOverlays)
+			_diagnosticOverlays--;
+		_overlays.RemoveAt(index);
 		element.SetAttachedRoot(null);
 		Visual.MarkDirty();
 	}
@@ -83,18 +125,21 @@ public sealed class UIRoot
 
 	/// <summary>The top-most element drawn at <paramref name="surfacePoint"/> (surface pixels): overlays top-most first,
 	/// then content, each hit-tested through the root visual's DIP→pixel scale and clipped to the surface, as they are
-	/// composited. Null outside the surface or where nothing hittable draws.</summary>
-	internal UIElement? HitTest(Vector2 surfacePoint)
+	/// composited. Null outside the surface or where nothing hittable draws. With <paramref name="includeHidden"/>, elements
+	/// whose <see cref="UIElement.IsHitTestVisible"/> is false are tested too; with <paramref name="diagnosticsPick"/>, the
+	/// diagnostics overlays are looked through at what is beneath them.</summary>
+	internal UIElement? HitTest(Vector2 surfacePoint, bool includeHidden = false, bool diagnosticsPick = false)
 	{
 		var surface = new Rect(0f, 0f, Visual.SurfaceSize.X, Visual.SurfaceSize.Y);
 		if (!surface.Contains(surfacePoint))
 			return null;
-		for (var i = _overlays.Count - 1; i >= 0; i--)
+		var top = diagnosticsPick ? _overlays.Count - _diagnosticOverlays : _overlays.Count;
+		for (var i = top - 1; i >= 0; i--)
 		{
-			if (_overlays[i].Element.HitTest(surfacePoint, Visual.Transform, surface) is { } hit)
+			if (_overlays[i].Element.HitTest(surfacePoint, Visual.Transform, surface, includeHidden) is { } hit)
 				return hit;
 		}
-		return Content?.HitTest(surfacePoint, Visual.Transform, surface);
+		return Content?.HitTest(surfacePoint, Visual.Transform, surface, includeHidden);
 	}
 
 	/// <summary>Measure + arrange the element tree against the surface (in pixels), then sync the composition tree.

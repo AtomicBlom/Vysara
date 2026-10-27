@@ -103,6 +103,24 @@ public abstract class DependencyObject
 	internal bool HasLocalValue(DependencyProperty dp) =>
 		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Has(ValueRung.Local);
 
+	/// <summary>The highest rung holding a value for <paramref name="dp"/>, or null when it resolves to its default.</summary>
+	internal ValueRung? TopRung(DependencyProperty dp)
+	{
+		if (_slots is null || !_slots.TryGetValue(dp.GlobalIndex, out var slot))
+			return null;
+		for (var rung = ValueRung.Animation; rung <= ValueRung.Inherited; rung++)
+		{
+			if (slot.Has(rung))
+				return rung;
+		}
+		return null;
+	}
+
+	/// <summary>The <see cref="DependencyProperty.GlobalIndex"/> of each property this object holds a value for on some
+	/// rung.</summary>
+	internal int[] StoredPropertyIndices() =>
+		_slots is null ? [] : [.. _slots.Where(static s => s.Value.Set != 0).Select(static s => s.Key)];
+
 	/// <summary>Write (or, with <paramref name="hasValue"/> false, clear) one rung, then raise the change if the
 	/// coerced resolved value moved.</summary>
 	internal void SetRung<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueRung rung, TValue value, bool hasValue)

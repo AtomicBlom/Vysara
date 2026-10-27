@@ -23,6 +23,12 @@
     <Using Include="Shouldly" />
   </ItemGroup>
 
+  <!-- Turns SUIsei.Diagnostics on, as a game opts in, so DiagnosticsTests run its members against real hosts. An AOT
+       publish of this app keeps it off: NativeAOT never allows it. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="SUIsei.Diagnostics.Enabled" Value="true" Trim="true" />
+  </ItemGroup>
+
   <!-- SUIsei is standalone — only the runtime project is needed (no Loom.Core / Loom.Assets). -->
   <!-- ReferenceOutputAssembly=true on SourceGen so XamlSourceGenerator is referenceable by CSharpGeneratorDriver tests.
        UndefineProperties keeps an AOT publish of this app from AOT-compiling the netstandard2.0 generator (NETSDK1207)
