@@ -136,14 +136,14 @@ public sealed class TextBox : Control
 		_caretVisual.Measure(available);
 		_selectionHighlight.Measure(available);
 
-		var lineHeight = FontAtlas.Default.LineHeight * FontSize;
+		var lineHeight = TextFont.LineHeight * FontSize;
 		var width = float.IsPositiveInfinity(available.Width) ? _textBlock.DesiredSize.Width + Pad.Horizontal + 2f : available.Width;
 		return new Size(width, lineHeight + Pad.Vertical);
 	}
 
 	protected override Size ArrangeOverride(Size finalSize)
 	{
-		var lineHeight = FontAtlas.Default.LineHeight * FontSize;
+		var lineHeight = TextFont.LineHeight * FontSize;
 		var viewport = MathF.Max(0f, finalSize.Width - Pad.Horizontal);
 
 		// Keep the caret inside the viewport, then pull back so the text's end never floats past the right edge
@@ -231,7 +231,7 @@ public sealed class TextBox : Control
 	private float OffsetOf(int index)
 	{
 		index = Math.Clamp(index, 0, Text.Length);
-		return index == 0 ? 0f : FontAtlas.Default.MeasureWidth(Text.AsSpan(0, index)) * FontSize;
+		return index == 0 ? 0f : TextFont.MeasureWidth(Text.AsSpan(0, index)) * FontSize;
 	}
 
 	private void OnTextChanged()

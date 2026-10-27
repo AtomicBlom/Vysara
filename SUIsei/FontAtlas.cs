@@ -94,8 +94,10 @@ public sealed class FontAtlas : IGlyphSource
 		return _glyphs.TryGetValue(' ', out var space) ? space.Advance : 0.5f;
 	}
 
-	/// <summary>Measure a single-line string's advance width in EM units, through the atlas's <see cref="Shaper"/>.</summary>
-	public float MeasureWidth(ReadOnlySpan<char> text) => Shaper.Measure(text, this);
+	/// <summary>Measure a single-line string's advance width in EM units, through the atlas's <see cref="Shaper"/>, with
+	/// <paramref name="features"/> applied (none when null): the width a run laid out with the same features draws at.</summary>
+	public float MeasureWidth(ReadOnlySpan<char> text, FontFeatureSet? features = null) =>
+		Shaper.Measure(text, this, features ?? FontFeatureSet.Empty);
 
 	/// <summary>Decode an atlas from its JSON layout + PNG page streams.</summary>
 	public static FontAtlas Load(Stream json, Stream png)

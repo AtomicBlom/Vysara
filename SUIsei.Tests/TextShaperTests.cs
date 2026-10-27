@@ -23,7 +23,7 @@ public sealed class TextShaperTests
 		var font = FontAtlas.Default;
 		var output = new List<ShapedGlyph>();
 
-		var width = font.Shaper.Shape("A B", font, output);
+		var width = font.Shaper.Shape("A B", font, FontFeatureSet.Empty, output);
 
 		output.Count.ShouldBe(2);          // 'A' and 'B' have geometry; the space does not
 		output[0].Cluster.ShouldBe(0);
@@ -53,7 +53,7 @@ public sealed class TextShaperTests
 		var source = new StubGlyphSource();
 		var output = new List<ShapedGlyph>();
 
-		var width = new SimpleTextShaper().Shape("AB", source, output);
+		var width = new SimpleTextShaper().Shape("AB", source, FontFeatureSet.Empty, output);
 
 		output.Count.ShouldBe(2);
 		output[0].PenXEm.ShouldBe(0f);
@@ -64,9 +64,9 @@ public sealed class TextShaperTests
 	// A trivial shaper proving the seam is honored: it reports a constant width and produces no glyphs.
 	private sealed class FixedWidthShaper(float width) : ITextShaper
 	{
-		public float Measure(ReadOnlySpan<char> text, IGlyphSource source) => width;
+		public float Measure(ReadOnlySpan<char> text, IGlyphSource source, FontFeatureSet features) => width;
 
-		public float Shape(ReadOnlySpan<char> text, IGlyphSource source, List<ShapedGlyph> output) => width;
+		public float Shape(ReadOnlySpan<char> text, IGlyphSource source, FontFeatureSet features, List<ShapedGlyph> output) => width;
 	}
 
 	// A minimal non-atlas glyph source: 'A'/'B' each advance 0.5 EM and have geometry; nothing else resolves.

@@ -38,6 +38,9 @@
     <!-- The MTSDF generator, tested against the font program it bakes: the exact fill its field must reconstruct, and
          the committed default atlas, which must be what baking its fontset produces. -->
     <ProjectReference Include="..\SUIsei.Text\SUIsei.Text.csproj" />
+    <!-- The HarfBuzz shaper, to check OpenType features reach HarfBuzz. Its native library ships for Windows only, so
+         those tests skip elsewhere. -->
+    <ProjectReference Include="..\SUIsei.HarfBuzz\SUIsei.HarfBuzz.csproj" />
   </ItemGroup>
 
   <ItemGroup>

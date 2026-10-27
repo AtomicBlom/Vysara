@@ -208,7 +208,7 @@ public sealed class RetainedContentTests
 		content.SetDerived(derived);
 		content.HasCurrentDerived.ShouldBeTrue();
 
-		content.Update("Hello", 16f, RedPaint, Vector2.Zero); // equal values: nothing changed
+		content.Update("Hello", 16f, RedPaint, Vector2.Zero, FontAtlas.Default, FontFeatureSet.Empty); // equal values: nothing changed
 		content.HasCurrentDerived.ShouldBeTrue();
 
 		content.Text = "Hello!";

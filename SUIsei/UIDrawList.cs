@@ -209,13 +209,14 @@ internal sealed class UIDrawList
 	}
 
 	/// <summary>
-	/// Lay out a text run as MTSDF glyph quads through the atlas's <see cref="FontAtlas.Shaper"/>,
-	/// so kerning / ligatures / contextual forms apply when a real shaper is installed (the default is advance-based
-	/// LTR). The run's local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the
-	/// first line's ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by
-	/// <paramref name="fontSize"/>, in the run's local units) with its atlas UV and the shared per-run
-	/// <c>screenPxRange</c> in <see cref="OverlayVertex.Custom"/>.x; all glyphs share <c>(Glyph, atlas, clip)</c> so they
-	/// batch into one draw. The atlas page is an ordinary texture source: the glyphs sample it through its slot in this list.
+	/// Lay out a text run as MTSDF glyph quads against its font, through the atlas's <see cref="FontAtlas.Shaper"/> with
+	/// the run's OpenType features, the font and features its element measured it with, so kerning / ligatures /
+	/// contextual forms / tabular figures apply when the shaper supports them (the default is advance-based LTR). The
+	/// run's local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the first line's
+	/// ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by the run's font size, in
+	/// its local units) with its atlas UV and the shared per-run <c>screenPxRange</c> in <see cref="OverlayVertex.Custom"/>.x;
+	/// all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw. The atlas page is an ordinary texture
+	/// source: the glyphs sample it through its slot in this list.
 	/// <para>
 	/// <c>screenPxRange</c> is the atlas's distance range in surface pixels at the size the glyphs land at: the local size
 	/// times the smallest stretch of <paramref name="matrix"/> (a layout scale, a render transform), so the coverage ramp is
@@ -229,11 +230,14 @@ internal sealed class UIDrawList
 	/// atlas uv, so text takes a gradient exactly, as rectangles do.
 	/// </para>
 	/// </summary>
-	public void AddGlyphRun(string text, float fontSize, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip,
+	public void AddGlyphRun(GlyphRunContent run, PremultipliedHdrColor color, in Matrix3x2 matrix, in Rect clip,
 		CompositionGradientBrush? gradient = null, in GradientLine line = default, float opacity = 1f)
 	{
+		var text = run.Text;
 		if (clip.IsEmpty || string.IsNullOrEmpty(text))
 			return;
+		var font = run.Font;
+		var fontSize = run.FontSize;
 		var slot = SlotFor(font.Image);
 		EnsureRun(UIPrimKind.Glyph, slot, clip);
 
@@ -241,7 +245,7 @@ internal sealed class UIDrawList
 		var baselineY = -font.Ascender * fontSize; // ascender is negative (y-down), so the top sits near y=0
 
 		_glyphBuf.Clear();
-		font.Shaper.Shape(text, font, _glyphBuf);
+		font.Shaper.Shape(text, font, run.Features, _glyphBuf);
 		Span<Vector2> corners = stackalloc Vector2[4];
 		Span<Vector2> uvs = stackalloc Vector2[4];
 		foreach (var sg in _glyphBuf)

@@ -334,6 +334,20 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		Parent?.InvalidateArrange();
 	}
 
+	/// <summary>Invalidate the measure of this element and of everything under it, for a change every element's layout
+	/// may read, such as the root's font.</summary>
+	internal void InvalidateMeasureTree()
+	{
+		InvalidateMeasure();
+		var children = VisualChildren;
+		for (var i = 0; i < children.Count; i++)
+			children[i].InvalidateMeasureTree();
+	}
+
+	/// <summary>The font this element's text measures and draws with: its root's <see cref="UIRoot.Font"/>, or
+	/// <see cref="FontAtlas.Default"/> while it is in no root.</summary>
+	private protected FontAtlas TextFont => AttachedRoot?.Font ?? FontAtlas.Default;
+
 	/// <summary>A render-only change (opacity, brush): refresh the composition node's render state and mark it dirty
 	/// for the next composite — no relayout. Layout-driven sync happens in <see cref="SyncVisual"/> after arrange.</summary>
 	public void InvalidateVisual()
