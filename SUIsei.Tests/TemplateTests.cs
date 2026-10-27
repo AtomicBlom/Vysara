@@ -82,6 +82,48 @@ public sealed class TemplateTests
 	}
 
 	[Test]
+	public void A_template_binding_to_a_dependency_property_writes_the_parts_template_rung()
+	{
+		var control = new ContentControl { Opacity = 0.5f };
+		var part = new Border();
+		control.RegisterTemplateBinding(UIElement.OpacityProperty, part, UIElement.OpacityProperty);
+
+		part.Opacity.ShouldBe(0.5f);
+		part.HasLocalValue(UIElement.OpacityProperty).ShouldBeFalse(); // the template's value, not the part's own
+		control.Opacity = 0.25f;
+		part.Opacity.ShouldBe(0.25f); // live
+	}
+
+	[Test]
+	public void A_local_value_on_a_template_part_wins_over_the_template_and_survives_its_next_push()
+	{
+		var control = new ContentControl { Opacity = 0.5f };
+		var part = new Border();
+		control.RegisterTemplateBinding(UIElement.OpacityProperty, part, UIElement.OpacityProperty);
+
+		part.Opacity = 0.8f;
+		part.Opacity.ShouldBe(0.8f);
+		control.Opacity = 0.2f;
+		part.Opacity.ShouldBe(0.8f); // the push lands below Local, as in WinUI
+
+		UIElement.OpacityProperty.ClearRung(part, DependencyObject.ValueRung.Local);
+		part.Opacity.ShouldBe(0.2f); // with Local cleared, the template's latest value shows
+	}
+
+	[Test]
+	public void A_converting_template_binding_writes_the_converted_value()
+	{
+		var slider = new Slider { Maximum = 100, Value = 12 };
+		var part = new TextBlock();
+		slider.RegisterTemplateBinding(Slider.ValueProperty, part, TextBlock.FontSizeProperty, static v => (float)v);
+
+		part.FontSize.ShouldBe(12f);
+		slider.Value = 30;
+		part.FontSize.ShouldBe(30f);
+		part.HasLocalValue(TextBlock.FontSizeProperty).ShouldBeFalse();
+	}
+
+	[Test]
 	public void Button_hover_animates_its_background_through_the_visual_state_manager()
 	{
 		var host = new UIHost();

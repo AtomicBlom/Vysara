@@ -23,6 +23,12 @@
     <Using Include="Shouldly" />
   </ItemGroup>
 
+  <!-- Turns SUIsei.Diagnostics on, as a game opts in, so DiagnosticsTests run its members against real hosts. An AOT
+       publish of this app keeps it off: NativeAOT never allows it. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="SUIsei.Diagnostics.Enabled" Value="true" Trim="true" />
+  </ItemGroup>
+
   <!-- SUIsei is standalone — only the runtime project is needed (no Loom.Core / Loom.Assets). -->
   <!-- ReferenceOutputAssembly=true on SourceGen so XamlSourceGenerator is referenceable by CSharpGeneratorDriver tests.
        UndefineProperties keeps an AOT publish of this app from AOT-compiling the netstandard2.0 generator (NETSDK1207)
@@ -35,6 +41,9 @@
          per-kind math (and the RT-stack layer composite) the GPU runs, so group opacity is asserted at the pixel
          level with no GPU. -->
     <ProjectReference Include="..\SUIsei.Rasterizer\SUIsei.Rasterizer.csproj" />
+    <!-- The RoseMCP tap, which RoseTapTests drive as RoseMCP's host would. Its copy of the contract's protocol is internal
+         to it, so the tests see only SUIsei's copy, through SUIsei's InternalsVisibleTo. -->
+    <ProjectReference Include="..\SUIsei.RoseTap\SUIsei.RoseTap.csproj" />
     <!-- The MTSDF generator, tested against the font program it bakes: the exact fill its field must reconstruct, and
          the committed default atlas, which must be what baking its fontset produces. -->
     <ProjectReference Include="..\SUIsei.Text\SUIsei.Text.csproj" />

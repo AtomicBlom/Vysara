@@ -29,8 +29,17 @@ namespace SUIsei.Rasterizer;
 /// of the backend RT stack, so it gives true (non-double-blended) group opacity headlessly. A command whose tag is
 /// none of these kinds throws <see cref="ArgumentException"/> before anything is drawn, rather than being shaded as
 /// something it is not.
+/// <para>
+/// SUIsei.RoseTap compiles this file into itself, for its magnifier, and defines <c>SUISEI_RASTERIZER_INTERNAL</c> so
+/// its copy is internal and never clashes with this assembly's in a program that references both.
+/// </para>
 /// </summary>
-public sealed class SoftwareRasterizer
+#if SUISEI_RASTERIZER_INTERNAL
+internal
+#else
+public
+#endif
+sealed class SoftwareRasterizer
 {
 	private readonly int _width;
 	private readonly int _height;
@@ -189,6 +198,7 @@ public sealed class SoftwareRasterizer
 	}
 
 	/// <summary>Rasterize one frame's draw list onto the framebuffer (over whatever <see cref="Clear"/> left).</summary>
+	/// <param name="draw">The draw list to rasterize.</param>
 	/// <param name="paperWhite">HDR paper-white linear scale (ui.slang's <c>pc.paperWhite</c>); applied only when the
 	/// list targets an HDR surface. 1.0 leaves SDR untouched.</param>
 	public void Render(DrawListData draw, float paperWhite = 1f)

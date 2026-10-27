@@ -11,7 +11,12 @@ namespace SUIsei.Rasterizer;
 /// texels are signed distances) is read raw. Alpha is never decoded. <see cref="Sample"/> returns what the hardware
 /// returns; premultiplying a <see cref="TextureAlphaMode.Straight"/> texture's sample is the shader's step, after it.
 /// </summary>
-public sealed class Texture
+#if SUISEI_RASTERIZER_INTERNAL
+internal
+#else
+public
+#endif
+sealed class Texture
 {
 	// RGB byte → linear value, per colour space. Linear is byte / 255, bit for bit what dividing the texel by 255 gives.
 	private static readonly float[] LinearBytes = BuildTable(TextureColorSpace.Linear);

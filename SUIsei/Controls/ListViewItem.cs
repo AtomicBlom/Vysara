@@ -25,7 +25,7 @@ public sealed class ListViewItem : ContentControl
 		var selection = new VisualStateGroup { Name = "SelectionStates" };
 		selection.States.Add(new VisualState { Name = "Unselected", Storyboard = TemplateStates.RestoreBackground(this) });
 		selection.States.Add(new VisualState { Name = "Selected", Storyboard = TemplateStates.Background(this, SelectedBackground) });
-		VisualStateManager.SetVisualStateGroups(this, [selection]);
+		SetBuiltInValue(VisualStateManager.VisualStateGroupsProperty, [selection]);
 	}
 
 	internal void SetSelected(bool selected)

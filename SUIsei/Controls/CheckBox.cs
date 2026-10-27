@@ -25,7 +25,7 @@ public sealed class CheckBox : ToggleButton
 	private Border? _box;
 	private Border? _checkGlyph;
 
-	public CheckBox() => Template = DefaultTemplate;
+	public CheckBox() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
 
 	protected override void OnToggleStateChanged()
 	{

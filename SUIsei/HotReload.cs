@@ -1,4 +1,5 @@
 using System.Reflection.Metadata;
+using SUIsei.Controls;
 
 [assembly: MetadataUpdateHandler(typeof(SUIsei.HotReloadHandler))]
 
@@ -9,7 +10,9 @@ namespace SUIsei;
 /// <see cref="UIHost"/> registers itself on construction. When the runtime applies a metadata delta (an edited
 /// <c>.xaml</c> re-runs the source generator under <c>dotnet watch</c>), the <see cref="HotReloadHandler"/>
 /// records the changed types; the next <see cref="UIHost.Tick"/> drains them and rebuilds the affected views on
-/// the UI thread — never on the hot-reload agent's thread.
+/// the UI thread — never on the hot-reload agent's thread. A view rebuilds wherever it sits in a live host's tree, nested
+/// in another view as much as hosted as a <see cref="UIRoot.Content"/>, and its code-behind hears of it through the
+/// generated <c>partial void OnComponentRebuilt()</c>.
 /// <para>
 /// Bookkeeping is gated on <see cref="Enabled"/>, which defaults to <see cref="MetadataUpdater.IsSupported"/>:
 /// it is <c>false</c> under NativeAOT / optimized publish, so the whole mechanism is inert and trimmable there,
@@ -69,14 +72,31 @@ public static class HotReload
 		}
 	}
 
+	// The host registry serves diagnostics as well as hot reload, so it is kept while either is on.
 	internal static void TrackHost(UIHost host)
 	{
-		if (!Enabled)
+		if (!Enabled && !Diagnostics.Enabled)
 			return;
 		lock (Sync)
 		{
 			PruneHosts();
 			Hosts.Add(new WeakReference<UIHost>(host));
+		}
+	}
+
+	/// <summary>The hosts still alive, in the order they were built; empty unless hot reload or diagnostics are on.</summary>
+	internal static UIHost[] LiveHosts()
+	{
+		lock (Sync)
+		{
+			PruneHosts();
+			var hosts = new List<UIHost>(Hosts.Count);
+			foreach (var wr in Hosts)
+			{
+				if (wr.TryGetTarget(out var host))
+					hosts.Add(host);
+			}
+			return [.. hosts];
 		}
 	}
 
@@ -105,8 +125,9 @@ public static class HotReload
 	}
 
 	/// <summary>Drain queued rebuilds. Called at the top of <see cref="UIHost.Tick"/> so reconstruction happens on
-	/// the ticking thread. Each affected view is rebuilt (in-place for inheritance roots; with Root reassignment for
-	/// composition roots) and the hosting <see cref="UIRoot.Content"/> is re-assigned to trigger re-layout.</summary>
+	/// the ticking thread. Each affected view in a live host's tree is rebuilt, wherever it sits in that tree: in place
+	/// for inheritance roots, and for composition roots with the new Root put where the old one was
+	/// (<see cref="ReplaceRoot"/>). Outer views rebuild before the views nested in them.</summary>
 	public static void ProcessPending()
 	{
 		if (!Enabled)
@@ -123,22 +144,65 @@ public static class HotReload
 			comps = [.. Components];
 		}
 
+		// Outermost first: an outer view's rebuild makes new instances of the views nested in its XAML, so an inner
+		// view rebuilt before it would be rebuilt for nothing.
+		var queue = new List<(Entry Entry, object Target, int Depth)>();
 		foreach (var c in comps)
 		{
-			if (!c.Target.TryGetTarget(out var target))
+			if (c.Target.TryGetTarget(out var target) && Array.IndexOf(types, target.GetType()) >= 0)
+				queue.Add((c, target, Depth(RootOf(c, target))));
+		}
+
+		foreach (var (c, target, _) in queue.OrderBy(q => q.Depth))
+		{
+			// Decided now rather than up front: a view an earlier rebuild replaced has left the live tree. An unhosted
+			// view has nothing on screen to refresh, so it is skipped rather than silently rebuilt.
+			var element = RootOf(c, target);
+			if (!IsLive(element))
 				continue;
-			if (Array.IndexOf(types, target.GetType()) < 0)
-				continue;
-			// Only rebuild views currently hosted as a UIRoot.Content. An unhosted tracked view has nothing on
-			// screen to refresh, so it is skipped rather than silently rebuilt.
-			var host = FindHostingRoot(c);
-			if (host is null)
+			// A composition view's new Root takes the old one's place, so the old one must be somewhere that can take it.
+			if (c.GetRoot is not null && FindSlot(element) is null)
 				continue;
 			c.Rebuild(target);
-			// For composition roots the Root field is reassigned during rebuild; retrieve the new instance.
-			var newElement = c.GetRoot != null ? c.GetRoot(target) : (UIElement)target;
-			host.Content = newElement;
 		}
+	}
+
+	/// <summary>
+	/// Put a rebuilt composition view's new root where its old root was: at the same index in a <see cref="Panel"/>'s
+	/// children, as a <see cref="Border"/>'s child, as a <see cref="ScrollViewer"/>'s, a <see cref="ContentControl"/>'s (a
+	/// templated one's too, whose presenter shows it) or a <see cref="ContentPresenter"/>'s content, or as a
+	/// <see cref="UIRoot"/>'s content. The generated
+	/// <c>RebuildComponent()</c> calls it once the new tree is built, before <c>OnComponentRebuilt</c>. It does nothing
+	/// when the old root is anywhere else: unparented, a popup's child, or an item of an items control.
+	/// </summary>
+	/// <returns>Whether <paramref name="newRoot"/> took the old root's place.</returns>
+	public static bool ReplaceRoot(UIElement? oldRoot, UIElement newRoot)
+	{
+		if (oldRoot is null || ReferenceEquals(oldRoot, newRoot) || FindSlot(oldRoot) is not { } slot)
+			return false;
+		switch (slot.Owner)
+		{
+			case UIRoot root:
+				root.Content = newRoot;
+				break;
+			case Panel panel:
+				panel.Children.RemoveAt(slot.Index);
+				panel.Children.Insert(slot.Index, newRoot);
+				break;
+			case Border border:
+				border.Child = newRoot;
+				break;
+			case ScrollViewer scrollViewer:
+				scrollViewer.Content = newRoot;
+				break;
+			case ContentControl control:
+				control.Content = newRoot;
+				break;
+			case ContentPresenter presenter:
+				presenter.Content = newRoot;
+				break;
+		}
+		return true;
 	}
 
 	/// <summary>Clear all registrations and pending work. For test isolation — the registry is process-global.</summary>
@@ -152,12 +216,25 @@ public static class HotReload
 		}
 	}
 
-	// Find the UIRoot currently hosting this entry's UIElement as its Content, across all live hosts.
-	private static UIRoot? FindHostingRoot(Entry entry)
+	// The element a tracked view shows: the component itself for an inheritance root, else its Root.
+	private static UIElement RootOf(Entry entry, object target) => entry.GetRoot?.Invoke(target) ?? (UIElement)target;
+
+	// How many parents the element has above it.
+	private static int Depth(UIElement element)
 	{
-		if (!entry.Target.TryGetTarget(out var target))
-			return null;
-		var element = entry.GetRoot != null ? entry.GetRoot(target) : (UIElement)target;
+		var depth = 0;
+		for (var e = element.Parent; e is not null; e = e.Parent)
+			depth++;
+		return depth;
+	}
+
+	// Whether the element is in a live host's tree, at any depth: under a UIRoot's Content, or under an overlay (a
+	// popup's child).
+	private static bool IsLive(UIElement element)
+	{
+		var top = element;
+		while (top.Parent is { } parent)
+			top = parent;
 		lock (Sync)
 		{
 			PruneHosts();
@@ -167,13 +244,56 @@ public static class HotReload
 					continue;
 				foreach (var view in host.Views)
 				{
-					if (ReferenceEquals(view.Root.Content, element))
-						return view.Root;
+					if (ReferenceEquals(view.Root.Content, top))
+						return true;
+					foreach (var (overlay, _, _) in view.Root.Overlays)
+					{
+						if (ReferenceEquals(overlay, top))
+							return true;
+					}
 				}
 			}
 		}
-		return null;
+		return false;
 	}
+
+	// Where an element sits, as a place another element can take: Owner is the UIRoot, Panel, Border, ScrollViewer,
+	// ContentControl or ContentPresenter holding it, and Index its place in a Panel's children.
+	private readonly record struct Slot(object Owner, int Index);
+
+	private static Slot? FindSlot(UIElement element)
+	{
+		switch (element.Parent)
+		{
+			case null:
+				// A popup's child is an overlay of the root, which no popup can be found from: it has no slot.
+				return element.AttachedRoot is { } root && ReferenceEquals(root.Content, element) ? new Slot(root, 0) : null;
+			case Panel panel when !IsItemsHost(panel):
+				var index = panel.Children.Items.IndexOf(element);
+				return index >= 0 ? new Slot(panel, index) : null;
+			case Border border when ReferenceEquals(border.Child, element):
+				return new Slot(border, 0);
+			case ScrollViewer scrollViewer when ReferenceEquals(scrollViewer.Content, element):
+				return new Slot(scrollViewer, 0);
+			case ContentControl control when ReferenceEquals(control.Content, element):
+				return control is ListViewItem ? null : new Slot(control, 0);
+			case ContentPresenter presenter:
+				// A templated control shows its content through a presenter in its template: the control's Content is the
+				// slot, which the template binding passes on to the presenter. A presenter given the element itself is the slot.
+				for (var e = presenter.Parent; e is not null; e = e.Parent)
+				{
+					if (e is ContentControl templated && ReferenceEquals(templated.Content, element))
+						return templated is ListViewItem ? null : new Slot(templated, 0);
+				}
+				return ReferenceEquals(presenter.Content, element) ? new Slot(presenter, 0) : null;
+			default:
+				return null;
+		}
+	}
+
+	// An items control's panel and its ListViewItems hold the containers made from its items, which would only put the
+	// old element back: neither is a slot.
+	private static bool IsItemsHost(Panel panel) => panel.Parent is ItemsControl items && ReferenceEquals(items.ItemsHost, panel);
 
 	private static void Prune() => Components.RemoveAll(c => !c.Target.TryGetTarget(out _));
 

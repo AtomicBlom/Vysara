@@ -28,7 +28,12 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 
 	public static readonly DependencyProperty<UIElement, Visibility> VisibilityProperty =
 		DependencyProperty.Register(nameof(Visibility),
-			new PropertyMetadata<UIElement, Visibility> { DefaultValue = Visibility.Visible, Invalidates = InvalidationFlags.Measure });
+			new PropertyMetadata<UIElement, Visibility>
+			{
+				DefaultValue = Visibility.Visible,
+				Invalidates = InvalidationFlags.Measure,
+				PropertyChanged = static (e, _, visibility) => e.OnVisibilityChanged(visibility),
+			});
 
 	public static readonly DependencyProperty<UIElement, bool> IsHitTestVisibleProperty =
 		DependencyProperty.Register(nameof(IsHitTestVisible),
@@ -48,7 +53,8 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	/// <summary>Group opacity (animatable — drives the composition <see cref="Visual.Opacity"/>).</summary>
 	public float Opacity { get => GetValue(OpacityProperty); set => SetValue(OpacityProperty, value); }
 
-	/// <summary><see cref="Visibility.Collapsed"/> contributes zero to layout and never hit-tests.</summary>
+	/// <summary><see cref="Visibility.Collapsed"/> contributes zero to layout, draws nothing and never
+	/// hit-tests.</summary>
 	public Visibility Visibility { get => GetValue(VisibilityProperty); set => SetValue(VisibilityProperty, value); }
 
 	/// <summary>When false, this element (and its subtree, by the walk) is skipped by hit-testing.</summary>
@@ -446,10 +452,11 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	}
 
 	/// <summary>Bring just this element's drawn content up to date in place (a brush/background change) against the
-	/// current <see cref="LayoutRect"/> — no relayout. Marks the visual dirty for the next composite.</summary>
+	/// current <see cref="LayoutRect"/> — no relayout; a collapsed element stays drawing nothing. Marks the visual dirty
+	/// for the next composite.</summary>
 	protected void InvalidateContent()
 	{
-		Visual.Content = UpdateContent();
+		Visual.Content = ShownContent();
 		Visual.MarkDirty();
 	}
 
@@ -470,13 +477,33 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		Visual.Transform = ComposeTransform();
 		Visual.Opacity = Opacity;
 		Visual.Clip = EffectiveClip();
-		Visual.Content = UpdateContent();
+		Visual.Content = ShownContent();
 		// A collapsed element's children were never re-arranged this pass (Arrange short-circuits ArrangeCore above),
 		// so their LayoutRect/transform are stale leftovers from when the element was last visible. Detaching them
 		// from the visual tree here (rather than only zeroing this element's own size) keeps "Collapsed contributes
 		// zero to layout" true for rendering too — otherwise stale descendants would still draw at their old position.
 		SyncVisualChildren(Visibility == Visibility.Collapsed ? [] : VisualChildren);
 		Visual.MarkDirty();
+	}
+
+	/// <summary>
+	/// What the element's visual draws: its content brought up to date, or nothing while it is collapsed. A collapsed
+	/// element is not arranged, so its content would be drawn from a stale or empty layout at the place it was given:
+	/// text and a polyline would draw in full there. It keeps its content object, which its next arrange once it is shown
+	/// brings up to date, so showing it again allocates nothing.
+	/// </summary>
+	private VisualContent? ShownContent() => Visibility == Visibility.Collapsed ? null : UpdateContent();
+
+	/// <summary>
+	/// Collapsed: stop drawing now, the element's content and its children, rather than at its next arrange, which a
+	/// panel need not give a collapsed child. Shown again, it draws once layout has placed it.
+	/// </summary>
+	private void OnVisibilityChanged(Visibility visibility)
+	{
+		if (visibility != Visibility.Collapsed)
+			return;
+		Visual.Content = null;
+		SyncVisualChildren([]);
 	}
 
 	// Mirror the element children's visuals into this visual's child list. An arrange usually leaves the children as
@@ -622,11 +649,14 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	/// count, and each visual's clip is intersected into <paramref name="clip"/> as its surface-space bounds, the same
 	/// bound the compositor clips with, so a point is hittable exactly where something can be seen. Children are tested
 	/// front-to-back before the element's own content, and an element is a hit only where its content draws
-	/// (<see cref="ContentContains"/>), so transparent panels let the point through. Allocation-free.
+	/// (<see cref="ContentContains"/>), so transparent panels let the point through. With
+	/// <paramref name="includeHidden"/>, elements whose <see cref="IsHitTestVisible"/> is false are tested too, as a
+	/// diagnostics pick does. Allocation-free.
 	/// </summary>
-	internal UIElement? HitTest(Vector2 surfacePoint, in Matrix3x2 parentWorld, Rect clip)
+	internal UIElement? HitTest(Vector2 surfacePoint, in Matrix3x2 parentWorld, Rect clip, bool includeHidden = false)
 	{
-		if (!IsHitTestVisible || Visibility != Visibility.Visible)
+		var skipped = !includeHidden && !IsHitTestVisible;
+		if (skipped || Visibility != Visibility.Visible)
 			return null;
 
 		var world = Visual.Transform * parentWorld;
@@ -638,7 +668,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		var children = VisualChildren;
 		for (var i = children.Count - 1; i >= 0; i--)
 		{
-			if (children[i].HitTest(surfacePoint, world, clip) is { } hit)
+			if (children[i].HitTest(surfacePoint, world, clip, includeHidden) is { } hit)
 				return hit;
 		}
 

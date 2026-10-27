@@ -269,6 +269,35 @@ public sealed class LayoutPropertyTests
 		border.LayoutRect.Width.ShouldBe(border.Width);
 	}
 
+	[Test]
+	public void Diagnostics_see_a_local_value_held_in_its_field()
+	{
+		var border = new Border { Width = 50f, Margin = new Thickness(1f) };
+		border.Style = new Style
+		{
+			Setters =
+			{
+				new Setter { Property = FrameworkElement.HeightProperty, Value = 20f },
+				new Setter { Property = FrameworkElement.MarginProperty, Value = new Thickness(5f) },
+			},
+		};
+		var properties = Diagnostics.Properties(border);
+		Diagnostics.PropertyValue Of(DependencyProperty dp) => properties.Single(p => ReferenceEquals(p.Property, dp));
+
+		Of(FrameworkElement.WidthProperty).ShouldSatisfyAllConditions( // in its field, with no slot
+			p => p.Level.ShouldBe(Diagnostics.ValueLevel.Local),
+			p => p.Value.ShouldBe(50f));
+		Of(FrameworkElement.MarginProperty).ShouldSatisfyAllConditions( // moved into a slot by the style
+			p => p.Level.ShouldBe(Diagnostics.ValueLevel.Local),
+			p => p.Value.ShouldBe(new Thickness(1f)));
+		Of(FrameworkElement.HeightProperty).Level.ShouldBe(Diagnostics.ValueLevel.Style);
+		Of(FrameworkElement.MaxWidthProperty).Level.ShouldBe(Diagnostics.ValueLevel.Default);
+		border.StoredPropertyIndices().ShouldBe(
+			[FrameworkElement.WidthProperty.GlobalIndex, FrameworkElement.HeightProperty.GlobalIndex, FrameworkElement.MarginProperty.GlobalIndex,
+				FrameworkElement.StyleProperty.GlobalIndex],
+			ignoreOrder: true);
+	}
+
 	// --- Registration ---
 
 	[Test]

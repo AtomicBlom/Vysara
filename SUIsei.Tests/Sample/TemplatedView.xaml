@@ -3,8 +3,8 @@
 	Templates end-to-end fixture (PlanningUI.md §D1.6). SUIsei.SourceGen turns this into a partial
 	SUIsei.Tests.TemplatedView at build time, so its very compilation proves the generated template
 	factories are valid C#. It exercises: a ControlTemplate with {TemplateBinding}s of Content and of the brushes into a
-	ContentPresenter, and an ItemsControl whose ItemTemplate is a DataTemplate binding {x:Bind} against a typed
-	(x:DataType) data item.
+	ContentPresenter, a {TemplateBinding Opacity} onto a dependency property of a template part, and an ItemsControl
+	whose ItemTemplate is a DataTemplate binding {x:Bind} against a typed (x:DataType) data item.
 -->
 <StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
 			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -13,7 +13,8 @@
 	<ContentControl x:Name="Card" Background="Teal" BorderBrush="Gold" Foreground="White">
 		<ContentControl.Template>
 			<ControlTemplate TargetType="ContentControl">
-				<Border CornerRadius="4" BorderThickness="2" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}">
+				<Border CornerRadius="4" BorderThickness="2" Opacity="{TemplateBinding Opacity}"
+						Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}">
 					<ContentPresenter Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" />
 				</Border>
 			</ControlTemplate>

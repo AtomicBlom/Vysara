@@ -187,37 +187,6 @@ partial class XamlSourceGenerator
 
 	private static int Hex(string s, int i) => Convert.ToInt32(s.Substring(i, 2), 16);
 
-	// "h:m:s(.fff)" / "m:s" / "s" → total seconds.
-	private static bool TryParseDuration(string raw, out double seconds)
-	{
-		seconds = 0;
-		var parts = raw.Trim().Split(':');
-		try
-		{
-			switch (parts.Length)
-			{
-				case 3:
-					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 3600
-						+ int.Parse(parts[1], CultureInfo.InvariantCulture) * 60
-						+ double.Parse(parts[2], CultureInfo.InvariantCulture);
-					return true;
-				case 2:
-					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 60
-						+ double.Parse(parts[1], CultureInfo.InvariantCulture);
-					return true;
-				case 1:
-					seconds = double.Parse(parts[0], CultureInfo.InvariantCulture);
-					return true;
-				default:
-					return false;
-			}
-		}
-		catch (FormatException)
-		{
-			return false;
-		}
-	}
-
 	private static bool IsIdentifier(string s)
 	{
 		if (s.Length == 0 || !(char.IsLetter(s[0]) || s[0] == '_'))

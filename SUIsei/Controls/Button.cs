@@ -19,7 +19,7 @@ public sealed class Button : ButtonBase
 	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(80, 80, 95));
 	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(40, 40, 55));
 
-	public Button() => Template = DefaultTemplate;
+	public Button() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
 
 	// The built-in look, shared (stateless) across default buttons: a rounded Border hosting a ContentPresenter, with a
 	// CommonStates group whose states show their own background on the border. The storyboards target the border created
