@@ -9,9 +9,10 @@ namespace SUIsei.Controls;
 /// and the resting state hands the background back to what the template bound it to, usually the control's own
 /// <see cref="Control.Background"/>. The part's <see cref="BrushTransition"/> fades between them.
 /// <para>
-/// The hand-back is a storyboard of its own rather than WinUI's empty state: the clock lets a storyboard go once it has
-/// finished, holding its end value, so leaving the state that holds a brush cannot release it. The resting state's
-/// storyboard clears the held value instead, on the clock's next step.
+/// The hand-back is a storyboard of its own rather than WinUI's empty state. It dates from when the clock let a finished
+/// storyboard go still holding its end value, so that leaving its state could not release it; leaving a state now
+/// releases what its storyboard holds, finished or not, so the resting state's storyboard only clears again what is
+/// already clear.
 /// </para>
 /// </summary>
 internal static class TemplateStates

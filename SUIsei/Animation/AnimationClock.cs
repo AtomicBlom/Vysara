@@ -35,12 +35,19 @@ public sealed class AnimationClock
 	/// <summary>True while any storyboard or tween is running (lets the host know a repaint may be needed).</summary>
 	public bool HasActiveClocks => _active.Count > 0 || _tweens.Count > 0;
 
-	/// <summary>Start (or restart) <paramref name="storyboard"/> from time zero. Each animation with no <c>From</c>
-	/// starts at the value its target shows now, so a storyboard that takes over a property mid-animation continues
-	/// from where the other left it.</summary>
+	/// <summary>
+	/// Start (or restart) <paramref name="storyboard"/> from time zero. Each animation with no <c>From</c> starts
+	/// at the
+	/// value its target shows now, so a storyboard that takes over a property mid-animation continues from where
+	/// the other left
+	/// it. Restarting one that is still running releases its targets first; one that has finished starts from the
+	/// end values it
+	/// holds.
+	/// </summary>
 	public void Begin(Storyboard storyboard)
 	{
-		Stop(storyboard);
+		if (RemoveActive(storyboard))
+			ReleaseAll(storyboard);
 		// Resolve any declarative Target/TargetProperty (from generated XAML) into the typed apply now, then record
 		// where each run starts. Children are walked by index: a foreach over the IList would box an enumerator.
 		var children = storyboard.Children;
@@ -63,16 +70,25 @@ public sealed class AnimationClock
 		_active.Add(entry);
 	}
 
-	/// <summary>Stop <paramref name="storyboard"/> and release every target it animates.</summary>
+	/// <summary>Stop <paramref name="storyboard"/> and release every target it animates, whether it is still running or
+	/// has finished and holds its end values, as WinUI's <c>Storyboard.Stop</c> does.</summary>
 	public void Stop(Storyboard storyboard)
+	{
+		RemoveActive(storyboard);
+		ReleaseAll(storyboard);
+	}
+
+	// Drop `storyboard`'s active entry, if it has one, and keep the entry for reuse. True when there was one.
+	private bool RemoveActive(Storyboard storyboard)
 	{
 		for (var i = _active.Count - 1; i >= 0; i--)
 		{
 			if (!ReferenceEquals(_active[i].Storyboard, storyboard))
 				continue;
-			ReleaseAll(storyboard);
 			RemoveEntry(i);
+			return true;
 		}
+		return false;
 	}
 
 	// Drop the active entry at index i and keep it for reuse, without holding on to its storyboard.
@@ -309,7 +325,8 @@ public sealed class AnimationClock
 		}
 	}
 
-	private static void ReleaseAll(Storyboard storyboard)
+	/// <summary>Release every target <paramref name="storyboard"/> animates.</summary>
+	internal static void ReleaseAll(Storyboard storyboard)
 	{
 		var children = storyboard.Children;
 		for (var i = 0; i < children.Count; i++)
