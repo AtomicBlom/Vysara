@@ -104,6 +104,7 @@ public sealed class XamlSubsetContractTests
 		("transform property paths", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.TranslateX)" To="5" /><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="5" />""")),
 		("brush property paths", States("""<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="Blue" /><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(Brush.Opacity)" To="0.5" />""")),
 		("brushes from colour strings", """<Border Background="#FF0000" BorderBrush="Gold" /><TextBlock Foreground="CornflowerBlue" /><Button Background="#202020" Foreground="White" BorderBrush="Gray" />"""),
+		("image sources bound from code", """<Image Source="{x:Bind Picture}" /><Image Source="{x:Bind Live}" /><Ellipse><Ellipse.Fill><ImageBrush ImageSource="{x:Bind Live}" /></Ellipse.Fill></Ellipse><Rectangle><Rectangle.Fill><ImageBrush ImageSource="{x:Bind Minimap}" Stretch="Uniform" /></Rectangle.Fill></Rectangle>"""),
 		("brush elements", """<Border><Border.Background><SolidColorBrush Color="Red" Opacity="0.5" /></Border.Background></Border><Border><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0" SpreadMethod="Reflect" MappingMode="Absolute" ColorInterpolationMode="ScRgbLinearInterpolation"><GradientStop Color="Red" Offset="0" /><GradientStop Color="Blue" Offset="1" /></LinearGradientBrush></Border.Background></Border><TextBlock><TextBlock.Foreground><LinearGradientBrush><LinearGradientBrush.GradientStops><GradientStop Color="Red" /><GradientStop Color="Blue" Offset="1" /></LinearGradientBrush.GradientStops></LinearGradientBrush></TextBlock.Foreground></TextBlock><Border><Border.Background><ImageBrush Stretch="UniformToFill" AlignmentX="Left" AlignmentY="Bottom" /></Border.Background></Border>"""),
 		("brush resources", """<StackPanel.Resources><Style x:Key="Tinted" TargetType="Border"><Setter Property="Background" Value="Teal" /><Setter Property="BorderBrush"><Setter.Value><SolidColorBrush Color="Gold" /></Setter.Value></Setter></Style></StackPanel.Resources><Border Style="{StaticResource Tinted}" />"""),
 		("transforms", """<Border RenderTransformOrigin="0.5,0.5"><Border.RenderTransform><TransformGroup><TranslateTransform X="1" Y="2" /><ScaleTransform ScaleX="2" CenterX="5" /><RotateTransform Angle="45" /><SkewTransform AngleX="10" /><CompositeTransform Rotation="5" TranslateX="3" /><MatrixTransform Matrix="1,0,0,1,4,5" /></TransformGroup></Border.RenderTransform></Border>"""),
@@ -160,10 +161,16 @@ public sealed class XamlSubsetContractTests
 	}
 
 	// Controls in the using: namespace: one for the XML-namespace form, and one with the geometry value types for the
-	// geometry forms, which no runtime element takes yet.
+	// geometry forms, which no runtime element takes yet. The view's image sources, which markup binds and code makes.
 	private const string ExtraTypes = """
 		namespace Demo
 		{
+			public partial class V
+			{
+				public SUIsei.Media.Imaging.BitmapSource Picture { get; } = SUIsei.Media.Imaging.BitmapSource.FromRgba8(1, 1, new byte[4]);
+				public SUIsei.Media.Imaging.WriteableBitmap Live { get; } = new(2, 2);
+				public SUIsei.Extensions.HostImageSource Minimap { get; } = new("minimap", 32, 16);
+			}
 			public sealed class Item2Host : SUIsei.Controls.ContentControl { }
 			public sealed class Shape2 : SUIsei.Controls.ContentControl
 			{
