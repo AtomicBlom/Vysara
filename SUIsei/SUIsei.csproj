@@ -43,7 +43,11 @@
   </ItemGroup>
 
   <!-- The engine's default baked font: the MTSDF atlas page + its JSON layout, embedded so FontAtlas.LoadEmbeddedDefault
-       resolves them with no loose files. Explicit LogicalName because the filenames carry dots. -->
+       resolves them with no loose files. Explicit LogicalName because the filenames carry dots.
+       A committed bake, not a build output: build/SUIsei.Fonts.targets runs SUIsei.Text.Tool, which depends on this
+       project, so this project's own build cannot run it. The pair is what baking ui-default.fontset.json produces
+       (SUIsei.Tests holds it to that); after editing the fontset or the generator, re-bake it by running
+       SUIsei.Text.Tool on the fontset with "-o SUIsei/Assets/Fonts" (the full command is in MsdfGenerationTests). -->
   <ItemGroup>
     <EmbeddedResource Include="Assets\Fonts\ui-default.font.json" LogicalName="ui-default.font.json" />
     <EmbeddedResource Include="Assets\Fonts\ui-default.0.png" LogicalName="ui-default.0.png" />

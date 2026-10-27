@@ -1,4 +1,7 @@
 using System.Text;
+using SUIsei.Controls;
+using SUIsei.Drawing;
+using SUIsei.Rasterizer;
 using SUIsei.Text;
 using SUIsei.Text.Atlas;
 using SUIsei.Text.Geometry;
@@ -10,6 +13,7 @@ namespace SUIsei.Tests;
 /// The native MTSDF generator (<c>SUIsei.Text</c>) against the font program it bakes. A field is right when a renderer
 /// sampling it reconstructs the glyph's exact fill (the nonzero winding of its outline) everywhere outside the
 /// antialiasing ramp, at texel centres and between them, where bilinear filtering mixes channels from different edges.
+/// The committed default atlas is held to being exactly what baking its fontset produces.
 /// </summary>
 public sealed class MsdfGenerationTests
 {
@@ -166,5 +170,50 @@ public sealed class MsdfGenerationTests
 		}
 
 		return (Math.Max(Math.Min(c[0], c[1]), Math.Min(Math.Max(c[0], c[1]), c[2])), c[3]);
+	}
+
+	[Test]
+	public void The_committed_default_atlas_is_the_bake_of_its_fontset()
+	{
+		// ui-default is committed rather than baked by the build (SUIsei.Text depends on SUIsei, so SUIsei's own build
+		// cannot run it). This holds the committed pair to the fontset next to it. When it fails, re-bake with
+		//   dotnet run --project SUIsei.Text.Tool -c Release -- SUIsei/Assets/Fonts/ui-default.fontset.json -o SUIsei/Assets/Fonts
+		var bake = DefaultBake.Value;
+
+		using var committedJson = typeof(FontAtlas).Assembly.GetManifestResourceStream("ui-default.font.json")!;
+		new StreamReader(committedJson).ReadToEnd().ShouldBe(bake.FontJson);
+
+		// The PNG's deflate stream may differ between zlib builds, so compare texels; a libm difference in the last bit
+		// of a distance may move one by a step.
+		var committed = FontAtlas.LoadEmbeddedDefault().Image.Pixels.Span;
+		var baked = bake.ToAtlasImage().Pixels.Span;
+		baked.Length.ShouldBe(committed.Length);
+		var maxDiff = 0;
+		for (var i = 0; i < baked.Length; i++)
+			maxDiff = Math.Max(maxDiff, Math.Abs(baked[i] - committed[i]));
+		maxDiff.ShouldBeLessThanOrEqualTo(1);
+	}
+
+	[Test]
+	public void An_8_rasterizes_with_an_open_lower_counter()
+	{
+		// Through the compositor and the CPU rasterizer at 96 px: the middle of the '8's lower counter shows the
+		// background, and its waist and lower stroke show ink.
+		var root = new UIRoot(new DrawListId(0)) { Content = new TextBlock { Text = "8", FontSize = 96f } };
+		root.LayoutPass(new Size(96f, 128f));
+		var draw = root.Render();
+		var rasterizer = new SoftwareRasterizer(96, 128);
+		rasterizer.Render(draw);
+
+		// Font units (x right of the pen, y up from the baseline; 2048 to the EM) down the '8's middle, at x = 600.
+		Coverage(390).ShouldBe(0f, 0.01f); // the lower counter's middle, on the row through its vertices
+		Coverage(740).ShouldBe(1f, 0.01f); // the waist, where five contours overlap
+		Coverage(40).ShouldBe(1f, 0.01f);  // the bottom stroke
+
+		float Coverage(float fontUnitsUp)
+		{
+			var baseline = -FontAtlas.Default.Ascender * 96f;
+			return rasterizer.ReadLinear((int)(600f / 2048f * 96f), (int)(baseline - fontUnitsUp / 2048f * 96f)).W;
+		}
 	}
 }

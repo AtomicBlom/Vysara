@@ -3,7 +3,7 @@
   "fonts": [
     { "path": "CascadiaCode.ttf", "ranges": ["Basic Latin"] }
   ],
-  "pxRange": 4,
+  "pxRange": 12,
   "glyphSize": 32,
-  "atlasPageSize": 256
+  "atlasPageSize": 320
 }

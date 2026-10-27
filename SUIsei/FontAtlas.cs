@@ -46,6 +46,13 @@ public sealed class FontAtlas : IGlyphSource
 	/// <summary>The EM size the atlas was rasterized at, in texels.</summary>
 	public float BakeSize { get; }
 
+	/// <summary>
+	/// The SDF distance range in EM: <see cref="DistanceRange"/> over <see cref="BakeSize"/>. The field holds distances up
+	/// to half of it either side of each glyph's edge, and each glyph's quad reaches that far past its ink, so it is as far
+	/// as anything drawn from the field (an outline, a shadow's softness) can reach, at any font size.
+	/// </summary>
+	public float DistanceRangeEm => DistanceRange / BakeSize;
+
 	/// <summary>Line advance in EM units (multiply by the on-screen font px size for the pixel line height).</summary>
 	public float LineHeight { get; }
 
