@@ -165,7 +165,7 @@ partial class XamlSourceGenerator
 				if (stateEl.Name.LocalName != "VisualState") { gen.Report(BadPropertyElement, stateEl, stateEl.Name.LocalName); continue; }
 				var stateName = stateEl.Attribute("Name")?.Value ?? "";
 				var sbEl = stateEl.Elements().FirstOrDefault(e => e.Name.LocalName == "Storyboard");
-				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, scope, sbEl);
+				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, scope, ownerVar, sbEl);
 				scope.Emit($"{groupVar}.States.Add(new global::SUIsei.Animation.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
 			}
 			scope.Emit($"{groupsVar}.Add({groupVar});");

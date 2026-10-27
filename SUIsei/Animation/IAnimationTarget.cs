@@ -11,6 +11,10 @@ internal interface IAnimationTarget
 
 	/// <summary>The name of the value type, for diagnostics.</summary>
 	string ValueTypeName { get; }
+
+	/// <summary>Bind an <see cref="ObjectAnimationUsingKeyFrames"/> to this target on <paramref name="owner"/>: a write of
+	/// its key values, which it holds as objects, unboxed to the target's own type.</summary>
+	ObjectBinding BindObjects(DependencyObject owner);
 }
 
 /// <summary>An <see cref="IAnimationTarget"/> of value type <typeparamref name="T"/>: read, write and release, unboxed.</summary>
@@ -30,4 +34,7 @@ internal interface IAnimationTarget<T> : IAnimationTarget
 
 	/// <summary>Check a value an animation names, as it begins, throwing on one the target refuses.</summary>
 	void Validate(DependencyObject target, T value);
+
+	// Every typed target binds an object animation the same way, through its own typed read, write and release.
+	ObjectBinding IAnimationTarget.BindObjects(DependencyObject owner) => new ObjectBinding<T>(owner, this);
 }

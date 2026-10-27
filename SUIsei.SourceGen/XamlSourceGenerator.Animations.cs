@@ -9,7 +9,7 @@ partial class XamlSourceGenerator
 {
 	// --- Storyboards: animations, keyframes, easing functions and Storyboard.TargetProperty paths ---
 
-	private enum AnimationKind { Double, Color, DoubleKeyFrames }
+	private enum AnimationKind { Double, Color, DoubleKeyFrames, ObjectKeyFrames }
 
 	// One step of a property path: `Property` alone, or `(Owner.Property)` with an optional xmlns prefix on the owner.
 	private readonly record struct PathStep(string? Prefix, string? Owner, string Property)
@@ -17,17 +17,18 @@ partial class XamlSourceGenerator
 		public override string ToString() => Owner is null ? Property : Prefix is null ? $"({Owner}.{Property})" : $"({Prefix}:{Owner}.{Property})";
 	}
 
-	// Build a Storyboard local and return its variable name.
-	private static string EmitStoryboard(Gen gen, Scope scope, XElement sbEl)
+	// Build a Storyboard local and return its variable name. `ownerVar` is the element whose visual states hold it, where
+	// a {StaticResource} among its values is looked up from.
+	private static string EmitStoryboard(Gen gen, Scope scope, string ownerVar, XElement sbEl)
 	{
 		var sbVar = NewName(gen, "__sb");
 		scope.Emit($"var {sbVar} = new global::SUIsei.Animation.Storyboard();");
 		foreach (var animEl in sbEl.Elements())
-			EmitAnimation(gen, scope, sbVar, animEl);
+			EmitAnimation(gen, scope, ownerVar, sbVar, animEl);
 		return sbVar;
 	}
 
-	private static void EmitAnimation(Gen gen, Scope scope, string sbVar, XElement animEl)
+	private static void EmitAnimation(Gen gen, Scope scope, string ownerVar, string sbVar, XElement animEl)
 	{
 		var name = animEl.Name.LocalName;
 		AnimationKind kind;
@@ -36,8 +37,10 @@ partial class XamlSourceGenerator
 			case "DoubleAnimation": kind = AnimationKind.Double; break;
 			case "ColorAnimation": kind = AnimationKind.Color; break;
 			case "DoubleAnimationUsingKeyFrames": kind = AnimationKind.DoubleKeyFrames; break;
+			case "ObjectAnimationUsingKeyFrames": kind = AnimationKind.ObjectKeyFrames; break;
 			default: gen.Report(BadPropertyElement, animEl, name); return;
 		}
+		var hasKeyFrames = kind is AnimationKind.DoubleKeyFrames or AnimationKind.ObjectKeyFrames;
 
 		var animVar = NewName(gen, "__anim");
 		scope.Emit($"var {animVar} = new global::SUIsei.Animation.{name}();");
@@ -60,30 +63,7 @@ partial class XamlSourceGenerator
 			EmitObjectAttribute(gen, scope, animVar, animType, attr);
 		}
 
-		// Children: an easing function, or a keyframe animation's keys (directly, or inside <X.KeyFrames>).
-		var keyFrames = 0;
-		var lastKeyTime = 0.0;
-		foreach (var child in animEl.Elements())
-		{
-			var local = child.Name.LocalName;
-			if (kind != AnimationKind.DoubleKeyFrames && local == name + ".EasingFunction")
-				EmitEasingFunction(gen, scope, animVar, child);
-			else if (kind == AnimationKind.DoubleKeyFrames && (local == name + ".KeyFrames" || local.IndexOf('.') < 0))
-			{
-				foreach (var keyEl in local.IndexOf('.') < 0 ? [child] : child.Elements())
-				{
-					keyFrames++;
-					lastKeyTime = Math.Max(lastKeyTime, EmitKeyFrame(gen, scope, animVar, keyEl));
-				}
-			}
-			else
-				gen.Report(BadPropertyElement, child, local);
-		}
-		// A keyframe animation with no Duration lasts until its last key, as in WinUI; the runtime measures key times
-		// against the duration, so it is written out.
-		if (kind == AnimationKind.DoubleKeyFrames && !hasDuration && keyFrames > 0)
-			scope.Emit($"{animVar}.Duration = global::System.TimeSpan.FromSeconds({Fmt(lastKeyTime)});");
-
+		// The target first: an object animation's values convert for the type of the property it sets.
 		INamedTypeSymbol? targetType = null;
 		var targetResolved = targetName is null;
 		if (targetName is not null)
@@ -98,8 +78,39 @@ partial class XamlSourceGenerator
 			else
 				gen.Report(BadStoryboardTarget, targetName, tn);
 		}
-		if (targetProp is not null && targetResolved && TryResolveTargetPath(gen, targetProp, targetType, kind, name, out var path))
+		ITypeSymbol? valueType = null;
+		if (targetProp is not null && targetResolved && TryResolveTargetPath(gen, targetProp, targetType, kind, name, out var path, out valueType))
 			scope.Emit($"{animVar}.TargetProperty = {path};");
+		else if (targetProp is null && kind == AnimationKind.ObjectKeyFrames)
+			gen.Report(BadPropertyElement, animEl, $"{name} (needs a Storyboard.TargetProperty, whose type its values convert for)");
+
+		// Children: an easing function, or a keyframe animation's keys (directly, or inside <X.KeyFrames>).
+		var keyFrames = 0;
+		var lastKeyTime = 0.0;
+		foreach (var child in animEl.Elements())
+		{
+			var local = child.Name.LocalName;
+			if (!hasKeyFrames && local == name + ".EasingFunction")
+				EmitEasingFunction(gen, scope, animVar, child);
+			else if (hasKeyFrames && (local == name + ".KeyFrames" || local.IndexOf('.') < 0))
+			{
+				foreach (var keyEl in local.IndexOf('.') < 0 ? [child] : child.Elements())
+				{
+					keyFrames++;
+					var keyTime = kind == AnimationKind.ObjectKeyFrames
+						? EmitObjectKeyFrame(gen, scope, ownerVar, animVar, keyEl, targetProp?.Value.Trim() ?? "", valueType)
+						: EmitKeyFrame(gen, scope, animVar, keyEl);
+					lastKeyTime = Math.Max(lastKeyTime, keyTime);
+				}
+			}
+			else
+				gen.Report(BadPropertyElement, child, local);
+		}
+		// A keyframe animation with no Duration lasts until its last key, as in WinUI; the runtime measures key times
+		// against the duration, so it is written out.
+		if (hasKeyFrames && !hasDuration && keyFrames > 0)
+			scope.Emit($"{animVar}.Duration = global::System.TimeSpan.FromSeconds({Fmt(lastKeyTime)});");
+
 		scope.Emit($"{sbVar}.Children.Add({animVar});");
 	}
 
@@ -141,6 +152,88 @@ partial class XamlSourceGenerator
 		return keyTime;
 	}
 
+	// One <DiscreteObjectKeyFrame>, added to the animation's keys, its Value converted for `valueType`, the type of the
+	// property the animation sets (null when the path did not resolve, which is reported already). Returns its key time in
+	// seconds.
+	private static double EmitObjectKeyFrame(Gen gen, Scope scope, string ownerVar, string animVar, XElement keyEl, string propertyName,
+		ITypeSymbol? valueType)
+	{
+		var name = keyEl.Name.LocalName;
+		if (name != "DiscreteObjectKeyFrame")
+		{
+			gen.Report(BadPropertyElement, keyEl, name);
+			return 0;
+		}
+
+		var keyVar = NewName(gen, "__key");
+		scope.Emit($"var {keyVar} = new global::SUIsei.Animation.DiscreteObjectKeyFrame();");
+
+		var keyType = gen.Compilation.GetTypeByMetadataName("SUIsei.Animation.DiscreteObjectKeyFrame")!;
+		var keyTime = 0.0;
+		XAttribute? valueAttr = null;
+		foreach (var attr in keyEl.Attributes())
+		{
+			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(keyEl, attr.Name.Namespace))
+				continue;
+			if (attr.Name.LocalName == "Value")
+			{
+				valueAttr = attr;
+				continue;
+			}
+			if (attr.Name.LocalName == "KeyTime" && !TryParseDuration(attr.Value, out keyTime))
+				keyTime = 0;
+			EmitObjectAttribute(gen, scope, keyVar, keyType, attr);
+		}
+
+		XElement? valueEl = null;
+		foreach (var child in keyEl.Elements())
+		{
+			if (child.Name.LocalName == name + ".Value" && valueEl is null)
+				valueEl = child;
+			else
+				gen.Report(BadPropertyElement, child, child.Name.LocalName);
+		}
+
+		if ((valueAttr is null) == (valueEl is null))
+			gen.Report(BadPropertyElement, keyEl, $"{name} (needs a Value, as an attribute or a <{name}.Value>)");
+		else if (valueType is not null && ObjectKeyFrameValue(gen, scope, ownerVar, valueAttr, valueEl, valueType, propertyName) is { } code)
+			scope.Emit($"{keyVar}.Value = {code};");
+
+		scope.Emit($"{animVar}.KeyFrames.Add({keyVar});");
+		return keyTime;
+	}
+
+	// A key's Value, written as a setter's is: text converted for the property's type (an enum member, a colour for a
+	// brush), {StaticResource}, {x:Null} or {x:Static}, or in <X.Value> text or one object of the type. Null when reported.
+	private static string? ObjectKeyFrameValue(Gen gen, Scope scope, string ownerVar, XAttribute? valueAttr, XElement? valueEl,
+		ITypeSymbol valueType, string propertyName)
+	{
+		if (valueAttr is not null)
+		{
+			if (!IsMarkup(valueAttr.Value, out var inner))
+				return ConvertOrReport(gen, valueAttr, valueType, valueAttr.Value, propertyName);
+			if (TryMarkupValue(gen, scope, valueAttr, ownerVar, inner, valueType, propertyName, out var markupCode))
+				return markupCode;
+			gen.Report(UnsupportedMarkup, valueAttr, valueAttr.Value.Trim());
+			return null;
+		}
+
+		var children = ObjectChildren(valueEl!);
+		var text = TextContent(valueEl!);
+		if (children.Count == 0 && text is not null)
+			return ConvertOrReport(gen, valueEl!, valueType, text, propertyName);
+		if (children.Count == 1 && text is null)
+		{
+			var child = children[0];
+			var ns = child.Name.Namespace == XNamespace.None ? Ui : child.Name.Namespace;
+			// An element that names no type reports itself as it is emitted.
+			if (ResolveType(gen.Compilation, ns, child.Name.LocalName) is null || ChildFits(gen, child, valueType))
+				return EmitElement(gen, scope, child);
+		}
+		gen.Report(BadPropertyElement, valueEl!, $"{valueEl!.Name.LocalName} (takes one value of {propertyName}'s type, {valueType.ToDisplayString()})");
+		return null;
+	}
+
 	// <Owner.EasingFunction> holding one easing element (CubicEase, QuadraticEase, BackEase, …), its attributes set as
 	// properties through the shared converter table (EasingMode, Amplitude).
 	private static void EmitEasingFunction(Gen gen, Scope scope, string ownerVar, XElement propEl)
@@ -176,11 +269,13 @@ partial class XamlSourceGenerator
 	}
 
 	// Resolve a Storyboard.TargetProperty path against the target's type into a PropertyPath expression, checking each
-	// step and that this kind of animation can drive the final property. Reports and returns false otherwise.
+	// step and that this kind of animation can drive the final property, whose value type is `propertyType`. Reports and
+	// returns false otherwise.
 	private static bool TryResolveTargetPath(Gen gen, XAttribute attr, INamedTypeSymbol? targetType, AnimationKind kind,
-		string animationName, out string expr)
+		string animationName, out string expr, out ITypeSymbol? propertyType)
 	{
 		expr = "";
+		propertyType = null;
 		var raw = attr.Value.Trim();
 		if (raw is "RenderTransform.Translate.X" or "RenderTransform.Translate.Y")
 		{
@@ -257,6 +352,7 @@ partial class XamlSourceGenerator
 					gen.Report(BadAnimationProperty, attr, raw, valueType.Name, animationName);
 					return false;
 				}
+				propertyType = valueType;
 				break;
 			}
 			if (valueType is not INamedTypeSymbol next || dependencyObject is null || !InheritsFrom(next, dependencyObject))
@@ -346,9 +442,13 @@ partial class XamlSourceGenerator
 		valueType is INamedTypeSymbol named && gen.Compilation.GetTypeByMetadataName("SUIsei.Media.Brush") is { } brush
 		&& InheritsFrom((INamedTypeSymbol)named.WithNullableAnnotation(NullableAnnotation.NotAnnotated), brush);
 
-	private static bool CanAnimate(AnimationKind kind, ITypeSymbol valueType) => kind == AnimationKind.Color
-		? valueType.ToDisplayString() == "SUIsei.HdrColor"
-		: valueType.SpecialType is SpecialType.System_Single or SpecialType.System_Double;
+	// An object animation sets a value of any type, interpolating nothing.
+	private static bool CanAnimate(AnimationKind kind, ITypeSymbol valueType) => kind switch
+	{
+		AnimationKind.ObjectKeyFrames => true,
+		AnimationKind.Color => valueType.ToDisplayString() == "SUIsei.HdrColor",
+		_ => valueType.SpecialType is SpecialType.System_Single or SpecialType.System_Double,
+	};
 
 	// An attached property's owner declares a static Set<Name>(target, value), as WinUI's do.
 	private static bool IsAttachedProperty(INamedTypeSymbol owner, string property) => AttachedSetter(owner, property) is not null;

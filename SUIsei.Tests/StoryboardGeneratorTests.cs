@@ -254,10 +254,179 @@ public sealed class StoryboardGeneratorTests
 	[Test]
 	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><LinearDoubleKeyFrame KeyTime=\"soon\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI012")]
 	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><SplineDoubleKeyFrame KeyTime=\"0:0:1\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI020")]
-	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><BounceEase /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI003")]
+	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><WobbleEase /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI003")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><CubicEase EasingMode=\"Sideways\" /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI012")]
 	public void Bad_keyframes_and_easing_functions_diagnose(string animation, string id) =>
 		XamlGeneratorHarness.Run(View(animation), CodeBehind).DiagnosticIds().ShouldBe([id]);
+
+	[Test]
+	public void Object_keyframes_convert_their_values_for_the_property_they_set()
+	{
+		var xaml = View("""
+			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Visibility)">
+			  <DiscreteObjectKeyFrame KeyTime="0:0:0.25" Value="Collapsed" />
+			</ObjectAnimationUsingKeyFrames>
+			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background)">
+			  <ObjectAnimationUsingKeyFrames.KeyFrames>
+			    <DiscreteObjectKeyFrame KeyTime="0" Value="#0000FF" />
+			    <DiscreteObjectKeyFrame KeyTime="0:0:0.5" Value="{x:Null}" />
+			    <DiscreteObjectKeyFrame KeyTime="0:0:1">
+			      <DiscreteObjectKeyFrame.Value>
+			        <SolidColorBrush Color="Red" />
+			      </DiscreteObjectKeyFrame.Value>
+			    </DiscreteObjectKeyFrame>
+			  </ObjectAnimationUsingKeyFrames.KeyFrames>
+			</ObjectAnimationUsingKeyFrames>
+			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Label" Storyboard.TargetProperty="Text" Duration="0:0:2" FillBehavior="Stop">
+			  <DiscreteObjectKeyFrame KeyTime="0:0:1" Value="Bye" />
+			</ObjectAnimationUsingKeyFrames>
+			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(Grid.Row)">
+			  <DiscreteObjectKeyFrame KeyTime="0" Value="2" />
+			</ObjectAnimationUsingKeyFrames>
+			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)">
+			  <DiscreteObjectKeyFrame KeyTime="0" Value="0.5" />
+			</ObjectAnimationUsingKeyFrames>
+			""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain("new global::SUIsei.Animation.ObjectAnimationUsingKeyFrames()");
+		code.ShouldContain("new global::SUIsei.Animation.DiscreteObjectKeyFrame()");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.UIElement.VisibilityProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Grid.RowProperty);");
+		code.ShouldContain(".Value = global::SUIsei.Visibility.Collapsed;");
+		code.ShouldContain(".Value = new global::SUIsei.Media.SolidColorBrush(global::SUIsei.HdrColor.FromRgb(0, 0, 255));");
+		code.ShouldContain(".Value = null;");
+		code.ShouldContain(".Value = \"Bye\";");
+		code.ShouldContain(".Value = 2;");
+		code.ShouldContain(".Value = 0.5f;"); // a float for a float property, as the runtime checks
+		code.ShouldContain(".Value = __"); // the object element, built as any element is
+		code.ShouldContain(".FillBehavior = global::SUIsei.Animation.FillBehavior.Stop;");
+		// With no Duration, an object keyframe animation lasts until its last key too.
+		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(0.25);");
+		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(1);");
+		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(2);");
+		code.ShouldContain(".Duration = global::System.TimeSpan.FromSeconds(0);");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_object_keyframe_value_may_be_a_resource_looked_up_from_the_states_owner()
+	{
+		var xaml = """
+			<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			            x:Class="Demo.V">
+			  <Border x:Name="Box" Width="10" Height="10" />
+			  <ContentControl x:Name="Host">
+			    <ContentControl.Resources>
+			      <SolidColorBrush x:Key="Accent" Color="#00FF00" />
+			    </ContentControl.Resources>
+			    <VisualStateManager.VisualStateGroups>
+			      <VisualStateGroup Name="G">
+			        <VisualState Name="S">
+			          <Storyboard>
+			            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background)">
+			              <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource Accent}" />
+			            </ObjectAnimationUsingKeyFrames>
+			          </Storyboard>
+			        </VisualState>
+			      </VisualStateGroup>
+			    </VisualStateManager.VisualStateGroups>
+			  </ContentControl>
+			</StackPanel>
+			""";
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain(".Value = (Host.FindResource(\"Accent\")) as global::SUIsei.Media.Brush;");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	private const string ObjectKeys = """<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="{0}">{1}</ObjectAnimationUsingKeyFrames>""";
+
+	[Test]
+	[Arguments("(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"Sideways\" />", "SUISEI012")]           // no such member
+	[Arguments("(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"{x:Null}\" />", "SUISEI012")]           // a Visibility cannot be null
+	[Arguments("(Grid.Row)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"lots\" />", "SUISEI012")]                         // not a whole number
+	[Arguments("(Border.Background)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"Blurple\" />", "SUISEI012")]             // not a colour
+	[Arguments("(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"soon\" Value=\"Collapsed\" />", "SUISEI012")]     // not a time
+	[Arguments("(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"0\" />", "SUISEI020")]                             // no value
+	[Arguments("(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"Visible\"><DiscreteObjectKeyFrame.Value>Collapsed</DiscreteObjectKeyFrame.Value></DiscreteObjectKeyFrame>", "SUISEI020")] // two values
+	[Arguments("(Border.Background)", "<DiscreteObjectKeyFrame KeyTime=\"0\"><DiscreteObjectKeyFrame.Value><TranslateTransform /></DiscreteObjectKeyFrame.Value></DiscreteObjectKeyFrame>", "SUISEI020")] // not a brush
+	[Arguments("(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"{x:Bind Nope}\" />", "SUISEI007")]     // markup outside the subset
+	[Arguments("(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"Collapsed\" Bogus=\"1\" />", "SUISEI004")]
+	[Arguments("(UIElement.Visibility)", "<DiscreteDoubleKeyFrame KeyTime=\"0\" Value=\"1\" />", "SUISEI020")]                // a double key
+	[Arguments("(UIElement.Visibility)", "<ObjectAnimationUsingKeyFrames.EasingFunction><SineEase /></ObjectAnimationUsingKeyFrames.EasingFunction>", "SUISEI020")]
+	[Arguments("(UIElement.Nope)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"Collapsed\" />", "SUISEI021")]             // reported once, the value left alone
+	[Arguments("(UIElement.Visibility).(UIElement.Opacity)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"1\" />", "SUISEI021")]
+	public void A_bad_object_keyframe_diagnoses(string path, string keys, string id) =>
+		XamlGeneratorHarness.Run(View(string.Format(System.Globalization.CultureInfo.InvariantCulture, ObjectKeys, path, keys)), CodeBehind)
+			.DiagnosticIds().ShouldBe([id]);
+
+	[Test]
+	public void An_object_keyframe_animation_needs_a_target_property_to_convert_its_values_for()
+	{
+		var diagnostic = XamlGeneratorHarness.Run(View("""
+			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box">
+			  <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed" />
+			</ObjectAnimationUsingKeyFrames>
+			"""), CodeBehind).Diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("SUISEI020");
+		diagnostic.GetMessage().ShouldContain("needs a Storyboard.TargetProperty");
+	}
+
+	[Test]
+	public void A_bad_object_keyframe_value_names_the_property_and_its_type()
+	{
+		var diagnostic = XamlGeneratorHarness.Run(View(string.Format(System.Globalization.CultureInfo.InvariantCulture, ObjectKeys,
+			"(UIElement.Visibility)", "<DiscreteObjectKeyFrame KeyTime=\"0\" Value=\"Sideways\" />")), CodeBehind).Diagnostics.ShouldHaveSingleItem();
+		diagnostic.GetMessage().ShouldBe("'Sideways' is not a valid value for property '(UIElement.Visibility)' of type 'SUIsei.Visibility': expected a member of Visibility");
+	}
+
+	[Test]
+	public void WinUIs_easing_functions_are_emitted_with_their_parameters()
+	{
+		static string Eased(string property, string ease) => $"""
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="{property}" To="1">
+			  <DoubleAnimation.EasingFunction>{ease}</DoubleAnimation.EasingFunction>
+			</DoubleAnimation>
+			""";
+		var xaml = View(string.Concat(
+			Eased("Opacity", """<SineEase EasingMode="EaseInOut" />"""),
+			Eased("(Canvas.Left)", """<QuarticEase />"""),
+			Eased("(Canvas.Top)", """<QuinticEase EasingMode="EaseIn" />"""),
+			Eased("Opacity", """<CircleEase />"""),
+			Eased("Opacity", """<PowerEase Power="3.5" />"""),
+			Eased("Opacity", """<ExponentialEase Exponent="6" EasingMode="EaseInOut" />"""),
+			Eased("Opacity", """<ElasticEase Oscillations="5" Springiness="1.5" />"""),
+			Eased("Opacity", """<BounceEase Bounces="2" Bounciness="3" EasingMode="EaseIn" />""")));
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.SineEase { EasingMode = global::SUIsei.Animation.EasingMode.EaseInOut };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.QuarticEase {  };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.QuinticEase { EasingMode = global::SUIsei.Animation.EasingMode.EaseIn };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.CircleEase {  };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.PowerEase { Power = 3.5d };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.ExponentialEase { Exponent = 6d, EasingMode = global::SUIsei.Animation.EasingMode.EaseInOut };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.ElasticEase { Oscillations = 5, Springiness = 1.5d };");
+		code.ShouldContain(".EasingFunction = new global::SUIsei.Animation.BounceEase { Bounces = 2, Bounciness = 3d, EasingMode = global::SUIsei.Animation.EasingMode.EaseIn };");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("<ElasticEase Oscillations=\"2.5\" />", "SUISEI012")] // a whole number of swings
+	[Arguments("<BounceEase Bounciness=\"springy\" />", "SUISEI012")]
+	[Arguments("<PowerEase Exponent=\"3\" />", "SUISEI004")]        // ExponentialEase's, not PowerEase's
+	public void A_bad_easing_parameter_diagnoses(string ease, string id) =>
+		XamlGeneratorHarness.Run(View($"""
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="1">
+			  <DoubleAnimation.EasingFunction>{ease}</DoubleAnimation.EasingFunction>
+			</DoubleAnimation>
+			"""), CodeBehind).DiagnosticIds().ShouldBe([id]);
 
 	[Test]
 	public void An_edited_storyboard_regenerates_on_the_next_run()
