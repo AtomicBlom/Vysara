@@ -4,18 +4,16 @@ namespace SUIsei.Controls;
 
 /// <summary>
 /// Hosts a single <see cref="Content"/>. Without a <see cref="Control.Template"/> it hosts the
-/// content directly (a <see cref="UIElement"/> as-is; a string wrapped in a <see cref="TextBlock"/>, which
-/// <see cref="Control.Foreground"/> colours) and paints <see cref="Control.Background"/> behind it. With a template, the
-/// control's visual tree comes from the template and a <c>{TemplateBinding Content}</c> routes <see cref="Content"/> into
-/// the template's <see cref="ContentPresenter"/>; <see cref="ContentChanged"/> lets that binding stay live.
+/// content directly (a <see cref="UIElement"/> as-is; a string wrapped in a <see cref="TextBlock"/>) and paints
+/// <see cref="Control.Background"/> behind it. With a template, the control's visual tree comes from the template and a
+/// <c>{TemplateBinding Content}</c> routes <see cref="Content"/> into the template's <see cref="ContentPresenter"/>;
+/// <see cref="ContentChanged"/> lets that binding stay live. Either way the text it shows inherits
+/// <see cref="Control.Foreground"/> and <see cref="Control.FontSize"/> unless something between sets its own.
 /// </summary>
 [ContentProperty(Name = nameof(Content))]
 public class ContentControl : Control
 {
 	private UIElement? _hosted;
-
-	// The text block made for content that is not an element, which Foreground colours; null otherwise.
-	private TextBlock? _wrapped;
 
 	// VisualChildren without a template, rebuilt only when _hosted changes, so reading it allocates nothing.
 	private UIElement[] _hostedList = [];
@@ -38,9 +36,6 @@ public class ContentControl : Control
 				if (_hosted is not null)
 					DropChild(_hosted);
 				_hosted = ContentHelper.Wrap(value);
-				_wrapped = value is UIElement ? null : _hosted as TextBlock;
-				if (_wrapped is not null && Foreground is { } foreground)
-					_wrapped.Foreground = foreground;
 				_hostedList = _hosted is null ? [] : [_hosted];
 				if (_hosted is not null)
 					AdoptChild(_hosted);
@@ -85,12 +80,6 @@ public class ContentControl : Control
 	{
 		TransitionBackground(BackgroundTransition, old, @new);
 		base.OnBackgroundChanged(old, @new);
-	}
-
-	private protected override void OnForegroundChanged(Brush? foreground)
-	{
-		if (_wrapped is { } text)
-			text.Foreground = foreground;
 	}
 
 	private protected override VisualContent? UpdateContent() =>

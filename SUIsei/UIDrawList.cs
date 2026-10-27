@@ -212,7 +212,9 @@ internal sealed class UIDrawList
 	/// the run's OpenType features, the font and features its element measured it with, so kerning / ligatures /
 	/// contextual forms / tabular figures apply when the shaper supports them (the default is advance-based LTR). The
 	/// run's local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the first line's
-	/// ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by the run's font size, in
+	/// ascenders sit at the top, and each later line's baseline a line height below the last, each line starting where the
+	/// run's <see cref="GlyphRunContent.TextAlignment"/> places it across the run's width. Each shaped glyph emits a quad at
+	/// its EM pen position along its line (scaled by the run's font size, in
 	/// its local units) with its atlas UV and the shared per-run <c>(screenPxRange, bias, softness, 0)</c> in
 	/// <see cref="OverlayVertex.Custom"/>; all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw. The
 	/// atlas page is an ordinary texture source: the glyphs sample it through its slot in this list.
@@ -268,36 +270,47 @@ internal sealed class UIDrawList
 		EnsureRun(UIPrimKind.Glyph, slot, clip);
 
 		var @params = new Vector4(screenPxRange, bias, softness, 0f);
-		var baselineY = -font.Ascender * fontSize + offset.Y; // ascender is negative (y-down), so the top sits near y=0
+		var firstBaselineY = -font.Ascender * fontSize + offset.Y; // ascender is negative (y-down), so the top sits near y=0
+		var lineHeight = font.LineHeight * fontSize;
 
-		var shaped = run.Shape().Glyphs;
+		var shaped = run.Shape();
+		var glyphs = shaped.Glyphs;
+		var lines = shaped.Lines;
 		Span<Vector2> corners = stackalloc Vector2[4];
 		Span<Vector2> uvs = stackalloc Vector2[4];
-		foreach (var sg in shaped)
+		for (var l = 0; l < lines.Count; l++)
 		{
-			var g = sg.Glyph; // the shaper omits zero-geometry glyphs, so every entry draws a quad
-			var penX = (sg.PenXEm + sg.XOffsetEm) * fontSize + offset.X;
-			var x0 = penX + g.PlaneLeft * fontSize;
-			var x1 = penX + g.PlaneRight * fontSize;
-			var y0 = baselineY + (sg.YOffsetEm + g.PlaneTop) * fontSize;
-			var y1 = baselineY + (sg.YOffsetEm + g.PlaneBottom) * fontSize;
-
-			if (gradient is not null)
+			// Each line is placed across the run's width by its alignment, a line height below the one before.
+			var shapedLine = lines[l];
+			var lineX = run.LineStart(shapedLine) + offset.X;
+			var baselineY = firstBaselineY + l * lineHeight;
+			for (var i = shapedLine.FirstGlyph; i < shapedLine.FirstGlyph + shapedLine.GlyphCount; i++)
 			{
-				corners[0] = new Vector2(x0, y0); uvs[0] = new Vector2(g.U0, g.V0);
-				corners[1] = new Vector2(x1, y0); uvs[1] = new Vector2(g.U1, g.V0);
-				corners[2] = new Vector2(x1, y1); uvs[2] = new Vector2(g.U1, g.V1);
-				corners[3] = new Vector2(x0, y1); uvs[3] = new Vector2(g.U0, g.V1);
-				GradientSplitter.AddPolygon(this, corners, uvs, gradient, paintLine, opacity, matrix, UIPrimKind.Glyph, @params, clip, slot);
-				continue;
-			}
+				var sg = glyphs[i];
+				var g = sg.Glyph; // the shaper omits zero-geometry glyphs, so every entry draws a quad
+				var penX = (sg.PenXEm + sg.XOffsetEm) * fontSize + lineX;
+				var x0 = penX + g.PlaneLeft * fontSize;
+				var x1 = penX + g.PlaneRight * fontSize;
+				var y0 = baselineY + (sg.YOffsetEm + g.PlaneTop) * fontSize;
+				var y1 = baselineY + (sg.YOffsetEm + g.PlaneBottom) * fontSize;
 
-			var first = ReserveVertices(4);
-			AddVertex(new Vector2(x0, y0), new Vector2(g.U0, g.V0), matrix, color, @params);
-			AddVertex(new Vector2(x1, y0), new Vector2(g.U1, g.V0), matrix, color, @params);
-			AddVertex(new Vector2(x1, y1), new Vector2(g.U1, g.V1), matrix, color, @params);
-			AddVertex(new Vector2(x0, y1), new Vector2(g.U0, g.V1), matrix, color, @params);
-			AddQuadIndices(first);
+				if (gradient is not null)
+				{
+					corners[0] = new Vector2(x0, y0); uvs[0] = new Vector2(g.U0, g.V0);
+					corners[1] = new Vector2(x1, y0); uvs[1] = new Vector2(g.U1, g.V0);
+					corners[2] = new Vector2(x1, y1); uvs[2] = new Vector2(g.U1, g.V1);
+					corners[3] = new Vector2(x0, y1); uvs[3] = new Vector2(g.U0, g.V1);
+					GradientSplitter.AddPolygon(this, corners, uvs, gradient, paintLine, opacity, matrix, UIPrimKind.Glyph, @params, clip, slot);
+					continue;
+				}
+
+				var first = ReserveVertices(4);
+				AddVertex(new Vector2(x0, y0), new Vector2(g.U0, g.V0), matrix, color, @params);
+				AddVertex(new Vector2(x1, y0), new Vector2(g.U1, g.V0), matrix, color, @params);
+				AddVertex(new Vector2(x1, y1), new Vector2(g.U1, g.V1), matrix, color, @params);
+				AddVertex(new Vector2(x0, y1), new Vector2(g.U0, g.V1), matrix, color, @params);
+				AddQuadIndices(first);
+			}
 		}
 	}
 

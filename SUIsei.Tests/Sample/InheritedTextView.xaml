@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Inherited text properties. A tab is a ContentControl whose template's ContentPresenter sizes and paints its label, and
+	whose Lit and Dim states animate the presenter's brush: the label is string content, a TextBlock the presenter makes,
+	which inherits both. A card passes its FontSize and Foreground through a StackPanel and a Border to the TextBlocks in
+	its element content; a TextBlock with its own value, or a style's, keeps it.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			x:Class="SUIsei.Tests.Sample.InheritedTextView">
+	<StackPanel.Resources>
+		<Style x:Key="Small" TargetType="TextBlock">
+			<Setter Property="FontSize" Value="9" />
+		</Style>
+	</StackPanel.Resources>
+	<ContentControl x:Name="Tab" Content="Track">
+		<ContentControl.Template>
+			<ControlTemplate TargetType="ContentControl">
+				<Border Padding="6,2">
+					<ContentPresenter x:Name="Label" Content="{TemplateBinding Content}" FontSize="20" Foreground="#606060" />
+					<VisualStateManager.VisualStateGroups>
+						<VisualStateGroup Name="Emphasis">
+							<VisualState Name="Lit">
+								<Storyboard>
+									<ColorAnimation Storyboard.TargetName="Label" Storyboard.TargetProperty="(ContentPresenter.Foreground).(SolidColorBrush.Color)" To="#FFFFFF" Duration="0:0:0.2" />
+								</Storyboard>
+							</VisualState>
+							<VisualState Name="Dim">
+								<Storyboard>
+									<ColorAnimation Storyboard.TargetName="Label" Storyboard.TargetProperty="(ContentPresenter.Foreground).(SolidColorBrush.Color)" To="#606060" Duration="0:0:0.2" />
+								</Storyboard>
+							</VisualState>
+						</VisualStateGroup>
+					</VisualStateManager.VisualStateGroups>
+				</Border>
+			</ControlTemplate>
+		</ContentControl.Template>
+	</ContentControl>
+	<ContentControl x:Name="Card" FontSize="18" Foreground="Gold">
+		<StackPanel>
+			<TextBlock x:Name="Title" Text="Inherits" />
+			<Border>
+				<TextBlock x:Name="Nested" Text="Through a border" />
+			</Border>
+			<TextBlock x:Name="Own" Text="Own" FontSize="11" Foreground="Teal" TextAlignment="End" />
+			<TextBlock x:Name="Styled" Text="Styled" Style="{StaticResource Small}" />
+		</StackPanel>
+	</ContentControl>
+</StackPanel>

@@ -32,6 +32,12 @@ public sealed class PropertyMetadata<TOwner, TValue> where TOwner : DependencyOb
 	/// </summary>
 	public Action<TOwner, TValue>? Validate { get; init; }
 	public InvalidationFlags Invalidates { get; init; }
+	/// <summary>
+	/// Makes the property its owner's member of an inherited value, as WinUI's text properties are: its value passes down
+	/// to the nearest elements below that hold a member of the same value, and below a local, style or animated value it
+	/// takes the one passed down to it. Internal, as WinUI gives apps no inherited properties of their own.
+	/// </summary>
+	internal InheritedProperty<TValue>? Inherits { get; init; }
 
 	/// <summary>
 	/// How the property interpolates when animated; a property with one is animatable. Left unset, a property of a
