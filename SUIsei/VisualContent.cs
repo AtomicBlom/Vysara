@@ -3,8 +3,8 @@ using System.Text;
 namespace SUIsei;
 
 /// <summary>
-/// What a <see cref="SpriteVisual"/> draws: the rectangle family (fill + border), MSDF glyph-run text, and image
-/// content. The compositor switches on the concrete type, with no reflection.
+/// What a <see cref="SpriteVisual"/> draws: the rectangle family (fill + border, or an image), MSDF glyph-run text, and
+/// vector shapes. The compositor switches on the concrete type, with no reflection.
 /// <para>
 /// Content is retained and mutable, like WinUI's composition objects: an element keeps one content object and
 /// updates it in place, so a brush change, an animation frame or a re-arrange allocates nothing. Every change to what

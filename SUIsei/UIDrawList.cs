@@ -171,7 +171,19 @@ internal sealed class UIDrawList
 	/// is indexed exactly as a quad.
 	/// </summary>
 	public void AddPolygon(ReadOnlySpan<Vector2> local, ReadOnlySpan<Vector2> uv, ReadOnlySpan<Vector4> color, in Matrix3x2 matrix,
-		UIPrimKind kind, Vector4 @params, in Rect clip, int slot)
+		UIPrimKind kind, Vector4 @params, in Rect clip, int slot) =>
+		AddPolygon(local, uv, color, default, @params, matrix, kind, clip, slot);
+
+	/// <summary>As <see cref="AddPolygon(ReadOnlySpan{Vector2}, ReadOnlySpan{Vector2}, ReadOnlySpan{Vector4}, in Matrix3x2, UIPrimKind, Vector4, in Rect, int)"/>,
+	/// with each corner's own <paramref name="params"/>: how the pieces a gradient cuts from a vector triangle keep their
+	/// edge distances.</summary>
+	public void AddPolygon(ReadOnlySpan<Vector2> local, ReadOnlySpan<Vector2> uv, ReadOnlySpan<Vector4> color, ReadOnlySpan<Vector4> @params,
+		in Matrix3x2 matrix, UIPrimKind kind, in Rect clip, int slot) =>
+		AddPolygon(local, uv, color, @params, default, matrix, kind, clip, slot);
+
+	// A polygon whose corners take `perCorner` params when given, else `shared`.
+	private void AddPolygon(ReadOnlySpan<Vector2> local, ReadOnlySpan<Vector2> uv, ReadOnlySpan<Vector4> color, ReadOnlySpan<Vector4> perCorner,
+		Vector4 shared, in Matrix3x2 matrix, UIPrimKind kind, in Rect clip, int slot)
 	{
 		if (clip.IsEmpty || local.Length < 3)
 			return;
@@ -181,7 +193,7 @@ internal sealed class UIDrawList
 		for (var i = 0; i < local.Length; i++)
 		{
 			var c = color[i];
-			AddVertex(local[i], uv[i], matrix, PremultipliedHdrColor.FromPremultiplied(c.X, c.Y, c.Z, c.W), @params);
+			AddVertex(local[i], uv[i], matrix, PremultipliedHdrColor.FromPremultiplied(c.X, c.Y, c.Z, c.W), perCorner.IsEmpty ? shared : perCorner[i]);
 		}
 		var indices = _set.Indices;
 		for (var i = 1; i + 1 < local.Length; i++)
@@ -382,6 +394,52 @@ internal sealed class UIDrawList
 	private readonly struct VectorEmitter(UIDrawList list, Matrix3x2 matrix, PremultipliedHdrColor color, Matrix3x2 localToUv) : IVectorSink
 	{
 		public void AddTriangles(ReadOnlySpan<VectorVertex> vertices) => list.AddVectorTriangles(vertices, matrix, color, localToUv);
+	}
+
+	/// <summary>
+	/// Append tessellated vector geometry, trimmed by <paramref name="trim"/> if it is a stroke, painted by
+	/// <paramref name="gradient"/> along <paramref name="line"/> through the path's local space with its alpha multiplied
+	/// by <paramref name="opacity"/>. Each triangle is cut where the gradient's colour stops being linear across it and the
+	/// pieces' corners take the gradient's colours (<see cref="GradientSplitter"/>), so the gradient is exact, colours above
+	/// paper white included, and the pieces keep the triangle's edge distances, so its antialiasing is unchanged.
+	/// <paramref name="groupOpacity"/> is as for <see cref="AddVector"/>.
+	/// </summary>
+	public void AddVectorGradient(TessellatedPath path, PathTrim trim, in Matrix3x2 matrix, CompositionGradientBrush gradient, in GradientLine line,
+		float opacity, in Rect clip, float groupOpacity = 1f)
+	{
+		if (clip.IsEmpty || path.TriangleCount == 0 || groupOpacity <= 0f || gradient.ColorStops.Length == 0)
+			return;
+		var grouped = groupOpacity < 1f;
+		if (grouped)
+			BeginLayer(clip, groupOpacity, Vector4.Zero);
+		var sink = new GradientVectorEmitter(this, matrix, gradient, line, opacity, clip);
+		path.Emit(ref sink, trim);
+		if (grouped)
+			EndLayer(clip);
+	}
+
+	/// <summary>Writes a tessellated path's triangles into the draw list, each cut into the gradient's bands.</summary>
+	private readonly struct GradientVectorEmitter(UIDrawList list, Matrix3x2 matrix, CompositionGradientBrush gradient, GradientLine line,
+		float opacity, Rect clip) : IVectorSink
+	{
+		public void AddTriangles(ReadOnlySpan<VectorVertex> vertices)
+		{
+			Span<Vector2> position = stackalloc Vector2[3];
+			Span<Vector2> uv = stackalloc Vector2[3]; // slot 0 is one white texel: any uv samples it
+			Span<Vector4> distances = stackalloc Vector4[3];
+			Span<float> t = stackalloc float[3];
+			for (var i = 0; i + 2 < vertices.Length; i += 3)
+			{
+				for (var k = 0; k < 3; k++)
+				{
+					ref readonly var v = ref vertices[i + k];
+					position[k] = v.Position;
+					distances[k] = v.Distances;
+					t[k] = line.IsDegenerate ? 0f : line.T(v.Position);
+				}
+				GradientSplitter.AddVectorTriangle(list, position, uv, distances, t, line.IsDegenerate, gradient, opacity, matrix, clip, slot: 0);
+			}
+		}
 	}
 
 	private void AddVertex(Vector2 local, Vector2 uv, in Matrix3x2 matrix, PremultipliedHdrColor color, Vector4 @params)

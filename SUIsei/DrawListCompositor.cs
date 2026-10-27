@@ -6,10 +6,10 @@ namespace SUIsei;
 /// <summary>
 /// Loom's default <see cref="IUICompositor"/>: walks a surface's composition tree, folds transform/clip/opacity
 /// into a pre-transformed vertex/command stream, and exposes it as a neutral <see cref="DrawListData"/>. Emits the
-/// rectangle family (fills + borders) and MSDF glyph runs, painted by colour, linear-gradient or image brushes; a
-/// gradient is drawn exactly by cutting the geometry where its colour stops being linear
-/// (<see cref="GradientSplitter"/>). Output is asserted on CPU via
-/// <see cref="DrawListData.Dump"/> — the primary test seam, no backend needed.
+/// rectangle family (fills + borders), MSDF glyph runs and vector shapes (<see cref="ShapeContent"/>, through the
+/// <see cref="UIPrimKind.Vector"/> prim), painted by colour, linear-gradient or image brushes; a gradient is drawn exactly
+/// by cutting the geometry where its colour stops being linear (<see cref="GradientSplitter"/>). Output is asserted on
+/// CPU via <see cref="DrawListData.Dump"/> — the primary test seam, no backend needed.
 /// </summary>
 public sealed class DrawListCompositor : IUICompositor
 {
@@ -201,7 +201,116 @@ public sealed class DrawListCompositor : IUICompositor
 						throw new NotSupportedException("An image brush cannot paint text yet: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
 				}
 				break;
+			case ShapeContent shape:
+				EmitShape(list, shape, matrix, alpha, localClip);
+				break;
 		}
+	}
+
+	// A shape: its fill, then its stroke over it, each tessellated through the content's cache for the scale it is drawn
+	// at. Faded with both a fill and a stroke, the two overlap (the stroke's inner half lies on the fill), so they are
+	// drawn into one layer that the fade applies to once, as a WinUI shape fades as a whole.
+	private static void EmitShape(UIDrawList list, ShapeContent shape, in Matrix3x2 matrix, float alpha, in Rect clip)
+	{
+		var fill = shape.Fill;
+		var stroke = shape.StrokeStyle.Thickness > 0f ? shape.Stroke : null;
+		if (shape.Path is not { IsEmpty: false } || (fill is null && stroke is null) || alpha <= 0f || clip.IsEmpty)
+			return;
+
+		var scale = TessellationScale.For(matrix);
+		var box = shape.Bounds;
+		var grouped = alpha < 1f && fill is not null && stroke is not null;
+		if (grouped)
+		{
+			list.BeginLayer(clip, alpha, Vector4.Zero);
+			alpha = 1f;
+		}
+		if (fill is not null)
+			AddPaintedVector(list, shape.TessellateFill(scale)!, PathTrim.None, fill, box, matrix, alpha, clip);
+		if (stroke is not null)
+			AddPaintedVector(list, shape.TessellateStroke(scale)!, shape.Trim, stroke, box, matrix, alpha, clip);
+		if (grouped)
+			list.EndLayer(clip);
+	}
+
+	// Tessellated geometry painted by a colour, a linear gradient over `box`, or an image placed in `box`. A stroke that
+	// can overlap itself (more than one segment) painted with one alpha below 1 is drawn opaque inside a layer that
+	// carries the alpha, so its joins and crossings blend once and look like the rest of it. Paint whose alpha varies (a
+	// gradient whose stops differ in alpha, an image) still blends twice where such a stroke overlaps itself.
+	private static void AddPaintedVector(UIDrawList list, TessellatedPath path, PathTrim trim, CompositionBrush paint, in Rect box,
+		in Matrix3x2 matrix, float alpha, in Rect clip)
+	{
+		var overlaps = path.IsStroke && path.SegmentCount > 1;
+		switch (paint)
+		{
+			case CompositionColorBrush color:
+				{
+					var a = alpha * color.Opacity * color.Color.A;
+					if (a <= 0f)
+						return;
+					if (overlaps && a < 1f)
+						list.AddVector(path, trim, matrix, (color.Color with { A = 1f }).ToPremultiplied(), clip, groupOpacity: a);
+					else
+						list.AddVector(path, trim, matrix, color.Color.ToPremultiplied(alpha * color.Opacity), clip);
+					break;
+				}
+			case CompositionLinearGradientBrush gradient:
+				{
+					gradient.ThrowIfUndefined();
+					var line = GradientLine.For(gradient, box);
+					var opacity = alpha * gradient.Opacity;
+					if (overlaps && UniformStopAlpha(gradient) is { } stopAlpha && stopAlpha * opacity < 1f)
+					{
+						if (stopAlpha * opacity > 0f)
+							list.AddVectorGradient(path, trim, matrix, gradient, line, 1f / stopAlpha, clip, groupOpacity: stopAlpha * opacity);
+					}
+					else
+						list.AddVectorGradient(path, trim, matrix, gradient, line, opacity, clip);
+					break;
+				}
+			case CompositionSurfaceBrush surface:
+				AddVectorImage(list, path, trim, surface, box, matrix, alpha, clip, overlaps);
+				break;
+			default:
+				throw new NotSupportedException($"The compositor cannot paint a {paint.GetType().Name}.");
+		}
+	}
+
+	// The alpha every stop of a gradient shares, or null when they differ (or there are none).
+	private static float? UniformStopAlpha(CompositionGradientBrush gradient)
+	{
+		var stops = gradient.ColorStops;
+		if (stops.Length == 0)
+			return null;
+		var a = stops[0].Color.A;
+		for (var i = 1; i < stops.Length; i++)
+		{
+			if (stops[i].Color.A != a)
+				return null;
+		}
+		return a;
+	}
+
+	// An image brush over vector geometry: the image placed in `box` by the brush's stretch and alignment and sampled
+	// through the Vector prim's texture slot at each point's place in it. Where the image does not cover the box (a
+	// letterboxed Uniform), the geometry is clipped to the image, to the bounds of its rect on the surface.
+	private static void AddVectorImage(UIDrawList list, TessellatedPath path, PathTrim trim, CompositionSurfaceBrush surface, in Rect box,
+		in Matrix3x2 matrix, float alpha, in Rect clip, bool overlaps)
+	{
+		var a = alpha * surface.Opacity;
+		if (surface.Surface is not { } source || a <= 0f)
+			return;
+		var placed = surface.ImageRect(new Vector2(box.Width, box.Height));
+		var image = new Rect(box.X + placed.X, box.Y + placed.Y, placed.Width, placed.Height);
+		if (image.IsEmpty)
+			return;
+		var localToUv = Matrix3x2.CreateTranslation(-image.X, -image.Y) * Matrix3x2.CreateScale(1f / image.Width, 1f / image.Height);
+		var covers = image.X <= box.X && image.Y <= box.Y && image.Right >= box.Right && image.Bottom >= box.Bottom;
+		var drawClip = covers ? clip : clip.Intersect(image.TransformBounds(matrix));
+		if (overlaps && a < 1f)
+			list.AddVector(path, trim, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, 1f), drawClip, a, source, localToUv);
+		else
+			list.AddVector(path, trim, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, a), drawClip, 1f, source, localToUv);
 	}
 
 	// A rect painted by a colour or a linear gradient: one quad for a colour, as many bands as the gradient needs.
