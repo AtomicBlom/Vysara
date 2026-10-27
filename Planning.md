@@ -150,6 +150,7 @@ In-world surfaces, camera-ray hit-testing, and billboards are implemented in the
 - **Gamepad + XYFocus spatial navigation** — the input enums exist; the directional scoring heuristic (with tunable weights + a debug overlay) is unimplemented, and there is no `GamepadInput` queue yet.
 - **IME** — committed-character text input works; add an `ITextInputProvider` host seam so per-OS IME lands without reworking `TextBox`.
 - **NativeAOT CI gate** — the libraries set `IsAotCompatible`, but there is no `PublishAot` smoke-publish (warnings-as-errors) gate in CI.
+- **Vector paint gaps** — a stroke painted with alpha that varies (a gradient whose stops differ in alpha, an image) still blends twice where it overlaps itself, since one layer carries one alpha; a letterboxed image on a rotated shape is clipped to its rect's bounds on the surface; fills are not trimmed; an image brush cannot paint text.
 - **Deferred:** multi-screen hosts, in-world occlusion (the analytic ray test ignores scene depth; opt-in depth-sampled occlusion is a later escape hatch), above-paper-white roll-off (hard clamp vs soft knee), and compositor threading.
 
 ---
