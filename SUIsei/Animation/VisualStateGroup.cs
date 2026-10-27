@@ -15,4 +15,8 @@ public sealed class VisualStateGroup
 
 	/// <summary>The state currently active in this group, if any.</summary>
 	public VisualState? CurrentState { get; internal set; }
+
+	/// <summary>The clock the current state's storyboard runs or holds its values on, which releases them when the state
+	/// is left; null when the state was shown with no clock, its values written directly.</summary>
+	internal AnimationClock? CurrentClock { get; set; }
 }

@@ -21,6 +21,21 @@ public abstract class AnimationTimeline : Timeline
 	/// <summary>Record where this run starts — <c>From</c> when set, else the target's current value. Called as the
 	/// animation begins, after <see cref="EnsureResolved"/>.</summary>
 	internal abstract void CaptureStart();
+
+	/// <summary>The object whose property this animation drives, once its delegates have been bound to that property, as a
+	/// storyboard's <c>Target</c> and <c>TargetProperty</c> bind them (<see cref="EnsureResolved"/>); null for one whose
+	/// delegates were set in code.</summary>
+	internal DependencyObject? BoundOwner { get; set; }
+
+	/// <summary>The property on <see cref="BoundOwner"/> this animation drives; null for one whose delegates were set in
+	/// code.</summary>
+	internal IAnimationTarget? BoundProperty { get; set; }
+
+	/// <summary>Whether this animation and <paramref name="other"/> were bound to the same property of the same object,
+	/// which is how the <see cref="AnimationClock"/> hands a property from one animation to the next. Animations whose
+	/// delegates were set in code cannot be compared, so never are.</summary>
+	internal bool DrivesSamePropertyAs(AnimationTimeline other) =>
+		BoundProperty is not null && ReferenceEquals(BoundProperty, other.BoundProperty) && ReferenceEquals(BoundOwner, other.BoundOwner);
 }
 
 /// <summary>
@@ -78,6 +93,7 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 		Release = () => typed.Release(owner);
 		ReadCurrent = () => typed.Read(owner);
 		ValidateValue = typed.Validates ? value => typed.Validate(owner, value) : null;
+		(BoundOwner, BoundProperty) = (owner, target);
 		return true;
 	}
 

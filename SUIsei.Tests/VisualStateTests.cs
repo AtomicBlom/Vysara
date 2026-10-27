@@ -106,4 +106,155 @@ public sealed class VisualStateTests
 		common.CurrentState.ShouldBe(over);         // unchanged by the SelectionStates transition
 		selection.CurrentState.ShouldBe(selected);
 	}
+
+	private static readonly Vector2 Surface = new(100, 100);
+
+	// A state whose storyboard fades the element's Opacity to `to` from wherever it is over 0.2 s, holding the end: bound
+	// through Target and TargetProperty, as generated XAML binds one, or through delegates set in code.
+	private static VisualState Fading(string name, UIElement element, float to, bool bound) => new()
+	{
+		Name = name,
+		Storyboard = new Storyboard
+		{
+			Children =
+			{
+				bound
+					? new DoubleAnimation { To = to, Duration = TimeSpan.FromSeconds(0.2), Target = element, TargetProperty = UIElement.OpacityProperty }
+					: new DoubleAnimation
+					{
+						To = to,
+						Duration = TimeSpan.FromSeconds(0.2),
+						Apply = v => element.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
+						Release = () => element.ClearAnimatedValue(UIElement.OpacityProperty),
+						ReadCurrent = () => element.Opacity,
+					},
+			},
+		},
+	};
+
+	// A control whose one group has A (Opacity to 0.3), B (no storyboard: the base look) and C (Opacity to 0.6), on a
+	// host's root unless `attach` is false.
+	private static (UIHost Host, ContentControl Control) ControlWithStates(bool bound = true, bool attach = true)
+	{
+		var host = new UIHost();
+		var control = new ContentControl { Width = 20, Height = 20 };
+		var group = new VisualStateGroup { Name = "Tabs" };
+		group.States.Add(Fading("A", control, 0.3f, bound));
+		group.States.Add(new VisualState { Name = "B" });
+		group.States.Add(Fading("C", control, 0.6f, bound));
+		VisualStateManager.GetVisualStateGroups(control).Add(group);
+		if (attach)
+			host.CreateRoot(UILayer.Default).Root.Content = control;
+		return (host, control);
+	}
+
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void Leaving_a_finished_state_for_one_with_no_storyboard_restores_the_base_value(bool bound)
+	{
+		var (host, control) = ControlWithStates(bound);
+		VisualStateManager.GoToState(control, "A", useTransitions: true).ShouldBeTrue();
+		host.Tick(0.5, 0f, Surface); // A's fade has finished, holding its end
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+		host.Clock.HasActiveClocks.ShouldBeFalse();
+
+		VisualStateManager.GoToState(control, "B", useTransitions: true).ShouldBeTrue();
+
+		control.Opacity.ShouldBe(1f); // B animates nothing, and leaving A released what it held, as in WinUI
+	}
+
+	[Test]
+	public void Going_to_a_state_that_animates_the_same_property_keeps_its_value()
+	{
+		var (host, control) = ControlWithStates();
+		VisualStateManager.GoToState(control, "A", useTransitions: true);
+		host.Tick(0.5, 0f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+
+		VisualStateManager.GoToState(control, "C", useTransitions: true).ShouldBeTrue();
+		// C took Opacity over from A as it began, so leaving A did not drop it to 1 before C's first frame.
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+		host.Tick(0.1, 0.5f, Surface);
+		control.Opacity.ShouldBe(0.45f, 0.001f); // halfway from A's value to C's
+		host.Tick(0.5, 0.6f, Surface);
+		control.Opacity.ShouldBe(0.6f, 0.001f);
+		host.Clock.HasActiveClocks.ShouldBeFalse();
+
+		VisualStateManager.GoToState(control, "B", useTransitions: true);
+		control.Opacity.ShouldBe(1f); // C, finished, is released in turn
+	}
+
+	[Test]
+	public void A_state_entered_without_a_transition_is_released_when_left()
+	{
+		var (host, control) = ControlWithStates();
+
+		VisualStateManager.GoToState(control, "A", useTransitions: false);
+		control.Opacity.ShouldBe(0.3f, 0.001f); // at once, with nothing left running on the clock
+		host.Clock.HasActiveClocks.ShouldBeFalse();
+		VisualStateManager.GoToState(control, "B", useTransitions: true);
+		control.Opacity.ShouldBe(1f);
+
+		VisualStateManager.GoToState(control, "A", useTransitions: false);
+		VisualStateManager.GoToState(control, "C", useTransitions: false);
+		control.Opacity.ShouldBe(0.6f, 0.001f);
+		VisualStateManager.GoToState(control, "B", useTransitions: false);
+		control.Opacity.ShouldBe(1f);
+	}
+
+	[Test]
+	public void A_state_shown_with_no_clock_is_released_when_left()
+	{
+		var (host, control) = ControlWithStates(attach: false);
+
+		VisualStateManager.GoToState(control, "A", useTransitions: true);
+		control.Opacity.ShouldBe(0.3f, 0.001f); // snapped: there is no clock to animate it
+		VisualStateManager.GoToState(control, "B", useTransitions: true);
+		control.Opacity.ShouldBe(1f);
+
+		// Shown while detached, left once on a host: the clock never held A's value, but leaving A still releases it.
+		VisualStateManager.GoToState(control, "A", useTransitions: true);
+		host.CreateRoot(UILayer.Default).Root.Content = control;
+		VisualStateManager.GoToState(control, "B", useTransitions: true);
+		control.Opacity.ShouldBe(1f);
+	}
+
+	[Test]
+	public void Changing_state_and_running_frames_allocates_nothing_once_warm()
+	{
+		var (host, control) = ControlWithStates();
+		Cycle(); // the clock's entries, and its list of storyboards holding values, are made here and reused after
+
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 4; i++)
+				Cycle();
+		});
+		control.Opacity.ShouldBe(1f);
+
+		// Fade to A and hold it, fade on to C and hold that, back to B; then the same without transitions.
+		void Cycle()
+		{
+			VisualStateManager.GoToState(control, "A", useTransitions: true);
+			Frames(20);
+			VisualStateManager.GoToState(control, "C", useTransitions: true);
+			Frames(20);
+			VisualStateManager.GoToState(control, "B", useTransitions: true);
+			Frames(2);
+			VisualStateManager.GoToState(control, "A", useTransitions: false);
+			Frames(2);
+			VisualStateManager.GoToState(control, "B", useTransitions: false);
+			Frames(2);
+		}
+
+		void Frames(int count)
+		{
+			for (var i = 0; i < count; i++)
+			{
+				host.Tick(1.0 / 60.0, 0f, Surface);
+				host.Render();
+			}
+		}
+	}
 }
