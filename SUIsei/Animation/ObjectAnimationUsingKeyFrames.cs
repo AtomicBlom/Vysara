@@ -29,6 +29,10 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 	/// <summary>The keys. Each holds from its <see cref="ObjectKeyFrame.KeyTime"/> until a later key's.</summary>
 	public IList<ObjectKeyFrame> KeyFrames { get; } = [];
 
+	/// <summary>WinUI's opt-in for an animation of a property that relayouts; SUIsei runs every animation and reads nothing
+	/// here (<see cref="DoubleAnimation.EnableDependentAnimation"/>).</summary>
+	public bool EnableDependentAnimation { get; set; }
+
 	internal override void EnsureResolved()
 	{
 		if (_binding is not null || Target is null || TargetProperty is null)

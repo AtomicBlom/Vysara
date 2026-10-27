@@ -280,7 +280,7 @@ public sealed class StoryboardGeneratorTests
 			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Label" Storyboard.TargetProperty="Text" Duration="0:0:2" FillBehavior="Stop">
 			  <DiscreteObjectKeyFrame KeyTime="0:0:1" Value="Bye" />
 			</ObjectAnimationUsingKeyFrames>
-			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(Grid.Row)">
+			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(Grid.Row)" EnableDependentAnimation="True">
 			  <DiscreteObjectKeyFrame KeyTime="0" Value="2" />
 			</ObjectAnimationUsingKeyFrames>
 			<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)">
@@ -300,6 +300,7 @@ public sealed class StoryboardGeneratorTests
 		code.ShouldContain(".Value = null;");
 		code.ShouldContain(".Value = \"Bye\";");
 		code.ShouldContain(".Value = 2;");
+		code.ShouldContain(".EnableDependentAnimation = true;"); // WinUI markup that sets it compiles unchanged
 		code.ShouldContain(".Value = 0.5f;"); // a float for a float property, as the runtime checks
 		code.ShouldContain(".Value = __"); // the object element, built as any element is
 		code.ShouldContain(".FillBehavior = global::SUIsei.Animation.FillBehavior.Stop;");
