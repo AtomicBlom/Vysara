@@ -16,14 +16,6 @@ public sealed class DrawListCompositor : IUICompositor
 {
 	// Each surface's builder, kept across composites: it owns the surface's retained buffers and its revision.
 	private readonly Dictionary<int, UIDrawList> _surfaces = [];
-	private readonly FontAtlas _font;
-
-	/// <param name="font">
-	/// The atlas glyph runs lay out against; defaults to <see cref="FontAtlas.Default"/> (the embedded default font).
-	/// Its page reaches the renderer through each list's <see cref="DrawListData.TextureSlots"/>, so the renderer always
-	/// binds the atlas the glyphs were laid out against.
-	/// </param>
-	public DrawListCompositor(FontAtlas? font = null) => _font = font ?? FontAtlas.Default;
 
 	/// <summary>How many full recomposites have run (a clean frame's no-op does not increment it) — instrumentation
 	/// for the incremental-recomposition tests.</summary>
@@ -183,12 +175,11 @@ public sealed class DrawListCompositor : IUICompositor
 				switch (gr.Brush)
 				{
 					case CompositionColorBrush color:
-						list.AddGlyphRun(gr.Text, gr.FontSizePx, color.Color.ToPremultiplied(alpha * color.Opacity), _font, matrix, localClip);
+						list.AddGlyphRun(gr, color.Color.ToPremultiplied(alpha * color.Opacity), matrix, localClip);
 						break;
 					case CompositionLinearGradientBrush gradient:
 						gradient.ThrowIfUndefined();
-						list.AddGlyphRun(gr.Text, gr.FontSizePx, default, _font, matrix, localClip,
-							gradient, GradientLine.For(gradient, gr.Size), alpha * gradient.Opacity);
+						list.AddGlyphRun(gr, default, matrix, localClip, gradient, GradientLine.For(gradient, gr.Size), alpha * gradient.Opacity);
 						break;
 					case CompositionSurfaceBrush:
 						throw new NotSupportedException("An image brush cannot paint text yet: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");

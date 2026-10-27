@@ -16,11 +16,23 @@ public sealed record FontEntry(string Path, IReadOnlyList<string> Ranges, bool I
 /// </summary>
 public sealed class Fontset
 {
+	/// <summary>
+	/// The MTSDF distance range, in atlas texels, of a bake that names none. At <see cref="DefaultGlyphSize"/> the field
+	/// reaches ±6 texels, ±0.1875 EM, past each glyph's edge: 2.6 px at 14 px text, room for a visible outline or a soft
+	/// shadow drawn from the true-distance channel.
+	/// </summary>
+	public const int DefaultPxRange = 12;
+
+	/// <summary>The EM size, in atlas texels, of a bake that names none.</summary>
+	public const int DefaultGlyphSize = 32;
+
+	/// <summary>The largest atlas page dimension, in texels, of a bake that names none.</summary>
+	public const int DefaultAtlasPageSize = 1024;
 	public required string Name { get; init; }
 	public required IReadOnlyList<FontEntry> Fonts { get; init; }
-	public int PxRange { get; init; } = 4;
-	public int GlyphSize { get; init; } = 32;
-	public int AtlasPageSize { get; init; } = 1024;
+	public int PxRange { get; init; } = DefaultPxRange;
+	public int GlyphSize { get; init; } = DefaultGlyphSize;
+	public int AtlasPageSize { get; init; } = DefaultAtlasPageSize;
 
 	/// <summary>When true, the atlas is keyed by font glyph id (each entry carries <c>glyphId</c>, plus <c>unicode</c>
 	/// where one exists) so a shaper can address it; when false (the default) it is keyed by code point. Opt-in via the
@@ -87,9 +99,9 @@ public sealed class Fontset
 		{
 			Name = name,
 			Fonts = fonts,
-			PxRange = root.TryGetProperty("pxRange", out var px) ? px.GetInt32() : 4,
-			GlyphSize = root.TryGetProperty("glyphSize", out var gs) ? gs.GetInt32() : 32,
-			AtlasPageSize = root.TryGetProperty("atlasPageSize", out var aps) ? aps.GetInt32() : 1024,
+			PxRange = root.TryGetProperty("pxRange", out var px) ? px.GetInt32() : DefaultPxRange,
+			GlyphSize = root.TryGetProperty("glyphSize", out var gs) ? gs.GetInt32() : DefaultGlyphSize,
+			AtlasPageSize = root.TryGetProperty("atlasPageSize", out var aps) ? aps.GetInt32() : DefaultAtlasPageSize,
 			Charset = ReadStringArray(root, "charset"),
 			GlyphIdKeyed = root.TryGetProperty("keying", out var k)
 				&& string.Equals(k.GetString(), "glyphId", StringComparison.OrdinalIgnoreCase),

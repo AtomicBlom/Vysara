@@ -32,8 +32,10 @@ internal sealed class GalleryRenderer
 	public GalleryRenderer(Action onQuit)
 	{
 		_gallery.Quit = onQuit;
-		// Composite against the glyph-id atlas so its HarfBuzz shaper drives every glyph run (ligatures included).
-		_view = _host.CreateRoot(UILayer.Default, interactive: true, compositor: new DrawListCompositor(_font));
+		// Lay text out and draw it with the glyph-id atlas, so its HarfBuzz shaper drives every glyph run (ligatures
+		// included) and measuring and drawing agree.
+		_view = _host.CreateRoot(UILayer.Default, interactive: true);
+		_view.Root.Font = _font;
 		_view.Root.Content = _gallery.Root;
 	}
 

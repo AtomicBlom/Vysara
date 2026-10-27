@@ -88,7 +88,7 @@ public sealed class UIHost
 
 	/// <summary>Add a root at <paramref name="layer"/>; returns the handle to keep. The first overlay gets
 	/// <see cref="UISurface.Hud"/> (list 0); subsequent views take higher ids. Pass <paramref name="compositor"/> to
-	/// use a non-default compositor — e.g. one bound to a specific (glyph-id / shaped) <see cref="FontAtlas"/>.</summary>
+	/// use a non-default compositor, such as a foreign engine's. The root's text font is <see cref="UIRoot.Font"/>.</summary>
 	public UIView CreateRoot(in UILayer layer, bool interactive = true, IUICompositor? compositor = null)
 	{
 		var root = new UIRoot(new DrawListId(_nextSurface++), compositor)

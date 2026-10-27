@@ -60,6 +60,27 @@ public sealed class UIRoot
 	/// Layout runs in DIPs; the render walk scales positions by this.</summary>
 	public float LayoutScale { get; set; } = 1f;
 
+	/// <summary>
+	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
+	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
+	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
+	/// everything under the root. It is the whole surface's font until elements choose their own.
+	/// </summary>
+	public FontAtlas Font
+	{
+		get => field ??= FontAtlas.Default;
+		set
+		{
+			ArgumentNullException.ThrowIfNull(value);
+			if (ReferenceEquals(field, value))
+				return;
+			field = value;
+			Content?.InvalidateMeasureTree();
+			foreach (var (element, _, _) in _overlays)
+				element.InvalidateMeasureTree();
+		}
+	}
+
 	/// <summary>Add an overlay element composited above <see cref="Content"/> (a popup/flyout, or its full-surface
 	/// light-dismiss layer), positioned in DIPs. Marks the tree dirty so the next composite shows it.</summary>
 	internal void AddOverlay(UIElement element, Vector2 position, bool fullSurface = false)

@@ -42,11 +42,8 @@ public readonly record struct TessellationScale
 	/// non-uniform scale or a skew flattens for its longest axis and antialiases for its shortest.</summary>
 	public static TessellationScale For(in Matrix3x2 localToPixels)
 	{
-		double a = localToPixels.M11, b = localToPixels.M12, c = localToPixels.M21, d = localToPixels.M22;
-		var e = (a * a + b * b + c * c + d * d) / 2;
-		var det = a * d - b * c;
-		var spread = Math.Sqrt(Math.Max(0, e * e - det * det));
-		return new TessellationScale(Bucket((float)Math.Sqrt(e + spread)), Bucket((float)Math.Sqrt(Math.Max(0, e - spread))));
+		var stretch = TransformStretch.Of(localToPixels);
+		return new TessellationScale(Bucket(stretch.Largest), Bucket(stretch.Smallest));
 	}
 
 	private static int Bucket(float scale) =>

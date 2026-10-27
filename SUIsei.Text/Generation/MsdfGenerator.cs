@@ -38,6 +38,7 @@ internal static class MsdfGenerator
 
 		CorrectPolarity(shape, bitmap, projection);
 		ErrorCorrect(shape, bitmap, projection);
+		CorrectInterpolation(shape, bitmap, projection, pxRangeTexels);
 		return bitmap;
 	}
 
@@ -238,5 +239,144 @@ internal static class MsdfGenerator
 		}
 	}
 
+	/// <summary>
+	/// Error correction between texels, where a renderer actually samples. A texel can be right at its centre yet clash with
+	/// a neighbour: where overlapping contours cross (the stem through a <c>$</c>), adjacent texels take their channels from
+	/// different edges, and interpolating each channel separately then taking the median dips across 0.5 in a thin sliver
+	/// well inside the ink. Checked on the 8-bit values the page will hold, as a renderer's filter reads them:
+	/// <list type="bullet">
+	/// <item>between neighbours along a row or column each channel is linear, so the median of the three is extreme only at
+	/// the ends or where two channels cross; checking there, and where the true distance comes within
+	/// <see cref="ClashMarginTexels"/> of the edge, finds every flip exactly;</item>
+	/// <item>inside each square of four texels, on a grid of nine samples.</item>
+	/// </list>
+	/// A sample whose median is on the other side from the interpolated true distance, more than the margin from the edge,
+	/// is settled by the exact fill: the true distance rounds sharp corners, which the channels exist to keep, but a median
+	/// on the wrong side is a clash. The texels a clashing sample read collapse onto their true distance, which interpolates
+	/// without clashing; only those lose their multi-channel sharpening. Later passes catch a clash an earlier one's
+	/// flattening moved.
+	/// </summary>
+	private static void CorrectInterpolation(Shape shape, GlyphBitmap bitmap, CellProjection projection, double pxRangeTexels)
+	{
+		var w = bitmap.Width;
+		var h = bitmap.Height;
+		var px = bitmap.Pixels;
+		var flatten = new bool[w * h];
+		Span<double> candidates = stackalloc double[8];
+		for (var pass = 0; pass < 3; pass++)
+		{
+			Array.Clear(flatten);
+			var any = false;
+			for (var y = 0; y < h; y++)
+			{
+				for (var x = 0; x < w; x++)
+				{
+					if (x + 1 < w)
+						any |= CheckPair(x, y, x + 1, y, candidates);
+					if (y + 1 < h)
+						any |= CheckPair(x, y, x, y + 1, candidates);
+					if (x + 1 >= w || y + 1 >= h)
+						continue;
+					for (var j = 1; j < 4; j++)
+					{
+						for (var i = 1; i < 4; i++)
+							any |= CheckSquare(x, y, i / 4.0, j / 4.0);
+					}
+				}
+			}
+
+			if (!any)
+				return;
+			for (var i = 0; i < flatten.Length; i++)
+			{
+				if (!flatten[i])
+					continue;
+				var o = i * 4;
+				px[o] = px[o + 1] = px[o + 2] = px[o + 3];
+			}
+		}
+
+		// The texels (ax, ay) and (bx, by), one apart along a row or column.
+		bool CheckPair(int ax, int ay, int bx, int by, Span<double> ts)
+		{
+			var a = (ay * w + ax) * 4;
+			var b = (by * w + bx) * 4;
+			var n = 0;
+			for (var i = 0; i < 3; i++)
+			{
+				for (var j = i + 1; j < 3; j++)
+				{
+					var da = Quantize(px[a + i]) - Quantize(px[a + j]);
+					var db = Quantize(px[b + i]) - Quantize(px[b + j]);
+					if (da * db < 0)
+						ts[n++] = da / (da - db);
+				}
+			}
+
+			// Where the interpolated true distance crosses the margin either side of the edge.
+			var ta = Quantize(px[a + 3]);
+			var tb = Quantize(px[b + 3]);
+			var margin = ClashMarginTexels / pxRangeTexels;
+			foreach (var level in (ReadOnlySpan<double>)[0.5 - margin, 0.5 + margin])
+			{
+				if ((ta - level) * (tb - level) < 0)
+					ts[n++] = (ta - level) / (ta - tb);
+			}
+
+			for (var k = 0; k < n; k++)
+			{
+				var t = ts[k];
+				var median = Median(Lerp(a, b, 0, t), Lerp(a, b, 1, t), Lerp(a, b, 2, t));
+				if (!Clashes(median, Lerp(a, b, 3, t), ax + (bx - ax) * t, ay + (by - ay) * t))
+					continue;
+				flatten[ay * w + ax] = flatten[by * w + bx] = true;
+				return true;
+			}
+
+			return false;
+		}
+
+		// The sample at (x + ox, y + oy) inside the square of four texels from (x, y).
+		bool CheckSquare(int x, int y, double ox, double oy)
+		{
+			Span<double> c = stackalloc double[4];
+			var o00 = (y * w + x) * 4;
+			var o10 = o00 + 4;
+			var o01 = o00 + w * 4;
+			var o11 = o01 + 4;
+			for (var ch = 0; ch < 4; ch++)
+			{
+				var top = Quantize(px[o00 + ch]) * (1 - ox) + Quantize(px[o10 + ch]) * ox;
+				var bottom = Quantize(px[o01 + ch]) * (1 - ox) + Quantize(px[o11 + ch]) * ox;
+				c[ch] = top * (1 - oy) + bottom * oy;
+			}
+
+			if (!Clashes(Median(c[0], c[1], c[2]), c[3], x + ox, y + oy))
+				return false;
+			flatten[y * w + x] = flatten[y * w + x + 1] = flatten[(y + 1) * w + x] = flatten[(y + 1) * w + x + 1] = true;
+			return true;
+		}
+
+		double Lerp(int a, int b, int channel, double t) => Quantize(px[a + channel]) * (1 - t) + Quantize(px[b + channel]) * t;
+
+		// A median on the wrong side, away from the edge: the side the true distance gives, unless the exact fill there says
+		// the true distance is the one that is wrong (rounding a sharp corner the median keeps).
+		bool Clashes(double median, double trueValue, double sx, double sy)
+		{
+			if (Math.Abs(trueValue - 0.5) * pxRangeTexels < ClashMarginTexels || median > 0.5 == trueValue > 0.5)
+				return false;
+			return median > 0.5 != (shape.WindingAt(projection.Project(sx, sy)) != 0);
+		}
+	}
+
+	/// <summary>How far from the true edge, in texels, a sample must be for its side to be checked against the exact fill:
+	/// half a texel, inside which the antialiasing ramp legitimately straddles the edge.</summary>
+	private const double ClashMarginTexels = 0.25;
+
+	// A channel value as the page will hold it: the baker's quantization to a byte, back in 0..1.
+	private static double Quantize(float v) => Math.Clamp((int)(v * 255f + 0.5f), 0, 255) / 255.0;
+
 	private static float Median(float a, float b, float c) => Math.Max(Math.Min(a, b), Math.Min(Math.Max(a, b), c));
+
+	private static double Median(double a, double b, double c) => Math.Max(Math.Min(a, b), Math.Min(Math.Max(a, b), c));
 }

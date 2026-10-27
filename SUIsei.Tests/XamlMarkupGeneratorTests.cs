@@ -118,6 +118,26 @@ public sealed class XamlMarkupGeneratorTests
 	}
 
 	[Test]
+	public void Typography_NumeralAlignment_is_WinUI_s_attached_property_on_a_text_block()
+	{
+		var code = Generates("""<TextBlock Text="12" Typography.NumeralAlignment="Tabular" />""");
+		code.ShouldContain("global::SUIsei.Documents.Typography.SetNumeralAlignment(");
+		code.ShouldContain("global::SUIsei.FontNumeralAlignment.Tabular");
+		Generates("""<TextBlock Text="12"><Typography.NumeralAlignment>Proportional</Typography.NumeralAlignment></TextBlock>""")
+			.ShouldContain("global::SUIsei.FontNumeralAlignment.Proportional");
+	}
+
+	[Test]
+	[Arguments("<Border Typography.NumeralAlignment=\"Tabular\" />", "SUISEI004")]
+	[Arguments("<TextBlock Typography.NumeralAlignment=\"Wide\" />", "SUISEI012")]
+	public void Typography_NumeralAlignment_off_a_text_block_or_with_an_unknown_value_is_reported_at_its_line(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
 	[Arguments("<Border suisei:StrokeTrim.End=\"0.5\" />")]
 	[Arguments("<Border><suisei:StrokeTrim.End>0.5</suisei:StrokeTrim.End></Border>")]
 	public void An_attached_property_on_an_element_its_setter_does_not_take_is_SUISEI004_at_its_line(string body)

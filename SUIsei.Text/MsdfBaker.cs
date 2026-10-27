@@ -71,9 +71,9 @@ public sealed class BakeOptions
 {
 	/// <summary>Charset range tokens (block names / <c>U+</c> ranges / "ascii"). Empty ⇒ printable ASCII.</summary>
 	public IReadOnlyList<string> Charset { get; init; } = [];
-	public int PxRange { get; init; } = 4;
-	public int GlyphSize { get; init; } = 32;
-	public int AtlasPageSize { get; init; } = 1024;
+	public int PxRange { get; init; } = Fontset.DefaultPxRange;
+	public int GlyphSize { get; init; } = Fontset.DefaultGlyphSize;
+	public int AtlasPageSize { get; init; } = Fontset.DefaultAtlasPageSize;
 
 	/// <summary>Key the atlas by font glyph id (for a shaper) instead of by code point. Default false.</summary>
 	public bool GlyphIdKeyed { get; init; }

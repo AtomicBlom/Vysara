@@ -35,6 +35,17 @@
          per-kind math (and the RT-stack layer composite) the GPU runs, so group opacity is asserted at the pixel
          level with no GPU. -->
     <ProjectReference Include="..\SUIsei.Rasterizer\SUIsei.Rasterizer.csproj" />
+    <!-- The MTSDF generator, tested against the font program it bakes: the exact fill its field must reconstruct, and
+         the committed default atlas, which must be what baking its fontset produces. -->
+    <ProjectReference Include="..\SUIsei.Text\SUIsei.Text.csproj" />
+    <!-- The HarfBuzz shaper, to check OpenType features reach HarfBuzz. Its native library ships for Windows only, so
+         those tests skip elsewhere. -->
+    <ProjectReference Include="..\SUIsei.HarfBuzz\SUIsei.HarfBuzz.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\SUIsei\Assets\Fonts\CascadiaCode.ttf" LogicalName="CascadiaCode.ttf" />
+    <EmbeddedResource Include="..\SUIsei\Assets\Fonts\ui-default.fontset.json" LogicalName="ui-default.fontset.json" />
   </ItemGroup>
 
   <Import Project="..\build\SUIsei.targets" />

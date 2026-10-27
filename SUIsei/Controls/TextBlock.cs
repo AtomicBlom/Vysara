@@ -1,12 +1,15 @@
 using System.Numerics;
+using SUIsei.Documents;
 using SUIsei.Media;
 
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A run of text. Measures and emits glyphs against the engine's default MTSDF font
-/// (<see cref="FontAtlas.Default"/>): an advance-based width (no HarfBuzz shaping) and a
-/// <see cref="GlyphRunContent"/> the compositor lays out into <see cref="UIPrimKind.Glyph"/> draws.
+/// A run of text. Measures and emits glyphs against its root's font (<see cref="UIRoot.Font"/>, the embedded
+/// <see cref="FontAtlas.Default"/> unless the host sets one) through that atlas's shaper, with the OpenType features
+/// its <see cref="Documents.Typography"/> settings name, and hands the same font and features to the
+/// <see cref="GlyphRunContent"/> the compositor lays out into <see cref="UIPrimKind.Glyph"/> draws, so the run draws in
+/// the width layout measured.
 /// </summary>
 public sealed class TextBlock : FrameworkElement
 {
@@ -27,7 +30,7 @@ public sealed class TextBlock : FrameworkElement
 	// The paint of text with no Foreground. Shared by every such run and never changed.
 	private static readonly CompositionColorBrush DefaultForeground = new(HdrColor.FromRgb(255, 255, 255));
 
-	/// <summary>The text to lay out and render as MTSDF glyphs (advance-based width; no HarfBuzz shaping).</summary>
+	/// <summary>The text to lay out and render as MTSDF glyphs, single-line.</summary>
 	public string Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
 
 	/// <summary>Font size in DIPs.</summary>
@@ -38,12 +41,12 @@ public sealed class TextBlock : FrameworkElement
 
 	protected override Size MeasureOverride(Size available)
 	{
-		var font = FontAtlas.Default;
+		var font = TextFont;
 		var height = font.LineHeight * FontSize;
 		var text = Text;
 		if (string.IsNullOrEmpty(text))
 			return new Size(0f, height);
-		var width = MathF.Min(font.MeasureWidth(text) * FontSize, available.Width);
+		var width = MathF.Min(font.MeasureWidth(text, Typography.FeaturesOf(this)) * FontSize, available.Width);
 		return new Size(width, height);
 	}
 
@@ -53,6 +56,9 @@ public sealed class TextBlock : FrameworkElement
 	private protected override void OnLiveTreeChanged(bool attached)
 	{
 		Listen(Foreground, attached);
+		// A root brings its font: one moved between roots measures again with the new root's.
+		if (attached)
+			InvalidateMeasure();
 		base.OnLiveTreeChanged(attached);
 	}
 
@@ -62,7 +68,8 @@ public sealed class TextBlock : FrameworkElement
 		if (string.IsNullOrEmpty(text))
 			return null;
 		var content = _glyphRun ??= new GlyphRunContent();
-		content.Update(text, FontSize, Foreground?.CompositionBrush ?? DefaultForeground, new Vector2(LayoutRect.Width, LayoutRect.Height));
+		content.Update(text, FontSize, Foreground?.CompositionBrush ?? DefaultForeground, new Vector2(LayoutRect.Width, LayoutRect.Height),
+			TextFont, Typography.FeaturesOf(this));
 		return content;
 	}
 }

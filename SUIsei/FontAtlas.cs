@@ -46,6 +46,13 @@ public sealed class FontAtlas : IGlyphSource
 	/// <summary>The EM size the atlas was rasterized at, in texels.</summary>
 	public float BakeSize { get; }
 
+	/// <summary>
+	/// The SDF distance range in EM: <see cref="DistanceRange"/> over <see cref="BakeSize"/>. The field holds distances up
+	/// to half of it either side of each glyph's edge, and each glyph's quad reaches that far past its ink, so it is as far
+	/// as anything drawn from the field (an outline, a shadow's softness) can reach, at any font size.
+	/// </summary>
+	public float DistanceRangeEm => DistanceRange / BakeSize;
+
 	/// <summary>Line advance in EM units (multiply by the on-screen font px size for the pixel line height).</summary>
 	public float LineHeight { get; }
 
@@ -68,8 +75,9 @@ public sealed class FontAtlas : IGlyphSource
 	public bool TryGetGlyphId(int codepoint, out int glyphId) => _codepointToGid.TryGetValue(codepoint, out glyphId);
 
 	/// <summary>
-	/// The MTSDF distance range in screen pixels for a glyph run drawn at <paramref name="fontSizePx"/>.
-	/// Fed to the shader as the smoothstep scale; scales with the on-screen size vs the baked EM size.
+	/// The MTSDF distance range in screen pixels for glyphs whose EM lands at <paramref name="fontSizePx"/> pixels, after every
+	/// transform above them (the layout scale included). Fed to the shader as the coverage scale, so the edge ramp is one pixel
+	/// wide; scales with the on-screen size vs the baked EM size.
 	/// </summary>
 	public float ScreenPxRange(float fontSizePx) => DistanceRange * fontSizePx / BakeSize;
 
@@ -86,8 +94,10 @@ public sealed class FontAtlas : IGlyphSource
 		return _glyphs.TryGetValue(' ', out var space) ? space.Advance : 0.5f;
 	}
 
-	/// <summary>Measure a single-line string's advance width in EM units, through the atlas's <see cref="Shaper"/>.</summary>
-	public float MeasureWidth(ReadOnlySpan<char> text) => Shaper.Measure(text, this);
+	/// <summary>Measure a single-line string's advance width in EM units, through the atlas's <see cref="Shaper"/>, with
+	/// <paramref name="features"/> applied (none when null): the width a run laid out with the same features draws at.</summary>
+	public float MeasureWidth(ReadOnlySpan<char> text, FontFeatureSet? features = null) =>
+		Shaper.Measure(text, this, features ?? FontFeatureSet.Empty);
 
 	/// <summary>Decode an atlas from its JSON layout + PNG page streams.</summary>
 	public static FontAtlas Load(Stream json, Stream png)

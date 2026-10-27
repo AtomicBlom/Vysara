@@ -1,4 +1,5 @@
 using System.Globalization;
+using SUIsei.Text.Atlas;
 
 namespace SUIsei.Text.Tool;
 
@@ -10,9 +11,9 @@ internal sealed class ToolOptions
 	public string? Name { get; private set; }
 	public string OutputDir { get; private set; } = ".";
 	public IReadOnlyList<string> Charset { get; private set; } = [];
-	public int PxRange { get; private set; } = 4;
-	public int GlyphSize { get; private set; } = 32;
-	public int PageSize { get; private set; } = 1024;
+	public int PxRange { get; private set; } = Fontset.DefaultPxRange;
+	public int GlyphSize { get; private set; } = Fontset.DefaultGlyphSize;
+	public int PageSize { get; private set; } = Fontset.DefaultAtlasPageSize;
 	public string? PreviewText { get; private set; }
 	public float PreviewSize { get; private set; } = 48f;
 
