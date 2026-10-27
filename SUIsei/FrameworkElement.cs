@@ -6,19 +6,121 @@ namespace SUIsei;
 /// (and the height pair), <see cref="Margin"/>, and alignment. It implements the WinUI
 /// <c>MeasureCore</c>/<c>ArrangeCore</c> wrapper — deflate by margin, clamp to min/max/explicit, call the
 /// element's <c>MeasureOverride</c>/<c>ArrangeOverride</c>, reinflate — so every control only writes its
-/// intrinsic sizing. Backing storage uses the C# 14 <c>field</c> keyword (no hand-declared fields).
+/// intrinsic sizing.
+/// <para>
+/// The layout inputs are dependency properties, as in WinUI, so a <see cref="Style"/> sets them and a storyboard
+/// animates the sizes. Layout reads them on every pass, so they are field-backed, as WinUI's core keeps them: each one's
+/// value is in a field here, which measure and arrange read, and an element whose layout only code or markup set holds
+/// nothing for them in the property store.
+/// </para>
 /// </summary>
 public abstract class FrameworkElement : UIElement
 {
-	public float Width { get; set { if (!Same(field, value)) { field = value; InvalidateMeasure(); } } } = float.NaN;
-	public float Height { get; set { if (!Same(field, value)) { field = value; InvalidateMeasure(); } } } = float.NaN;
-	public float MinWidth { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
-	public float MinHeight { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
-	public float MaxWidth { get; set { if (field != value) { field = value; InvalidateMeasure(); } } } = float.PositiveInfinity;
-	public float MaxHeight { get; set { if (field != value) { field = value; InvalidateMeasure(); } } } = float.PositiveInfinity;
-	public Thickness Margin { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
-	public HorizontalAlignment HorizontalAlignment { get; set { if (field != value) { field = value; InvalidateArrange(); } } } = HorizontalAlignment.Stretch;
-	public VerticalAlignment VerticalAlignment { get; set { if (field != value) { field = value; InvalidateArrange(); } } } = VerticalAlignment.Stretch;
+	/// <summary>The element's width in DIPs. NaN, the default, is Auto: the width comes from the content and the slot.
+	/// XAML writes Auto as <c>Width="Auto"</c>.</summary>
+	public static readonly DependencyProperty<FrameworkElement, float> WidthProperty =
+		DependencyProperty.Register(nameof(Width),
+			new PropertyMetadata<FrameworkElement, float>
+			{
+				DefaultValue = float.NaN,
+				Invalidates = InvalidationFlags.Measure,
+				Field = static e => ref e._width,
+			});
+
+	/// <summary>The element's height in DIPs. NaN, the default, is Auto, as for <see cref="WidthProperty"/>.</summary>
+	public static readonly DependencyProperty<FrameworkElement, float> HeightProperty =
+		DependencyProperty.Register(nameof(Height),
+			new PropertyMetadata<FrameworkElement, float>
+			{
+				DefaultValue = float.NaN,
+				Invalidates = InvalidationFlags.Measure,
+				Field = static e => ref e._height,
+			});
+
+	public static readonly DependencyProperty<FrameworkElement, float> MinWidthProperty =
+		DependencyProperty.Register(nameof(MinWidth),
+			new PropertyMetadata<FrameworkElement, float>
+			{
+				Invalidates = InvalidationFlags.Measure,
+				Field = static e => ref e._minWidth,
+			});
+
+	public static readonly DependencyProperty<FrameworkElement, float> MinHeightProperty =
+		DependencyProperty.Register(nameof(MinHeight),
+			new PropertyMetadata<FrameworkElement, float>
+			{
+				Invalidates = InvalidationFlags.Measure,
+				Field = static e => ref e._minHeight,
+			});
+
+	public static readonly DependencyProperty<FrameworkElement, float> MaxWidthProperty =
+		DependencyProperty.Register(nameof(MaxWidth),
+			new PropertyMetadata<FrameworkElement, float>
+			{
+				DefaultValue = float.PositiveInfinity,
+				Invalidates = InvalidationFlags.Measure,
+				Field = static e => ref e._maxWidth,
+			});
+
+	public static readonly DependencyProperty<FrameworkElement, float> MaxHeightProperty =
+		DependencyProperty.Register(nameof(MaxHeight),
+			new PropertyMetadata<FrameworkElement, float>
+			{
+				DefaultValue = float.PositiveInfinity,
+				Invalidates = InvalidationFlags.Measure,
+				Field = static e => ref e._maxHeight,
+			});
+
+	public static readonly DependencyProperty<FrameworkElement, Thickness> MarginProperty =
+		DependencyProperty.Register(nameof(Margin),
+			new PropertyMetadata<FrameworkElement, Thickness>
+			{
+				Invalidates = InvalidationFlags.Measure,
+				Field = static e => ref e._margin,
+			});
+
+	public static readonly DependencyProperty<FrameworkElement, HorizontalAlignment> HorizontalAlignmentProperty =
+		DependencyProperty.Register(nameof(HorizontalAlignment),
+			new PropertyMetadata<FrameworkElement, HorizontalAlignment>
+			{
+				DefaultValue = HorizontalAlignment.Stretch,
+				Invalidates = InvalidationFlags.Arrange,
+				Field = static e => ref e._horizontalAlignment,
+			});
+
+	public static readonly DependencyProperty<FrameworkElement, VerticalAlignment> VerticalAlignmentProperty =
+		DependencyProperty.Register(nameof(VerticalAlignment),
+			new PropertyMetadata<FrameworkElement, VerticalAlignment>
+			{
+				DefaultValue = VerticalAlignment.Stretch,
+				Invalidates = InvalidationFlags.Arrange,
+				Field = static e => ref e._verticalAlignment,
+			});
+
+	/// <summary>An object of the app's own kept with the element, as WinUI's <c>Tag</c>. SUIsei never reads it.</summary>
+	public static readonly DependencyProperty<FrameworkElement, object?> TagProperty =
+		DependencyProperty.Register(nameof(Tag), new PropertyMetadata<FrameworkElement, object?>());
+
+	// The layout properties' values, kept by the property store (PropertyMetadata.Field); each starts at its default.
+	private float _width = float.NaN, _height = float.NaN, _minWidth, _minHeight;
+	private float _maxWidth = float.PositiveInfinity, _maxHeight = float.PositiveInfinity;
+	private Thickness _margin;
+	private HorizontalAlignment _horizontalAlignment = HorizontalAlignment.Stretch;
+	private VerticalAlignment _verticalAlignment = VerticalAlignment.Stretch;
+
+	public float Width { get => _width; set => SetValue(WidthProperty, value); }
+	public float Height { get => _height; set => SetValue(HeightProperty, value); }
+	public float MinWidth { get => _minWidth; set => SetValue(MinWidthProperty, value); }
+	public float MinHeight { get => _minHeight; set => SetValue(MinHeightProperty, value); }
+	public float MaxWidth { get => _maxWidth; set => SetValue(MaxWidthProperty, value); }
+	public float MaxHeight { get => _maxHeight; set => SetValue(MaxHeightProperty, value); }
+	public Thickness Margin { get => _margin; set => SetValue(MarginProperty, value); }
+	public HorizontalAlignment HorizontalAlignment { get => _horizontalAlignment; set => SetValue(HorizontalAlignmentProperty, value); }
+	public VerticalAlignment VerticalAlignment { get => _verticalAlignment; set => SetValue(VerticalAlignmentProperty, value); }
+
+	/// <summary>An object of the app's own kept with the element, such as what a shared click handler needs to tell its
+	/// senders apart. SUIsei never reads it.</summary>
+	public object? Tag { get => GetValue(TagProperty); set => SetValue(TagProperty, value); }
 
 	/// <summary>Optional name (the <c>x:Name</c> the generator assigns; diagnostics only).</summary>
 	public string? Name { get; set; }
@@ -49,9 +151,6 @@ public abstract class FrameworkElement : UIElement
 		}
 		return null;
 	}
-
-	// NaN-safe equality so re-assigning Auto (NaN) doesn't read as a change.
-	private static bool Same(float a, float b) => a.Equals(b);
 
 	protected override Size MeasureCore(Size availableSize)
 	{

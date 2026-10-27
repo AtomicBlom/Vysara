@@ -3,8 +3,9 @@ using System.Globalization;
 namespace SUIsei.Markup;
 
 /// <summary>
-/// The text forms XAML values take: colours (<c>#RRGGBB</c>, <c>#AARRGGBB</c>, or one of WinUI's named colours) and
-/// lists of numbers separated by commas or whitespace (points, vectors, thicknesses).
+/// The text forms XAML values take: colours (<c>#RRGGBB</c>, <c>#AARRGGBB</c>, or one of WinUI's named colours), lists of
+/// numbers separated by commas or whitespace (points, vectors, thicknesses), grid lengths, durations and repeat
+/// behaviours.
 /// <para>
 /// This file is compiled into both the runtime and the netstandard2.0 XAML generator, which links it as source, so a
 /// value the generator accepts at compile time parses the same way at runtime. It uses only APIs both targets have.
@@ -53,6 +54,87 @@ internal static class XamlValueSyntax
 				return null;
 		}
 		return values;
+	}
+
+	/// <summary>The three forms a grid length takes.</summary>
+	public enum GridLengthForm { Auto, Pixels, Stars }
+
+	/// <summary>Parse a WinUI grid length: <c>Auto</c> (any case), <c>*</c> or <c>N*</c> (a star weight), or a pixel
+	/// number. <paramref name="value"/> is the weight or the pixels, and 1 for a bare <c>*</c>.</summary>
+	public static bool TryParseGridLength(string text, out GridLengthForm form, out float value)
+	{
+		var s = text.Trim();
+		form = GridLengthForm.Pixels;
+		value = 0f;
+		if (string.Equals(s, "Auto", StringComparison.OrdinalIgnoreCase))
+		{
+			form = GridLengthForm.Auto;
+			return true;
+		}
+		if (s == "*")
+		{
+			form = GridLengthForm.Stars;
+			value = 1f;
+			return true;
+		}
+		if (s.EndsWith("*", StringComparison.Ordinal))
+		{
+			if (ParseNumbers(s.Substring(0, s.Length - 1)) is not { Length: 1 } weight)
+				return false;
+			form = GridLengthForm.Stars;
+			value = weight[0];
+			return true;
+		}
+		if (ParseNumbers(s) is not { Length: 1 } pixels)
+			return false;
+		value = pixels[0];
+		return true;
+	}
+
+	/// <summary>Parse a duration, <c>h:m:s</c>, <c>m:s</c> or <c>s</c>, where the seconds may carry a fraction, to
+	/// total seconds.</summary>
+	public static bool TryParseDuration(string text, out double seconds)
+	{
+		seconds = 0;
+		var parts = text.Trim().Split(':');
+		try
+		{
+			switch (parts.Length)
+			{
+				case 3:
+					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 3600
+						+ int.Parse(parts[1], CultureInfo.InvariantCulture) * 60
+						+ double.Parse(parts[2], CultureInfo.InvariantCulture);
+					return true;
+				case 2:
+					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 60
+						+ double.Parse(parts[1], CultureInfo.InvariantCulture);
+					return true;
+				case 1:
+					seconds = double.Parse(parts[0], CultureInfo.InvariantCulture);
+					return true;
+				default:
+					return false;
+			}
+		}
+		catch (Exception e) when (e is FormatException or OverflowException)
+		{
+			return false;
+		}
+	}
+
+	/// <summary>Parse a repeat behaviour: <c>Forever</c> (any case), or a positive iteration count with an optional
+	/// <c>x</c>, as <c>3x</c> or <c>0.5x</c>.</summary>
+	public static bool TryParseRepeatBehavior(string text, out bool forever, out double count)
+	{
+		var s = text.Trim();
+		forever = string.Equals(s, "Forever", StringComparison.OrdinalIgnoreCase);
+		count = 0;
+		if (forever)
+			return true;
+		var number = s.EndsWith("x", StringComparison.OrdinalIgnoreCase) ? s.Substring(0, s.Length - 1) : s;
+		return double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out count)
+			&& !double.IsNaN(count) && !double.IsInfinity(count) && count > 0;
 	}
 
 	private static readonly char[] Separators = [',', ' ', '\t', '\r', '\n'];

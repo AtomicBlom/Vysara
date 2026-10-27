@@ -1,9 +1,15 @@
+using System.Numerics;
+
 namespace SUIsei;
 
 /// <summary>
 /// The base of everything that carries dependency properties. Holds a sparse, int-keyed
 /// effective-value store and resolves the WinUI value-precedence ladder:
-/// <para><c>Animation &gt; Local &gt; Style &gt; Inherited &gt; Default</c></para>
+/// <para><c>Animation &gt; Local &gt; Template &gt; Style &gt; BuiltInStyle &gt; Inherited &gt; Default</c></para>
+/// The Template rung holds what a <c>{TemplateBinding}</c> pushes onto a template part, so a Local value an app sets
+/// on that part wins over the template, as in WinUI. The BuiltInStyle rung holds what a control gives itself, the way
+/// WinUI's default style does: its built-in template, and that a control is a tab stop. An app's style or its own
+/// value overrides either, and a diagnostics read can tell them from the app's markup.
 /// A set recomputes the top of the ladder, coerces it, fires the typed change callback only when the
 /// <em>coerced resolved</em> value changes, and ORs the property's <see cref="InvalidationFlags"/> into the element (via
 /// <see cref="OnPropertyInvalidated"/>). Reflection-free: dispatch goes through the typed delegates on
@@ -13,11 +19,16 @@ namespace SUIsei;
 /// of that property to this object. After that a write, its coercion, its change check and its change callback never
 /// box, so animating a value-type property every frame allocates nothing.
 /// </para>
+/// <para>
+/// A field-backed property (SUIsei's layout properties, such as <c>Width</c>) keeps its resolved value in a field of its
+/// owner, which a read returns. Its local value lives there too until a style, inherited or animated value makes it a
+/// slot, so an element whose layout only code or markup set holds no store at all for it.
+/// </para>
 /// </summary>
 public abstract class DependencyObject
 {
 	/// <summary>A rung of the precedence ladder below the default, highest first.</summary>
-	internal enum ValueRung { Animation = 0, Local = 1, Style = 2, Inherited = 3 }
+	internal enum ValueRung { Animation = 0, Local = 1, Template = 2, Style = 3, BuiltInStyle = 4, Inherited = 5 }
 
 	// One property's value on each rung, with a bitmask of the rungs that hold one.
 	private abstract class ValueSlot
@@ -29,7 +40,7 @@ public abstract class DependencyObject
 
 	private sealed class ValueSlot<T> : ValueSlot
 	{
-		private T _animation = default!, _local = default!, _style = default!, _inherited = default!;
+		private T _animation = default!, _local = default!, _template = default!, _style = default!, _builtInStyle = default!, _inherited = default!;
 
 		public void Put(ValueRung r, T value, bool has)
 		{
@@ -37,7 +48,9 @@ public abstract class DependencyObject
 			{
 				case ValueRung.Animation: _animation = value; break;
 				case ValueRung.Local: _local = value; break;
+				case ValueRung.Template: _template = value; break;
 				case ValueRung.Style: _style = value; break;
+				case ValueRung.BuiltInStyle: _builtInStyle = value; break;
 				default: _inherited = value; break;
 			}
 			if (has) Set |= (byte)(1 << (int)r);
@@ -48,7 +61,9 @@ public abstract class DependencyObject
 		{
 			if (Has(ValueRung.Animation)) { value = _animation; return true; }
 			if (Has(ValueRung.Local)) { value = _local; return true; }
+			if (Has(ValueRung.Template)) { value = _template; return true; }
 			if (Has(ValueRung.Style)) { value = _style; return true; }
+			if (Has(ValueRung.BuiltInStyle)) { value = _builtInStyle; return true; }
 			if (Has(ValueRung.Inherited)) { value = _inherited; return true; }
 			value = default!;
 			return false;
@@ -57,14 +72,19 @@ public abstract class DependencyObject
 
 	private Dictionary<int, ValueSlot>? _slots;
 
+	// The field-backed properties (PropertyMetadata.Field) whose local value is in the owner's field rather than a slot, by
+	// DependencyProperty.FieldBit. A property that has a slot keeps its local value there instead.
+	private ulong _fieldLocals;
+
 	// {TemplateBinding} targets keyed by the source DP: a OneWay push from this object's property to a child setter,
 	// fired on every resolved-value change (and once at registration). Each is an Action<TValue> of its property's
 	// value type. Only allocated when a template wires one.
 	private Dictionary<int, Delegate>? _templateTargets;
 
-	/// <summary>Read the property's resolved value (top of the precedence ladder, else its typed default), coerced.</summary>
+	/// <summary>Read the property's resolved value (top of the precedence ladder, else its typed default), coerced. A
+	/// field-backed property's field holds it already.</summary>
 	public TValue GetValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
-		Effective(dp, Slot(dp));
+		dp.FieldBit != 0 ? dp.Metadata.Field!((TOwner)this) : Effective(dp, Slot(dp));
 
 	/// <summary>Write the <b>Local</b> rung (the public set). Never clobbers an active Animation value — animation
 	/// still wins until cleared.</summary>
@@ -85,12 +105,50 @@ public abstract class DependencyObject
 	/// <summary>Clear the <b>Style</b> rung (called when a new style replaces an old one so stale setters are removed).</summary>
 	internal void ClearStyleValue(DependencyProperty dp) => dp.ClearRung(this, ValueRung.Style);
 
+	/// <summary>Push the <b>Template</b> rung (a <c>{TemplateBinding}</c> onto a template part; below Local, above Style).</summary>
+	internal void SetTemplateValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, TValue value) where TOwner : DependencyObject =>
+		SetRung(dp, ValueRung.Template, value, hasValue: true);
+
+	/// <summary>Clear the <b>Template</b> rung.</summary>
+	internal void ClearTemplateValue(DependencyProperty dp) => dp.ClearRung(this, ValueRung.Template);
+
+	/// <summary>Write the <b>BuiltInStyle</b> rung: a value a control gives itself, as WinUI's default style does (below
+	/// Style, above Inherited), so the app's style or its own value overrides it.</summary>
+	internal void SetBuiltInValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, TValue value) where TOwner : DependencyObject =>
+		SetRung(dp, ValueRung.BuiltInStyle, value, hasValue: true);
+
 	/// <summary>Push the <b>Inherited</b> rung (property-value inheritance; below Style).</summary>
 	internal void SetInheritedValue(DependencyProperty dp, object? value) => dp.SetRungBoxed(this, ValueRung.Inherited, value);
 
 	/// <summary>True if a Local value is currently set (independent of the resolved value).</summary>
 	internal bool HasLocalValue(DependencyProperty dp) =>
-		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Has(ValueRung.Local);
+		(_fieldLocals & dp.FieldBit) != 0
+		|| (_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Has(ValueRung.Local));
+
+	/// <summary>The highest rung holding a value for <paramref name="dp"/>, or null when it resolves to its default.</summary>
+	internal ValueRung? TopRung(DependencyProperty dp)
+	{
+		if ((_fieldLocals & dp.FieldBit) != 0)
+			return ValueRung.Local; // a local value held in its field, which means the property has no slot
+		if (_slots is null || !_slots.TryGetValue(dp.GlobalIndex, out var slot))
+			return null;
+		for (var rung = ValueRung.Animation; rung <= ValueRung.Inherited; rung++)
+		{
+			if (slot.Has(rung))
+				return rung;
+		}
+		return null;
+	}
+
+	/// <summary>The <see cref="DependencyProperty.GlobalIndex"/> of each property this object holds a value for on some
+	/// rung, a field-backed property's local value in its field included.</summary>
+	internal int[] StoredPropertyIndices()
+	{
+		var indices = _slots is null ? [] : _slots.Where(static s => s.Value.Set != 0).Select(static s => s.Key).ToList();
+		for (var locals = _fieldLocals; locals != 0; locals &= locals - 1)
+			indices.Add(DependencyProperty.FieldGlobalIndex(BitOperations.TrailingZeroCount(locals)));
+		return [.. indices];
+	}
 
 	/// <summary>Write (or, with <paramref name="hasValue"/> false, clear) one rung, then raise the change if the
 	/// coerced resolved value moved.</summary>
@@ -106,10 +164,21 @@ public abstract class DependencyObject
 		var slot = Slot(dp);
 		if (slot is null)
 		{
+			if (rung == ValueRung.Local && dp.Metadata.Field is { } fieldOf)
+			{
+				SetLocalField(dp, fieldOf, value, hasValue);
+				return;
+			}
 			if (!hasValue)
 				return; // clearing a rung of a property this object never held changes nothing
 			_slots ??= [];
 			_slots[dp.GlobalIndex] = slot = new ValueSlot<TValue>();
+			if ((_fieldLocals & dp.FieldBit) != 0)
+			{
+				// The local value moves from the field into the slot, which ranks it against the rung being written.
+				_fieldLocals &= ~dp.FieldBit;
+				slot.Put(ValueRung.Local, dp.Metadata.Field!((TOwner)this), true);
+			}
 		}
 
 		var oldValue = Effective(dp, slot);
@@ -119,6 +188,8 @@ public abstract class DependencyObject
 		if (EqualityComparer<TValue>.Default.Equals(oldValue, newValue))
 			return;
 
+		if (dp.Metadata.Field is { } resolvedField)
+			resolvedField((TOwner)this) = newValue;
 		dp.Metadata.PropertyChanged?.Invoke((TOwner)this, oldValue, newValue);
 		if (dp.Invalidates != InvalidationFlags.None)
 			OnPropertyInvalidated(dp, dp.Invalidates);
@@ -126,8 +197,38 @@ public abstract class DependencyObject
 			((Action<TValue>)push)(newValue);
 	}
 
+	// The local value of a field-backed property that holds no slot: it lives in the owner's field, and its bit in
+	// _fieldLocals records that it was set, so a style or animated value written later still ranks below it. The change is
+	// raised as SetRung raises it.
+	private void SetLocalField<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, FieldAccessor<TOwner, TValue> fieldOf, TValue value, bool hasValue)
+		where TOwner : DependencyObject
+	{
+		if (hasValue)
+			_fieldLocals |= dp.FieldBit;
+		else if ((_fieldLocals & dp.FieldBit) == 0)
+			return;
+		else
+		{
+			_fieldLocals &= ~dp.FieldBit;
+			value = dp.Metadata.DefaultValue;
+		}
+
+		ref var stored = ref fieldOf((TOwner)this);
+		var oldValue = stored;
+		if (EqualityComparer<TValue>.Default.Equals(oldValue, value))
+			return;
+		stored = value;
+		dp.Metadata.PropertyChanged?.Invoke((TOwner)this, oldValue, value);
+		if (dp.Invalidates != InvalidationFlags.None)
+			OnPropertyInvalidated(dp, dp.Invalidates);
+		if (_templateTargets is not null && _templateTargets.TryGetValue(dp.GlobalIndex, out var push))
+			((Action<TValue>)push)(value);
+	}
+
 	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> from <paramref name="source"/> on this object to a child setter.
-	/// The child is updated immediately with the current value and on every later change, with no boxing.
+	/// The child is updated immediately with the current value and on every later change, with no boxing. This is the form
+	/// for a target that is not a dependency property, which has no Template rung for the value to land on; a dependency
+	/// property target takes the overload that writes its Template rung.
 	/// Public so a generated (or hand-written) template factory can wire its template bindings without reflection.</summary>
 	public void RegisterTemplateBinding<TOwner, TValue>(DependencyProperty<TOwner, TValue> source, Action<TValue> push)
 		where TOwner : DependencyObject
@@ -138,6 +239,32 @@ public abstract class DependencyObject
 			: push;
 		push(GetValue(source));
 	}
+
+	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> from <paramref name="source"/> on this object to
+	/// <paramref name="targetProperty"/> on a template part. The part's <b>Template</b> rung is written now and on every
+	/// later change, so a Local value set on the part still wins, as in WinUI. Public so a generated (or hand-written)
+	/// template factory can wire its template bindings without reflection.</summary>
+	/// <param name="source">The templated control's property the value flows from.</param>
+	/// <param name="target">The template part the value flows to.</param>
+	/// <param name="targetProperty">The part's property, of the same value type as <paramref name="source"/>.</param>
+	public void RegisterTemplateBinding<TOwner, TValue, TTargetOwner>(DependencyProperty<TOwner, TValue> source,
+		DependencyObject target, DependencyProperty<TTargetOwner, TValue> targetProperty)
+		where TOwner : DependencyObject
+		where TTargetOwner : DependencyObject =>
+		RegisterTemplateBinding(source, value => target.SetTemplateValue(targetProperty, value));
+
+	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> between properties of different value types: as
+	/// <see cref="RegisterTemplateBinding{TOwner, TValue, TTargetOwner}(DependencyProperty{TOwner, TValue}, DependencyObject, DependencyProperty{TTargetOwner, TValue})"/>,
+	/// with each value passed through <paramref name="convert"/> on its way to the part's <b>Template</b> rung.</summary>
+	/// <param name="source">The templated control's property the value flows from.</param>
+	/// <param name="target">The template part the value flows to.</param>
+	/// <param name="targetProperty">The part's property.</param>
+	/// <param name="convert">Converts a source value to the part's value type.</param>
+	public void RegisterTemplateBinding<TOwner, TValue, TTargetOwner, TTargetValue>(DependencyProperty<TOwner, TValue> source,
+		DependencyObject target, DependencyProperty<TTargetOwner, TTargetValue> targetProperty, Func<TValue, TTargetValue> convert)
+		where TOwner : DependencyObject
+		where TTargetOwner : DependencyObject =>
+		RegisterTemplateBinding(source, value => target.SetTemplateValue(targetProperty, convert(value)));
 
 	private ValueSlot<TValue>? Slot<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
 		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) ? (ValueSlot<TValue>)s : null;

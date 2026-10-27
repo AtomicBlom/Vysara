@@ -14,12 +14,16 @@ public abstract class DependencyProperty
 	// int-keyed store instead of a reference-hashed dictionary.
 	private static int _next;
 
-	private protected DependencyProperty(string name, DependencyPropertyKind kind, InvalidationFlags invalidates)
+	private protected DependencyProperty(string name, DependencyPropertyKind kind, InvalidationFlags invalidates, Type ownerType, Type valueType)
 	{
 		GlobalIndex = Interlocked.Increment(ref _next) - 1;
 		Name = name;
 		Kind = kind;
 		Invalidates = invalidates;
+		OwnerType = ownerType;
+		ValueType = valueType;
+		if (Diagnostics.Enabled)
+			AddToRegistry(this);
 	}
 
 	/// <summary>Dense slot id assigned at registration (the store key — never a string/Type lookup).</summary>
@@ -33,6 +37,68 @@ public abstract class DependencyProperty
 
 	/// <summary>What a resolved-value change invalidates.</summary>
 	public InvalidationFlags Invalidates { get; }
+
+	// Field-backed properties (PropertyMetadata.Field) each take one bit of an object's record of the local values it
+	// holds in fields, so there can be 64 of them; the GlobalIndex of each, by its bit, for diagnostics to list them.
+	private static int _nextField;
+	private static readonly int[] FieldIndices = new int[64];
+
+	/// <summary>This property's bit in <see cref="DependencyObject"/>'s record of the local values it holds in fields, for a
+	/// field-backed property (<see cref="PropertyMetadata{TOwner, TValue}.Field"/>); 0 for any other.</summary>
+	internal ulong FieldBit { get; private protected init; }
+
+	/// <summary>The <see cref="GlobalIndex"/> of the field-backed property whose <see cref="FieldBit"/> is bit
+	/// <paramref name="bit"/>.</summary>
+	internal static int FieldGlobalIndex(int bit) => FieldIndices[bit];
+
+	private protected ulong NextFieldBit()
+	{
+		var index = Interlocked.Increment(ref _nextField) - 1;
+		if (index >= 64)
+			throw new InvalidOperationException($"{Name} would be field-backed property {index + 1}; DependencyObject records 64.");
+		FieldIndices[index] = GlobalIndex;
+		return 1UL << index;
+	}
+
+	/// <summary>The type that registered the property: the declaring control, or for an attached property the type
+	/// that declares it (<c>Grid</c> for <c>Grid.Row</c>).</summary>
+	internal Type OwnerType { get; }
+
+	/// <summary>The type of the property's value.</summary>
+	internal Type ValueType { get; }
+
+	// Each property by GlobalIndex, and each owner type's properties in registration order: what diagnostics lists for
+	// an object. Filled only while diagnostics are on, so a game that leaves them off keeps no table.
+	private static readonly Lock RegistryLock = new();
+	private static Dictionary<int, DependencyProperty>? _byIndex;
+	private static Dictionary<Type, List<DependencyProperty>>? _byOwner;
+
+	private static void AddToRegistry(DependencyProperty dp)
+	{
+		lock (RegistryLock)
+		{
+			(_byIndex ??= [])[dp.GlobalIndex] = dp;
+			_byOwner ??= [];
+			if (!_byOwner.TryGetValue(dp.OwnerType, out var list))
+				_byOwner[dp.OwnerType] = list = [];
+			list.Add(dp);
+		}
+	}
+
+	/// <summary>The properties <paramref name="owner"/> registered, normal and attached, in registration order; empty
+	/// unless diagnostics are on.</summary>
+	internal static DependencyProperty[] RegisteredBy(Type owner)
+	{
+		lock (RegistryLock)
+			return _byOwner is not null && _byOwner.TryGetValue(owner, out var list) ? [.. list] : [];
+	}
+
+	/// <summary>The property with <paramref name="globalIndex"/>, or null when diagnostics are off.</summary>
+	internal static DependencyProperty? FromIndex(int globalIndex)
+	{
+		lock (RegistryLock)
+			return _byIndex is not null && _byIndex.TryGetValue(globalIndex, out var dp) ? dp : null;
+	}
 
 	/// <summary>Whether an animation can drive this property: it has a
 	/// <see cref="PropertyMetadata{TOwner, TValue}.Lerp"/>, declared or standard for its type.</summary>
@@ -58,6 +124,14 @@ public abstract class DependencyProperty
 	/// holds none (or holds a value type) — how a property path steps from one object to the next.</summary>
 	internal abstract DependencyObject? GetObjectValue(DependencyObject target);
 
+	/// <summary>The property's resolved value on <paramref name="target"/>, boxed — the diagnostics read, never the
+	/// typed path.</summary>
+	internal abstract object? GetBoxedValue(DependencyObject target);
+
+	/// <summary>Whether <paramref name="value"/> can be stored in this property: an instance of its value type, or null
+	/// where the value type admits null.</summary>
+	internal abstract bool Accepts(object? value);
+
 	/// <summary>Whether <paramref name="target"/> can hold this property: any object for an attached property, else an
 	/// instance of its owner type.</summary>
 	internal abstract bool AppliesTo(DependencyObject target);
@@ -69,10 +143,17 @@ public abstract class DependencyProperty
 public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAnimationTarget<TValue> where TOwner : DependencyObject
 {
 	internal DependencyProperty(string name, DependencyPropertyKind kind, PropertyMetadata<TOwner, TValue> metadata)
-		: base(name, kind, metadata.Invalidates)
+		: base(name, kind, metadata.Invalidates, typeof(TOwner), typeof(TValue))
 	{
 		Metadata = metadata;
 		Lerp = metadata.Lerp ?? Lerps.For<TValue>();
+		if (metadata.Field is not null)
+		{
+			// The field holds the resolved value as is, so nothing may change it on the way out, and it starts at one default.
+			if (metadata.Coerce is not null || metadata.DefaultValueFor is not null || kind == DependencyPropertyKind.Attached)
+				throw new ArgumentException($"{name} keeps its value in a field, so it can have no Coerce or DefaultValueFor and cannot be attached.", nameof(metadata));
+			FieldBit = NextFieldBit();
+		}
 	}
 
 	public PropertyMetadata<TOwner, TValue> Metadata { get; }
@@ -94,6 +175,10 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 
 	internal override DependencyObject? GetObjectValue(DependencyObject target) =>
 		typeof(TValue).IsValueType ? null : target.GetValue(this) as DependencyObject;
+
+	internal override object? GetBoxedValue(DependencyObject target) => target.GetValue(this);
+
+	internal override bool Accepts(object? value) => value is TValue || (value is null && default(TValue) is null);
 
 	internal override bool AppliesTo(DependencyObject target) => Kind == DependencyPropertyKind.Attached || target is TOwner;
 

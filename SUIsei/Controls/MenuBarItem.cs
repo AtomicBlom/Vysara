@@ -23,7 +23,7 @@ public sealed class MenuBarItem : ButtonBase
 
 	public MenuBarItem()
 	{
-		Template = DefaultTemplate;
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
 		_flyout.Closed += OnFlyoutClosed;
 	}
 

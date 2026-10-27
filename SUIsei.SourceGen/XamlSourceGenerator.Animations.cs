@@ -3,6 +3,8 @@ using System.Xml.Linq;
 
 using Microsoft.CodeAnalysis;
 
+using SUIsei.Markup;
+
 namespace SUIsei.SourceGen;
 
 partial class XamlSourceGenerator
@@ -135,7 +137,7 @@ partial class XamlSourceGenerator
 		{
 			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(keyEl, attr.Name.Namespace))
 				continue;
-			if (attr.Name.LocalName == "KeyTime" && !TryParseDuration(attr.Value, out keyTime))
+			if (attr.Name.LocalName == "KeyTime" && !XamlValueSyntax.TryParseDuration(attr.Value, out keyTime))
 				keyTime = 0;
 			EmitObjectAttribute(gen, scope, keyVar, keyType, attr);
 		}
@@ -180,7 +182,7 @@ partial class XamlSourceGenerator
 				valueAttr = attr;
 				continue;
 			}
-			if (attr.Name.LocalName == "KeyTime" && !TryParseDuration(attr.Value, out keyTime))
+			if (attr.Name.LocalName == "KeyTime" && !XamlValueSyntax.TryParseDuration(attr.Value, out keyTime))
 				keyTime = 0;
 			EmitObjectAttribute(gen, scope, keyVar, keyType, attr);
 		}

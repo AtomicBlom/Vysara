@@ -2,7 +2,7 @@ namespace SUIsei.Tests;
 
 /// <summary>
 /// Coverage for the reflection-free dependency-property model + value-precedence ladder:
-/// resolve <c>Animation &gt; Local &gt; Style &gt; Inherited &gt; Default</c>, fire the
+/// resolve <c>Animation &gt; Local &gt; Template &gt; Style &gt; Inherited &gt; Default</c>, fire the
 /// typed change callback only on a <em>resolved</em> change, and ensure <c>SetValue</c> never clobbers an active
 /// animation. Asserted directly on a probe object — no engine, no GPU.
 /// </summary>
@@ -53,6 +53,81 @@ public sealed class DependencyPropertyTests
 		p.Value.ShouldBe(2);
 		p.Value = 3; // Local
 		p.Value.ShouldBe(3);
+	}
+
+	[Test]
+	public void Template_sits_between_local_and_style()
+	{
+		var p = new Probe();
+		p.SetStyleValue(Probe.ValueProperty, 2);
+		p.SetTemplateValue(Probe.ValueProperty, 4);
+		p.Value.ShouldBe(4); // Template outranks Style
+		p.Value = 3;
+		p.Value.ShouldBe(3); // Local outranks Template
+		p.SetTemplateValue(Probe.ValueProperty, 5);
+		p.Value.ShouldBe(3); // a later template push does not overwrite Local
+		Probe.ValueProperty.ClearRung(p, DependencyObject.ValueRung.Local);
+		p.Value.ShouldBe(5); // clearing Local reveals the template's latest value
+		p.ClearTemplateValue(Probe.ValueProperty);
+		p.Value.ShouldBe(2); // and clearing that, the style's
+	}
+
+	[Test]
+	public void Animation_outranks_a_template_value()
+	{
+		var p = new Probe();
+		p.SetTemplateValue(Probe.ValueProperty, 4);
+		p.SetAnimatedValue(Probe.ValueProperty, 9);
+		p.Value.ShouldBe(9);
+		p.ClearAnimatedValue(Probe.ValueProperty);
+		p.Value.ShouldBe(4);
+	}
+
+	[Test]
+	public void A_built_in_value_sits_between_style_and_inherited()
+	{
+		var p = new Probe();
+		p.SetInheritedValue(Probe.ValueProperty, 1);
+		p.SetBuiltInValue(Probe.ValueProperty, 6);
+		p.Value.ShouldBe(6); // BuiltInStyle outranks Inherited
+		p.SetStyleValue(Probe.ValueProperty, 2);
+		p.Value.ShouldBe(2); // Style outranks BuiltInStyle
+		p.ClearStyleValue(Probe.ValueProperty);
+		p.Value.ShouldBe(6);
+		p.Value = 3;
+		p.Value.ShouldBe(3);
+		p.HasLocalValue(Probe.ValueProperty).ShouldBeTrue();
+	}
+
+	[Test]
+	public void A_controls_built_in_template_and_tab_stop_are_not_local_values()
+	{
+		var button = new SUIsei.Controls.Button();
+
+		button.IsTabStop.ShouldBeTrue();
+		button.Template.ShouldNotBeNull();
+		button.HasLocalValue(UIElement.IsTabStopProperty).ShouldBeFalse();
+		button.HasLocalValue(SUIsei.Controls.Control.TemplateProperty).ShouldBeFalse();
+	}
+
+	[Test]
+	public void A_style_replaces_a_controls_built_in_template()
+	{
+		var replacement = new SUIsei.Controls.ControlTemplate { Factory = static _ => new SUIsei.Controls.Border() };
+		var button = new SUIsei.Controls.Button
+		{
+			Style = new Style
+			{
+				Setters =
+				{
+					new Setter { Property = SUIsei.Controls.Control.TemplateProperty, Value = replacement },
+					new Setter { Property = UIElement.IsTabStopProperty, Value = false },
+				},
+			},
+		};
+
+		button.Template.ShouldBe(replacement);
+		button.IsTabStop.ShouldBeFalse();
 	}
 
 	[Test]

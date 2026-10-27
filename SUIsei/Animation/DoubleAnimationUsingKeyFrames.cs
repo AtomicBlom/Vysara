@@ -11,6 +11,10 @@ public sealed class DoubleAnimationUsingKeyFrames : AnimationTimeline<double>
 	/// <summary>The keys, in ascending <see cref="DoubleKeyFrame.KeyTime"/> order.</summary>
 	public IList<DoubleKeyFrame> KeyFrames { get; } = [];
 
+	/// <summary>WinUI's opt-in for an animation of a property that relayouts; SUIsei runs every animation and reads nothing
+	/// here (<see cref="DoubleAnimation.EnableDependentAnimation"/>).</summary>
+	public bool EnableDependentAnimation { get; set; }
+
 	public override double ValueAt(double progress)
 	{
 		var n = KeyFrames.Count;

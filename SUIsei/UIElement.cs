@@ -649,11 +649,14 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	/// count, and each visual's clip is intersected into <paramref name="clip"/> as its surface-space bounds, the same
 	/// bound the compositor clips with, so a point is hittable exactly where something can be seen. Children are tested
 	/// front-to-back before the element's own content, and an element is a hit only where its content draws
-	/// (<see cref="ContentContains"/>), so transparent panels let the point through. Allocation-free.
+	/// (<see cref="ContentContains"/>), so transparent panels let the point through. With
+	/// <paramref name="includeHidden"/>, elements whose <see cref="IsHitTestVisible"/> is false are tested too, as a
+	/// diagnostics pick does. Allocation-free.
 	/// </summary>
-	internal UIElement? HitTest(Vector2 surfacePoint, in Matrix3x2 parentWorld, Rect clip)
+	internal UIElement? HitTest(Vector2 surfacePoint, in Matrix3x2 parentWorld, Rect clip, bool includeHidden = false)
 	{
-		if (!IsHitTestVisible || Visibility != Visibility.Visible)
+		var skipped = !includeHidden && !IsHitTestVisible;
+		if (skipped || Visibility != Visibility.Visible)
 			return null;
 
 		var world = Visual.Transform * parentWorld;
@@ -665,7 +668,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		var children = VisualChildren;
 		for (var i = children.Count - 1; i >= 0; i--)
 		{
-			if (children[i].HitTest(surfacePoint, world, clip) is { } hit)
+			if (children[i].HitTest(surfacePoint, world, clip, includeHidden) is { } hit)
 				return hit;
 		}
 

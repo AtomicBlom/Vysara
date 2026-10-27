@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- XAML -> typed control-tree generator wiring (registers *.xaml as AdditionalFiles + the analyzer ref). -->
+  <Import Project="..\build\SUIsei.props" />
+
+  <!-- A game with no window and no GPU, for driving SUIsei.RoseTap from RoseMCP's real host: it hosts one small XAML
+       view on a headless UIHost, ticks it until killed, and opts into SUIsei.Diagnostics, so the diagnostics endpoint
+       comes up on suisei-diag-{pid} for a host to attach to and load the tap through. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- How a game opts into diagnostics: the feature switch, set in its runtime config. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="SUIsei.Diagnostics.Enabled" Value="true" Trim="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\build\SUIsei.targets" />
+
+</Project>

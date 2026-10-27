@@ -104,9 +104,12 @@ partial class XamlSourceGenerator
 		}
 	}
 
-	// Convert, reporting a bad or unsupported value against `node`; null when it was reported.
-	private static string? ConvertOrReport(Gen gen, XObject node, ITypeSymbol type, string raw, string propertyName)
+	// Convert, reporting a bad or unsupported value against `node`; null when it was reported. `member` is the property
+	// being set (its CLR property or its dependency-property field), where its own syntax matters.
+	private static string? ConvertOrReport(Gen gen, XObject node, ITypeSymbol type, string raw, string propertyName, ISymbol? member = null)
 	{
+		if (IsAutoLength(member, raw))
+			return "float.NaN";
 		switch (TryConvertValue(type, raw, out var code, out var expected))
 		{
 			case LiteralStatus.Ok:
@@ -123,6 +126,13 @@ partial class XamlSourceGenerator
 				return null;
 		}
 	}
+
+	// "Auto" (any case) for FrameworkElement.Width or Height, which WinUI's parser reads as NaN through its LengthConverter;
+	// it takes no other property.
+	private static bool IsAutoLength(ISymbol? member, string raw) =>
+		member is { Name: "Width" or "Height" or "WidthProperty" or "HeightProperty", ContainingType: { } owner }
+		&& owner.ToDisplayString() == "SUIsei.FrameworkElement"
+		&& string.Equals(raw.Trim(), "Auto", StringComparison.OrdinalIgnoreCase);
 
 	private static bool ConvertColor(string raw, out string code)
 	{
@@ -260,41 +270,31 @@ partial class XamlSourceGenerator
 	// A WinUI grid length: "Auto", "*" or "N*" (star weight), or a pixel number.
 	private static bool ConvertGridLength(string raw, out string code)
 	{
-		var value = raw.Trim();
 		code = "";
-		if (string.Equals(value, "Auto", StringComparison.OrdinalIgnoreCase))
-			code = "global::SUIsei.GridLength.Auto";
-		else if (value == "*")
-			code = "global::SUIsei.GridLength.Star";
-		else if (value.EndsWith("*", StringComparison.Ordinal))
+		if (!XamlValueSyntax.TryParseGridLength(raw, out var form, out var value))
+			return false;
+		code = form switch
 		{
-			if (XamlValueSyntax.ParseNumbers(value.Substring(0, value.Length - 1)) is { Length: 1 } weight)
-				code = $"global::SUIsei.GridLength.Stars({F(weight[0])})";
-		}
-		else if (XamlValueSyntax.ParseNumbers(value) is { Length: 1 } pixels)
-			code = $"global::SUIsei.GridLength.Pixels({F(pixels[0])})";
-		return code.Length > 0;
+			XamlValueSyntax.GridLengthForm.Auto => "global::SUIsei.GridLength.Auto",
+			XamlValueSyntax.GridLengthForm.Stars when raw.Trim() == "*" => "global::SUIsei.GridLength.Star",
+			XamlValueSyntax.GridLengthForm.Stars => $"global::SUIsei.GridLength.Stars({F(value)})",
+			_ => $"global::SUIsei.GridLength.Pixels({F(value)})",
+		};
+		return true;
 	}
 
 	private static bool ConvertTimeSpan(string raw, out string code)
 	{
-		code = TryParseDuration(raw, out var seconds) ? $"global::System.TimeSpan.FromSeconds({Fmt(seconds)})" : "";
+		code = XamlValueSyntax.TryParseDuration(raw, out var seconds) ? $"global::System.TimeSpan.FromSeconds({Fmt(seconds)})" : "";
 		return code.Length > 0;
 	}
 
 	// "Forever", or an iteration count with an optional x ("3x", "0.5x").
 	private static bool ConvertRepeatBehavior(string raw, out string code)
 	{
-		var s = raw.Trim();
-		if (string.Equals(s, "Forever", StringComparison.OrdinalIgnoreCase))
-		{
-			code = "global::SUIsei.Animation.RepeatBehavior.Forever";
-			return true;
-		}
-		var count = s.EndsWith("x", StringComparison.OrdinalIgnoreCase) ? s.Substring(0, s.Length - 1) : s;
-		code = double.TryParse(count, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && IsFinite(n) && n > 0
-			? $"global::SUIsei.Animation.RepeatBehavior.Times({Fmt(n)})"
-			: "";
+		code = !XamlValueSyntax.TryParseRepeatBehavior(raw, out var forever, out var count) ? ""
+			: forever ? "global::SUIsei.Animation.RepeatBehavior.Forever"
+			: $"global::SUIsei.Animation.RepeatBehavior.Times({Fmt(count)})";
 		return code.Length > 0;
 	}
 
