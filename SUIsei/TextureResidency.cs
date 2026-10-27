@@ -6,10 +6,14 @@ namespace SUIsei;
 
 /// <summary>
 /// The texture sources a <see cref="UIHost"/>'s surfaces draw, counted across them, and those its last render let go of.
-/// A source is held while the current draw list of any of the host's surfaces names it in its slot table. One no surface
-/// names any more, or one disposed while held, is reported in <see cref="Released"/> after the render that let it go,
-/// so a host releases its texture only once no list it is about to draw samples it. <see cref="TextureSource.White"/>
-/// is never counted or reported: a host keeps it for its whole life.
+/// A source is held exactly while the current draw list of one of the host's surfaces names it in its slot table, so one
+/// reported in <see cref="Released"/> is named by no list the host is about to draw. A disposed source is found at the
+/// start of the next render, and the surfaces that drew it are redrawn without it in that render, which therefore
+/// releases it. <see cref="TextureSource.White"/> is never counted or reported: a host keeps it for its whole life.
+/// <para>
+/// Sources keep no reference to the hosts that hold them, so a long-lived source (the default font atlas, a cached image)
+/// never keeps a host or its trees alive, and disposing a source on another thread touches no host state.
+/// </para>
 /// </summary>
 internal sealed class TextureResidency(IReadOnlyList<UIView> views)
 {
@@ -26,57 +30,54 @@ internal sealed class TextureResidency(IReadOnlyList<UIView> views)
 	/// <summary>How many sources the host's surfaces hold.</summary>
 	public int HeldCount => _held.Count;
 
+	/// <summary>Start a render: redraw every surface that draws a source disposed since it was drawn, so this render's
+	/// lists no longer name it and it is released at the end. One version check per held source; allocates
+	/// nothing.</summary>
+	public void BeginRender()
+	{
+		_disposed.Clear();
+		foreach (var (source, _) in _held)
+		{
+			if (source.IsDisposed)
+				_disposed.Add(source);
+		}
+		for (var d = 0; d < _disposed.Count; d++)
+		{
+			for (var i = 0; i < views.Count; i++)
+			{
+				var view = views[i];
+				if (view.Textures.Holds(_disposed[d]))
+					view.Root.Visual.MarkDirty();
+			}
+		}
+	}
+
 	/// <summary>Start holding <paramref name="source"/> for one more surface.</summary>
 	public void Hold(TextureSource source)
 	{
-		if (_held.TryGetValue(source, out var count))
-		{
-			_held[source] = count + 1;
-			return;
-		}
-		_held.Add(source, 1);
-		source.AddHolder(this);
+		_held[source] = _held.TryGetValue(source, out var count) ? count + 1 : 1;
 	}
 
 	/// <summary>Stop holding <paramref name="source"/> for one surface; when no surface holds it, it is released at the end
 	/// of the render.</summary>
 	public void Unhold(TextureSource source)
 	{
-		if (!_held.TryGetValue(source, out var count))
-			return; // disposed while held: already reported
+		var count = _held[source];
 		_held[source] = count - 1;
 		if (count == 1)
 			_unheld.Add(source);
 	}
 
-	/// <summary>A held source was disposed: report it after the next render, and redraw the surfaces that drew it, so that
-	/// render's lists no longer sample it.</summary>
-	public void Disposed(TextureSource source)
-	{
-		if (!_held.Remove(source))
-			return;
-		_disposed.Add(source);
-		for (var i = 0; i < views.Count; i++)
-		{
-			var view = views[i];
-			if (view.Textures.Holds(source))
-				view.Root.Visual.MarkDirty();
-		}
-	}
-
-	/// <summary>End a render: publish the sources it let go of, and those disposed since the render before.</summary>
+	/// <summary>End a render: publish the sources no surface's list names any more.</summary>
 	public void EndRender()
 	{
 		_released.Clear();
-		_released.AddRange(_disposed);
-		_disposed.Clear();
 		for (var i = 0; i < _unheld.Count; i++)
 		{
 			var source = _unheld[i];
 			if (!_held.TryGetValue(source, out var count) || count > 0)
 				continue; // taken up again by a later surface, or already published
 			_held.Remove(source);
-			source.RemoveHolder(this);
 			_released.Add(source);
 		}
 		_unheld.Clear();
@@ -117,7 +118,8 @@ internal sealed class SurfaceTextures
 	public bool Holds(TextureSource source) => _held.Contains(source);
 
 	/// <summary>Hold the sources <paramref name="list"/> samples and let go of those it no longer does. Runs only when the
-	/// list's revision or texture revision moved; allocates nothing once its sets have grown to the surface's sources.</summary>
+	/// list's revision or texture revision moved; allocates nothing once its sets have grown to the surface's sources. A
+	/// disposed source the list still names is held like any other, until a redraw drops it.</summary>
 	public void Track(DrawListData list, TextureResidency residency)
 	{
 		var revisions = (list.Revision, list.TextureRevision);
@@ -130,7 +132,7 @@ internal sealed class SurfaceTextures
 		for (var i = 0; i < slots.Count; i++)
 		{
 			var source = slots[i];
-			if (ReferenceEquals(source, TextureSource.White) || source.IsDisposed)
+			if (ReferenceEquals(source, TextureSource.White))
 				continue;
 			if (_next.Add(source) && !_held.Contains(source))
 				residency.Hold(source);

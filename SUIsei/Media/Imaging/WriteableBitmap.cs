@@ -29,8 +29,19 @@ public sealed class WriteableBitmap : BitmapSource
 	/// <summary>A transparent image of <paramref name="pixelWidth"/> × <paramref name="pixelHeight"/> texels whose bytes
 	/// the app writes in <paramref name="colorSpace"/>, with <paramref name="alphaMode"/> alpha. SUIsei-only.</summary>
 	public WriteableBitmap(int pixelWidth, int pixelHeight, TextureAlphaMode alphaMode, TextureColorSpace colorSpace)
-		: base(pixelWidth, pixelHeight, new byte[checked(Math.Max(pixelWidth, 0) * Math.Max(pixelHeight, 0) * 4)], alphaMode, colorSpace)
+		: base(pixelWidth, pixelHeight, new byte[TexelBytes(pixelWidth, pixelHeight)], alphaMode, colorSpace)
 	{
+	}
+
+	// The bytes of a pixelWidth × pixelHeight RGBA8 buffer, refusing a size no array can hold.
+	private static int TexelBytes(int pixelWidth, int pixelHeight)
+	{
+		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
+		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
+		var bytes = (long)pixelWidth * pixelHeight * 4;
+		if (bytes > Array.MaxLength)
+			throw new ArgumentOutOfRangeException(nameof(pixelWidth), $"{pixelWidth}x{pixelHeight} RGBA8 texels need {bytes} bytes, more than an array holds.");
+		return (int)bytes;
 	}
 
 	/// <summary>The texels to write: RGBA8, row-major, <see cref="BitmapSource.PixelWidth"/> ×

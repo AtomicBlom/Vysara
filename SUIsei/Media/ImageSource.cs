@@ -16,8 +16,9 @@ namespace SUIsei.Media;
 /// <para>
 /// <b>Lifetime.</b> A host keeps an image's texture while any of its surfaces draws the image, and is told to release it
 /// once none does (<see cref="UIHost.ReleasedTextures"/>), including an image a hot-reload rebuild left behind.
-/// <see cref="Dispose"/> (SUIsei-only, as WinUI's image sources are not disposable) lets it go at once: the image draws
-/// nothing from then on, and the hosts that held it release its texture after their next render.
+/// <see cref="Dispose"/> (SUIsei-only, as WinUI's image sources are not disposable) lets it go without waiting for
+/// nothing to draw it: each host that draws the image redraws without it at its next render and releases its texture
+/// then. An image keeps no reference to the hosts that draw it, so a long-lived one keeps none of them alive.
 /// </para>
 /// </summary>
 public abstract class ImageSource : TextureSource, IDisposable
@@ -28,9 +29,11 @@ public abstract class ImageSource : TextureSource, IDisposable
 	}
 
 	/// <summary>
-	/// Stop drawing the image and release its texture now, rather than when nothing draws it any more. Every surface
-	/// that drew it is redrawn without it at its host's next render, which reports it in
-	/// <see cref="UIHost.ReleasedTextures"/>. Disposing twice does nothing.
+	/// Stop drawing the image and release its texture at the next render, rather than when nothing draws it any more.
+	/// Each host whose surfaces draw it redraws them without it at its next render, which reports it in
+	/// <see cref="UIHost.ReleasedTextures"/>; until then a list it already handed out may still name the image, and is
+	/// drawn as it was. A foreign <see cref="IUICompositor"/> reads <see cref="TextureSource.IsDisposed"/> itself. Safe on
+	/// any thread; disposing twice does nothing.
 	/// </summary>
 	public void Dispose()
 	{

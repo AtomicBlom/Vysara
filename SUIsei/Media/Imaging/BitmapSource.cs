@@ -18,6 +18,7 @@ public class BitmapSource : ImageSource
 	private protected BitmapSource(int pixelWidth, int pixelHeight, byte[] rgba, TextureAlphaMode alphaMode, TextureColorSpace colorSpace)
 		: base(alphaMode, colorSpace)
 	{
+		ArgumentNullException.ThrowIfNull(rgba);
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
 		if (rgba.Length != (long)pixelWidth * pixelHeight * 4)

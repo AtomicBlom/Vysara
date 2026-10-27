@@ -84,6 +84,17 @@ internal sealed class DrawListBuffers
 		return moved;
 	}
 
+	/// <summary>Whether the list opens group-opacity layers.</summary>
+	public bool HasLayers()
+	{
+		foreach (ref readonly var cmd in Commands.Span)
+		{
+			if ((UIPrimKind)cmd.Tag is UIPrimKind.BeginLayer or UIPrimKind.EndLayer)
+				return true;
+		}
+		return false;
+	}
+
 	/// <summary>The surface pixels drawn by commands that sample a slot <see cref="ChangedSlots"/> marks, each command's
 	/// vertex bounds cut to its clip: where texels changed under unchanged geometry. Empty when none did.</summary>
 	public Rect TexelDamage()

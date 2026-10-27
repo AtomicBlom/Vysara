@@ -217,8 +217,28 @@ public sealed class ImageSourceTests
 	public void A_bitmap_needs_as_many_bytes_as_its_texels()
 	{
 		Should.Throw<ArgumentException>(() => BitmapSource.FromRgba8(2, 2, new byte[15]));
+		Should.Throw<ArgumentNullException>(() => BitmapSource.FromRgba8(2, 2, null!));
 		Should.Throw<ArgumentOutOfRangeException>(() => new WriteableBitmap(0, 4));
+		Should.Throw<ArgumentOutOfRangeException>(() => new WriteableBitmap(65536, 65536)); // more bytes than an array holds
 		Should.Throw<ArgumentOutOfRangeException>(() => new HostImageSource("t", 4, -1));
+	}
+
+	[Test]
+	public void A_texel_change_under_a_group_layer_damages_the_whole_surface()
+	{
+		// A layer's composite can carry a change past what was drawn in it (an effect's blur), so damage covers the
+		// surface, on a clean frame as on a recomposite.
+		var bitmap = new WriteableBitmap(2, 2);
+		var group = new StackPanel { Opacity = 0.5f };
+		group.Children.Add(new Image { Source = bitmap, Width = 8f, Height = 8f });
+		group.Children.Add(new Border { Width = 8f, Height = 8f, Background = new SolidColorBrush(HdrColor.FromRgb(9, 9, 9)) });
+		var (host, _) = Hosted(group);
+		Frame(host);
+
+		bitmap.Invalidate();
+		var draw = Frame(host);
+
+		draw.Damage.ShouldBe(new Rect(0f, 0f, 64f, 64f));
 	}
 
 	[Test]
@@ -240,6 +260,8 @@ public sealed class ImageSourceTests
 		raster.SkippedCommands.ShouldBe(2); // the image quad and the rectangle's vector fill
 		raster.ReadLinear(8, 8).ShouldBe(Vector4.Zero);
 		raster.ReadLinear(8, 24).ShouldBe(Vector4.Zero);
+		raster.RenderParallel(draw, Vector4.Zero);
+		raster.SkippedCommands.ShouldBe(2); // counted once, however many bands replay them
 	}
 
 	[Test]
@@ -316,15 +338,22 @@ public sealed class ImageSourceTests
 	public void Disposing_a_drawn_image_redraws_without_it_and_reports_it_once()
 	{
 		var bitmap = new WriteableBitmap(1, 1);
+		Fill(bitmap, 255, 0, 0);
 		var image = new Image { Source = bitmap, Width = 4f, Height = 4f };
 		var dot = new Ellipse { Width = 8f, Height = 8f, Fill = new ImageBrush { ImageSource = bitmap } };
 		var panel = new StackPanel();
 		panel.Children.Add(image);
 		panel.Children.Add(dot);
 		var (host, _) = Hosted(panel);
-		Frame(host).TextureSlots.ShouldContain(bitmap);
+		var drawn = Frame(host);
+		drawn.TextureSlots.ShouldContain(bitmap);
 
 		bitmap.Dispose();
+		// The list the host already has was made before the dispose and still names the bitmap: it is drawn as it was,
+		// from the texture the host keeps until its next render releases it.
+		var before = Rasterized(drawn);
+		before.SkippedCommands.ShouldBe(0);
+		before.ReadLinear(2, 2).ShouldBe(new Vector4(1f, 0f, 0f, 1f));
 		var redrawn = Frame(host);
 
 		bitmap.IsDisposed.ShouldBeTrue();
@@ -338,6 +367,49 @@ public sealed class ImageSourceTests
 		bitmap.Dispose(); // twice does nothing
 		Frame(host);
 		host.ReleasedTextures.ShouldBeEmpty();
+	}
+
+	[Test]
+	public async Task An_image_disposed_on_another_thread_is_released_at_the_next_render()
+	{
+		var bitmap = BitmapSource.FromRgba8(1, 1, [255, 0, 0, 255]);
+		var (host, _) = Hosted(new Image { Source = bitmap, Width = 4f, Height = 4f });
+		Frame(host);
+
+		await Task.Run(bitmap.Dispose);
+		var redrawn = Frame(host);
+
+		redrawn.TextureSlots.ShouldNotContain(bitmap);
+		host.ReleasedTextures.ShouldBe([bitmap]);
+	}
+
+	[Test]
+	public void A_long_lived_source_keeps_no_host_alive()
+	{
+		// A static or cached source (the default font atlas, an image shared across windows) outlives the hosts that drew
+		// it, so it must hold no reference that keeps them, or their element trees, alive.
+		var shared = BitmapSource.FromRgba8(1, 1, [255, 0, 0, 255]);
+		var host = DrawnAndDropped(shared);
+
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		GC.Collect();
+
+		host.TryGetTarget(out _).ShouldBeFalse();
+		GC.KeepAlive(shared);
+	}
+
+	// A host that drew `source` and text (the default atlas page), then was dropped by its owner.
+	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	private static WeakReference<UIHost> DrawnAndDropped(ImageSource source)
+	{
+		var panel = new StackPanel();
+		panel.Children.Add(new TextBlock { Text = "Hi", FontSize = 12f });
+		panel.Children.Add(new Image { Source = source, Width = 4f, Height = 4f });
+		var (host, _) = Hosted(panel);
+		Frame(host);
+		host.DumpTextures().ShouldStartWith("Textures held (2):\n");
+		return new WeakReference<UIHost>(host);
 	}
 
 	[Test]

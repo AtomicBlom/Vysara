@@ -71,14 +71,18 @@ public sealed class UIHost
 
 	/// <summary>
 	/// The texture sources the last <see cref="Render"/> let go of, for the host to release its textures for: each source
-	/// none of this host's surfaces draws any more (an element removed, an image replaced, a view removed, a tree a
-	/// hot-reload rebuild replaced), and each one disposed while a surface drew it. No list in <see cref="DrawLists"/>
-	/// samples any of them, so a host can release them before drawing those lists, deferring destruction past the frames
-	/// still in flight. Read it after each <see cref="Render"/>: the next one replaces it. A source drawn again later is
-	/// new to the host and uploaded again. A host image's (<see cref="Extensions.HostImageSource"/>) texture is the host's
-	/// own: it stops binding it rather than destroying it. A source whose texels changed is not released but replaced,
-	/// which the host does itself on seeing its <see cref="TextureSource.Version"/> move. <see cref="TextureSource.White"/>
-	/// is never released.
+	/// no list in <see cref="DrawLists"/> names any more (an element removed, an image replaced, a view removed, a tree a
+	/// hot-reload rebuild replaced, an image disposed since the render before, whose surfaces this render redrew without
+	/// it). No list in <see cref="DrawLists"/> samples any of them, so a host can release them before drawing those
+	/// lists, deferring destruction past the frames still in flight. Read it after each <see cref="Render"/>: the next one
+	/// replaces it. A source drawn again later is new to the host and uploaded again. A host image's
+	/// (<see cref="Extensions.HostImageSource"/>) texture is the host's own: it stops binding it rather than destroying it.
+	/// A source whose texels changed is not released but replaced, which the host does itself on seeing its
+	/// <see cref="TextureSource.Version"/> move. <see cref="TextureSource.White"/> is never released.
+	/// <para>
+	/// It covers the lists this host hands out. A view composited by a foreign <see cref="IUICompositor"/> hands out
+	/// none, so that compositor tracks what it draws itself, and reads <see cref="TextureSource.IsDisposed"/>.
+	/// </para>
 	/// </summary>
 	public IReadOnlyList<TextureSource> ReleasedTextures => _textures.Released;
 
@@ -148,6 +152,7 @@ public sealed class UIHost
 	/// samples any more → <see cref="ReleasedTextures"/>.</summary>
 	public void Render()
 	{
+		_textures.BeginRender();
 		_drawLists.Clear();
 		foreach (var view in _views)
 		{

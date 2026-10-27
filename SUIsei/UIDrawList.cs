@@ -113,7 +113,9 @@ internal sealed class UIDrawList
 	/// <summary>
 	/// For a frame that reuses the current list unchanged: move its texture revision if a source it samples has
 	/// changed its texels since the list recorded them, so the host re-uploads it although the geometry is the same, and
-	/// make the list's damage the pixels drawn with those sources. Allocation-free; one version comparison per slot.
+	/// make the list's damage the pixels drawn with those sources: the whole surface when the list has group layers, whose
+	/// composite (an effect's blur, say) can carry a change past what was drawn, as a recomposite's damage does.
+	/// Allocation-free; one version comparison per slot.
 	/// </summary>
 	public void RefreshTextureRevision()
 	{
@@ -121,7 +123,7 @@ internal sealed class UIDrawList
 			return;
 		_textureRevision++;
 		Last.StampTextureRevision(_textureRevision);
-		Last.Damage = _set.TexelDamage();
+		Last.Damage = _set.HasLayers() ? new Rect(0f, 0f, _surfaceSize.X, _surfaceSize.Y) : _set.TexelDamage();
 	}
 
 	// The slot `source` holds in the list being built, assigning it the next one on first use, so slots are dense and

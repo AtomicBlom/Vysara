@@ -66,7 +66,7 @@ public sealed class DrawListCompositor : IUICompositor
 		var pv = previous.Vertices.Span;
 		var cv = current.Vertices.Span;
 
-		if (pv.Length != cv.Length || pc.Length != cc.Length || !pc.SequenceEqual(cc) || HasLayers(cc))
+		if (pv.Length != cv.Length || pc.Length != cc.Length || !pc.SequenceEqual(cc) || current.HasLayers())
 			return new Rect(0, 0, surfaceSize.X, surfaceSize.Y);
 
 		float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
@@ -86,14 +86,6 @@ public sealed class DrawListCompositor : IUICompositor
 	{
 		minX = MathF.Min(minX, p.X); minY = MathF.Min(minY, p.Y);
 		maxX = MathF.Max(maxX, p.X); maxY = MathF.Max(maxY, p.Y);
-	}
-
-	private static bool HasLayers(ReadOnlySpan<DrawCommand> commands)
-	{
-		foreach (ref readonly var cmd in commands)
-			if ((UIPrimKind)cmd.Tag is UIPrimKind.BeginLayer or UIPrimKind.EndLayer)
-				return true;
-		return false;
 	}
 
 	private static bool AnyDirty(Visual v)

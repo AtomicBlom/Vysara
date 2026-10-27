@@ -17,8 +17,9 @@ namespace SUIsei.Drawing;
 /// </summary>
 public abstract class TextureSource
 {
-	// The hosts that hold this source resident (usually one), so disposing it can reach them. Made on first use.
-	private List<TextureResidency>? _holders;
+	// Written by Dispose on any thread and read by each host's render on its own, so it is volatile. The source keeps no
+	// reference to the hosts that draw it: a long-lived source (a font atlas, a cached image) must not keep them alive.
+	private volatile bool _disposed;
 
 	private protected TextureSource(TextureAlphaMode alphaMode, TextureColorSpace colorSpace)
 	{
@@ -48,31 +49,17 @@ public abstract class TextureSource
 	/// holding an upload of an older version replaces it: it uploads the new texels and releases the old texture.</summary>
 	public uint Version { get; private set; }
 
-	/// <summary>True once the source has been disposed: it draws nothing, and a host that held it was told to release
-	/// it (<see cref="UIHost.ReleasedTextures"/>).</summary>
-	public bool IsDisposed { get; private set; }
+	/// <summary>True once the source has been disposed. A composite made after it draws nothing with the source; a host
+	/// drawing it redraws without it at its next render and reports it then (<see cref="UIHost.ReleasedTextures"/>).
+	/// A list made before it may still name it, and a host draws such a list from the texture it still has.</summary>
+	public bool IsDisposed => _disposed;
 
 	/// <summary>Record that the texels changed: the next draw list that samples this source, or the surface's
 	/// current one on its next frame, moves its <see cref="DrawListData.TextureRevision"/>.</summary>
 	internal void InvalidateTexels() => Version++;
 
-	/// <summary>Mark the source disposed and tell every host holding it, which reports it for release and redraws the
-	/// surfaces that drew it.</summary>
-	private protected void MarkDisposed()
-	{
-		if (IsDisposed)
-			return;
-		IsDisposed = true;
-		if (_holders is not { } holders)
-			return;
-		for (var i = holders.Count - 1; i >= 0; i--)
-			holders[i].Disposed(this);
-		holders.Clear();
-	}
-
-	internal void AddHolder(TextureResidency residency) => (_holders ??= []).Add(residency);
-
-	internal void RemoveHolder(TextureResidency residency) => _holders?.Remove(residency);
+	/// <summary>Mark the source disposed, for each host drawing it to find at its next render.</summary>
+	private protected void MarkDisposed() => _disposed = true;
 
 	/// <summary>One line describing the source for a dump: its kind, size, version and how its texels read.</summary>
 	internal void Describe(StringBuilder sb)

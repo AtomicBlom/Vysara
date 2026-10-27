@@ -21,8 +21,9 @@ namespace SUIsei.Rasterizer;
 /// <see cref="UIPrimKind.Vector"/> (edge distances times a texel), the last three sampling the texture in their
 /// <c>TextureIndex</c> slot of the list's <see cref="DrawListData.TextureSlots"/>, read as the slot's source declares: an
 /// sRGB source decoded per texel before filtering, a straight-alpha one's image and vector samples premultiplied after it.
-/// Such a command whose slot the list lacks, or whose slot holds a host image (its texels are the host's) or a disposed
-/// source, is skipped (counted in <see cref="SkippedCommands"/>). It also honours the
+/// Such a command whose slot the list lacks, or whose slot holds a host image (its texels are the host's), is skipped
+/// (counted in <see cref="SkippedCommands"/>). A disposed source a list still names is drawn, as a host draws it from
+/// the texture it keeps until its next render releases it. It also honours the
 /// <see cref="UIPrimKind.BeginLayer"/>/<see cref="UIPrimKind.EndLayer"/> group-opacity markers by rendering the
 /// bracketed subtree into an offscreen framebuffer and compositing it back at the group's fade alpha — the CPU twin
 /// of the backend RT stack, so it gives true (non-double-blended) group opacity headlessly. A command whose tag is
@@ -76,8 +77,9 @@ public sealed class SoftwareRasterizer
 	/// <summary>Triangles rasterized by the last <see cref="Render"/> call (perf-shape instrumentation).</summary>
 	public int TrianglesDrawn { get; private set; }
 
-	/// <summary>Glyph, image and vector commands skipped in the last <see cref="Render"/> call because their slot was
-	/// missing, or held a source with no texels here: a host image (<see cref="HostImageSource"/>), or a disposed one.</summary>
+	/// <summary>Glyph, image and vector commands skipped in the last <see cref="Render"/> or <see cref="RenderParallel(DrawListData, Vector4?, float)"/>
+	/// call because their slot was missing or held a host image (<see cref="HostImageSource"/>), whose texels are the
+	/// host's.</summary>
 	public int SkippedCommands { get; private set; }
 
 	/// <summary>Group-opacity layers composited back in the last <see cref="Render"/> call (EndLayer markers).</summary>
@@ -88,8 +90,8 @@ public sealed class SoftwareRasterizer
 
 	// Bind a list's slot table: slot i samples the texels of slots[i], copied once per source and version, as a host
 	// uploads each source once and replaces it when its version moves (here by copying the new texels over the old ones,
-	// so a source rewritten every frame allocates nothing). A host image has no texels to copy and a disposed source
-	// draws nothing, so their slots stay unbound and what samples them is skipped.
+	// so a source rewritten every frame allocates nothing). A host image has no texels to copy, so its slot stays unbound
+	// and what samples it is skipped.
 	private void BindSlots(IReadOnlyList<TextureSource> slots)
 	{
 		if (_slots.Length < slots.Count)
@@ -98,7 +100,7 @@ public sealed class SoftwareRasterizer
 		for (var i = 0; i < slots.Count; i++)
 		{
 			var source = slots[i];
-			if (source is HostImageSource || source.IsDisposed)
+			if (source is HostImageSource)
 			{
 				_slots[i] = null;
 				continue;
@@ -305,6 +307,7 @@ public sealed class SoftwareRasterizer
 		var verts = draw.Vertices;
 		var indices = draw.Indices;
 		var commands = draw.Commands;
+		SkippedCommands = CountUnbound(commands.Span); // counted once here: every band replays every command
 		var fb = _fb;
 		var width = _width;
 		var fullWidth = rx0 == 0 && rx1 == width - 1;
@@ -364,6 +367,18 @@ public sealed class SoftwareRasterizer
 			}
 		}
 		return triangles;
+	}
+
+	// The texture-sampling commands whose slot is unbound, which every band skips.
+	private int CountUnbound(ReadOnlySpan<DrawCommand> commands)
+	{
+		var unbound = 0;
+		foreach (ref readonly var cmd in commands)
+		{
+			if ((UIPrimKind)cmd.Tag is UIPrimKind.Glyph or UIPrimKind.Image or UIPrimKind.Vector && !TryGetSlot(cmd.TextureIndex, out _))
+				unbound++;
+		}
+		return unbound;
 	}
 
 	// Check every command's tag before anything is drawn, and report whether the list opens group-opacity layers. A tag
