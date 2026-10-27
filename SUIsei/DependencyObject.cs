@@ -140,14 +140,16 @@ public abstract class DependencyObject
 	private ValueSlot<TValue>? Slot<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
 		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) ? (ValueSlot<TValue>)s : null;
 
-	// The coerced effective value: resolve the precedence ladder (else the typed default), then coerce. Coercion
-	// applies to the resolved value, not per rung at write time — so a coercion that depends on another property
-	// reflects that property's current value on every read.
+	// The coerced effective value: resolve the precedence ladder (else the default, this object's own where its type
+	// sets one), then coerce. Coercion applies to the resolved value, not per rung at write time — so a coercion that
+	// depends on another property reflects that property's current value on every read.
 	private TValue Effective<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueSlot<TValue>? slot)
 		where TOwner : DependencyObject
 	{
-		var baseValue = slot is not null && slot.TryResolve(out var v) ? v : dp.Metadata.DefaultValue;
-		return dp.Metadata.Coerce is { } coerce ? coerce((TOwner)this, baseValue) : baseValue;
+		var metadata = dp.Metadata;
+		var baseValue = slot is not null && slot.TryResolve(out var v) ? v
+			: metadata.DefaultValueFor is { } defaultFor ? defaultFor((TOwner)this) : metadata.DefaultValue;
+		return metadata.Coerce is { } coerce ? coerce((TOwner)this, baseValue) : baseValue;
 	}
 
 	/// <summary>

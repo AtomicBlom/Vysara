@@ -107,6 +107,59 @@ public sealed class ShapeContent : VisualContent
 		return _stroke;
 	}
 
+	/// <summary>
+	/// Whether <paramref name="point"/>, in the visual's local space, is on what the shape draws at
+	/// <paramref name="scale"/>: inside the fill when there is a fill, or on the stroke when there is one, within half its
+	/// thickness of the outline along the dashes, caps and joins it draws and only where the trim leaves it. A point counts
+	/// where its coverage is at least half, past the middle of each antialiased edge. Uses the cached tessellations, and
+	/// allocates nothing.
+	/// </summary>
+	public bool HitTest(Vector2 point, TessellationScale scale)
+	{
+		if (Path is not { IsEmpty: false })
+			return false;
+		if (Fill is not null && Covers(TessellateFill(scale)!, PathTrim.None, point))
+			return true;
+		return Stroke is not null && StrokeStyle.Thickness > 0f && Covers(TessellateStroke(scale)!, Trim, point);
+	}
+
+	private static bool Covers(TessellatedPath path, PathTrim trim, Vector2 point)
+	{
+		var bounds = path.Bounds;
+		if (point.X < bounds.X || point.Y < bounds.Y || point.X > bounds.Right || point.Y > bounds.Bottom)
+			return false;
+		var probe = new CoverageProbe(point);
+		path.Emit(ref probe, trim);
+		return probe.Hit;
+	}
+
+	/// <summary>Finds whether any triangle drawn covers a point: the point inside it, and every edge distance interpolated
+	/// there at least 0.</summary>
+	private struct CoverageProbe(Vector2 point) : IVectorSink
+	{
+		public bool Hit;
+
+		public void AddTriangles(ReadOnlySpan<VectorVertex> vertices)
+		{
+			for (var i = 0; !Hit && i + 2 < vertices.Length; i += 3)
+			{
+				Vector2 a = vertices[i].Position, b = vertices[i + 1].Position, c = vertices[i + 2].Position;
+				var area = Cross(b - a, c - a);
+				if (area == 0f)
+					continue;
+				var wa = Cross(b - point, c - point) / area;
+				var wb = Cross(c - point, a - point) / area;
+				var wc = 1f - wa - wb;
+				if (wa < 0f || wb < 0f || wc < 0f)
+					continue;
+				var d = wa * vertices[i].Distances + wb * vertices[i + 1].Distances + wc * vertices[i + 2].Distances;
+				Hit = d.X >= 0f && d.Y >= 0f && d.Z >= 0f && d.W >= 0f;
+			}
+		}
+
+		private static float Cross(Vector2 u, Vector2 v) => u.X * v.Y - u.Y * v.X;
+	}
+
 	internal override void Describe(StringBuilder sb)
 	{
 		var c = CultureInfo.InvariantCulture;

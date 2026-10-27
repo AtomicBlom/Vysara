@@ -40,7 +40,7 @@ public abstract partial class UIElement
 	}
 
 	/// <summary>Start or stop listening to <paramref name="geometry"/>, as to a brush or a transform.</summary>
-	private void Listen(Geometry? geometry, bool listen)
+	private protected void Listen(Geometry? geometry, bool listen)
 	{
 		if (geometry is null)
 			return;

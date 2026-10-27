@@ -401,39 +401,19 @@ public sealed class DrawListCompositor : IUICompositor
 			if (_built == (size, radius, thickness))
 				return;
 			_built = (size, radius, thickness);
+			var outer = new Rect(0f, 0f, size.X, size.Y);
+			var inner = new Rect(thickness, thickness, size.X - 2f * thickness, size.Y - 2f * thickness);
 			var fill = Fill.Path!;
 			fill.Clear();
-			AddRoundedRect(fill, 0f, 0f, size.X, size.Y, radius);
+			fill.AddRoundedRectangle(outer, Circular(outer, radius));
 			var ring = Border.Path!;
 			ring.Clear();
 			ring.FillRule = FillRule.EvenOdd;
-			AddRoundedRect(ring, 0f, 0f, size.X, size.Y, radius);
-			AddRoundedRect(ring, thickness, thickness, size.X - 2f * thickness, size.Y - 2f * thickness, radius - thickness);
+			ring.AddRoundedRectangle(outer, Circular(outer, radius));
+			ring.AddRoundedRectangle(inner, Circular(inner, radius - thickness));
 		}
 
-		// A rect with corners rounded by quarter ellipse arcs of `radius`, at most half its shorter side; nothing when empty.
-		private static void AddRoundedRect(CompositionPath path, float x, float y, float w, float h, float radius)
-		{
-			if (!(w > 0f) || !(h > 0f))
-				return;
-			var r = Math.Clamp(radius, 0f, MathF.Min(w, h) / 2f);
-			var radii = new Vector2(r);
-			path.MoveTo(new Vector2(x + r, y));
-			path.LineTo(new Vector2(x + w - r, y));
-			Corner(new Vector2(x + w, y + r));
-			path.LineTo(new Vector2(x + w, y + h - r));
-			Corner(new Vector2(x + w - r, y + h));
-			path.LineTo(new Vector2(x + r, y + h));
-			Corner(new Vector2(x, y + h - r));
-			path.LineTo(new Vector2(x, y + r));
-			Corner(new Vector2(x + r, y));
-			path.Close();
-
-			void Corner(Vector2 to)
-			{
-				if (r > 0f)
-					path.ArcTo(radii, 0f, false, SweepDirection.Clockwise, to);
-			}
-		}
+		// Circular corners of `radius`, at most half the rect's shorter side, as the rounded-box prims draw them.
+		private static Vector2 Circular(in Rect rect, float radius) => new(Math.Clamp(radius, 0f, MathF.Max(0f, MathF.Min(rect.Width, rect.Height) / 2f)));
 	}
 }

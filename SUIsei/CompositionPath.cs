@@ -225,6 +225,47 @@ public sealed class CompositionPath
 		Version++;
 	}
 
+	/// <summary>Add a closed figure of <paramref name="rect"/> with its corners rounded by quarter-ellipse arcs of
+	/// <paramref name="radii"/>, each at most half the side it rounds, clockwise from the top edge; square corners when
+	/// either radius is 0, and nothing when the rectangle is empty.</summary>
+	internal void AddRoundedRectangle(in Rect rect, Vector2 radii)
+	{
+		if (!(rect.Width > 0f) || !(rect.Height > 0f))
+			return;
+		var r = new Vector2(Math.Clamp(radii.X, 0f, rect.Width / 2f), Math.Clamp(radii.Y, 0f, rect.Height / 2f));
+		if (r.X == 0f || r.Y == 0f)
+			r = Vector2.Zero;
+		float x0 = rect.X, y0 = rect.Y, x1 = rect.Right, y1 = rect.Bottom;
+		MoveTo(new Vector2(x0 + r.X, y0));
+		Side(new Vector2(x1 - r.X, y0), new Vector2(x1, y0 + r.Y));
+		Side(new Vector2(x1, y1 - r.Y), new Vector2(x1 - r.X, y1));
+		Side(new Vector2(x0 + r.X, y1), new Vector2(x0, y1 - r.Y));
+		Side(new Vector2(x0, y0 + r.Y), new Vector2(x0 + r.X, y0));
+		Close();
+
+		// A side up to where the next corner starts, then the corner; a square corner adds nothing.
+		void Side(Vector2 end, Vector2 cornerEnd)
+		{
+			LineTo(end);
+			if (r != Vector2.Zero)
+				ArcTo(r, 0f, false, SweepDirection.Clockwise, cornerEnd);
+		}
+	}
+
+	/// <summary>Add a closed figure of the ellipse inscribed in <paramref name="rect"/>, clockwise from its rightmost
+	/// point, as WinUI's ellipse runs; nothing when the rectangle is empty.</summary>
+	internal void AddEllipse(in Rect rect)
+	{
+		if (!(rect.Width > 0f) || !(rect.Height > 0f))
+			return;
+		var radii = new Vector2(rect.Width / 2f, rect.Height / 2f);
+		var center = new Vector2(rect.X, rect.Y) + radii;
+		MoveTo(center + new Vector2(radii.X, 0f));
+		ArcTo(radii, 0f, false, SweepDirection.Clockwise, center - new Vector2(radii.X, 0f));
+		ArcTo(radii, 0f, false, SweepDirection.Clockwise, center + new Vector2(radii.X, 0f));
+		Close();
+	}
+
 	/// <summary>Add every figure of <paramref name="other"/> to this path, as they are, keeping this path's fill rule.
 	/// A figure this path has open stays open; the next drawing call after this one continues the last figure
 	/// appended.</summary>
