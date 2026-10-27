@@ -2,10 +2,10 @@ using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
-using SUIsei.Media;
-using SUIsei.Media.Imaging;
 using SUIsei.Extensions;
 using SUIsei.Input;
+using SUIsei.Media;
+using SUIsei.Media.Imaging;
 using SUIsei.Rasterizer;
 using SUIsei.RoutedEvents;
 

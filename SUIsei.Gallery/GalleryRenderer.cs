@@ -88,6 +88,7 @@ internal sealed class GalleryRenderer
 		_lastSeconds = seconds;
 
 		var t0 = Stopwatch.GetTimestamp();
+		_gallery.Animate(seconds);
 		_host.Tick(dt, (float)seconds, new Vector2(width, height));
 		var t1 = Stopwatch.GetTimestamp();
 		_host.Render();
