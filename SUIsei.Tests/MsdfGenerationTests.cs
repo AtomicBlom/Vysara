@@ -19,9 +19,10 @@ public sealed class MsdfGenerationTests
 {
 	internal static byte[] CascadiaCode => field ??= ReadResource("CascadiaCode.ttf");
 
+	private static Fontset DefaultFontset => Fontset.Parse(Encoding.UTF8.GetString(ReadResource("ui-default.fontset.json")));
+
 	// The default fontset baked afresh by this build's generator, once for every test that reads it.
-	private static readonly Lazy<BakeResult> DefaultBake = new(() =>
-		MsdfBaker.Bake(Fontset.Parse(Encoding.UTF8.GetString(ReadResource("ui-default.fontset.json"))), _ => CascadiaCode));
+	private static readonly Lazy<BakeResult> DefaultBake = new(() => MsdfBaker.Bake(DefaultFontset, _ => CascadiaCode));
 
 	private static byte[] ReadResource(string name)
 	{
@@ -103,7 +104,7 @@ public sealed class MsdfGenerationTests
 		var atlas = DefaultBake.Value.ToFontAtlas();
 		var font = OpenTypeFont.Load(CascadiaCode);
 		var failures = new List<string>();
-		for (var cp = 33; cp < 127; cp++)
+		foreach (var cp in DefaultFontset.ResolveCharset())
 		{
 			if (!atlas.TryGetGlyph(cp, out var glyph) || !glyph.HasGeometry)
 				continue;
@@ -195,6 +196,21 @@ public sealed class MsdfGenerationTests
 	}
 
 	[Test]
+	public void The_default_atlas_covers_Latin_1_and_the_common_UI_symbols()
+	{
+		// Latin-1 for names and accents, and the punctuation, arrows, maths and shapes UI text reaches for, so a middle dot,
+		// a degree sign or an arrow draws rather than leaving a gap.
+		var atlas = FontAtlas.Default;
+		foreach (var c in "·°→←↑↓↔€£©™±×÷µ¿¡ÀÉÜßàéñçæø–—‘’“”•…≤≥≠≈−▲▶▼◀●✓")
+		{
+			atlas.TryGetGlyph(c, out var glyph).ShouldBeTrue($"'{c}' U+{(int)c:X4}");
+			glyph.HasGeometry.ShouldBeTrue($"'{c}' U+{(int)c:X4}");
+		}
+		for (var cp = 0xC0; cp <= 0xFF; cp++)
+			atlas.TryGetGlyph(cp, out _).ShouldBeTrue($"U+{cp:X4}");
+	}
+
+	[Test]
 	public void An_8_rasterizes_with_an_open_lower_counter()
 	{
 		// Through the compositor and the CPU rasterizer at 96 px: the middle of the '8's lower counter shows the
@@ -215,5 +231,88 @@ public sealed class MsdfGenerationTests
 			var baseline = -FontAtlas.Default.Ascender * 96f;
 			return rasterizer.ReadLinear((int)(600f / 2048f * 96f), (int)(baseline - fontUnitsUp / 2048f * 96f)).W;
 		}
+	}
+
+	[Test]
+	[Arguments(8f)]
+	[Arguments(11f)]
+	[Arguments(13f)]
+	[Arguments(14f)]
+	[Arguments(16f)]
+	[Arguments(20f)]
+	public void Small_text_draws_nothing_a_pixel_clear_of_its_outline_and_all_of_a_pixel_inside_it(float size)
+	{
+		// Every printable ASCII glyph and a line of the rest of the charset at sixteen sub-pixel phases, through the
+		// compositor and the CPU rasterizer, against the outlines themselves. A pixel centre a whole pixel or more from the
+		// outline is past the reach of the one-pixel ramp, so it must read the outline's side exactly: nothing outside, full
+		// coverage inside. A field whose median reads a point much nearer an edge than it is (a channel taking its distance
+		// from an edge's extension past its corner, between the legs of an 'n') shows here as a speck.
+		const string text = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+			+ "·°→←↑↓↔€£¥©®™±×÷µ¶§¿¡ÀÉÎÕÜÆØßàéîõüñçæø–—‘’“”•…‰′″≤≥≠≈−▲▶▼◀●✓";
+		var font = OpenTypeFont.Load(CascadiaCode);
+		var atlas = FontAtlas.Default;
+		var outlines = text.Select(c => font.GetOutline(font.GetGlyphIndex(c))).ToArray();
+		var bounds = outlines.Select(o => o.ComputeBounds()).ToArray();
+		var unitsPerPixel = font.UnitsPerEm / (double)size;
+		var width = (int)MathF.Ceiling(text.Length * atlas.Advance('M') * size) + 8;
+		var height = (int)MathF.Ceiling(atlas.LineHeight * size) + 4;
+		var failures = new List<string>();
+		for (var phase = 0; phase < 16; phase++)
+		{
+			var left = 2f + phase % 4 / 4f;
+			var top = 1f + phase / 4 / 4f;
+			var block = new TextBlock { Text = text, FontSize = size };
+			var canvas = new Canvas();
+			canvas.Children.Add(block);
+			Canvas.SetLeft(block, left);
+			Canvas.SetTop(block, top);
+			var root = new UIRoot(new DrawListId(0)) { Content = canvas };
+			root.LayoutPass(new Size(width, height));
+			var rasterizer = new SoftwareRasterizer(width, height);
+			rasterizer.Render(root.Render());
+			var pens = block.Visual.Content.ShouldBeOfType<GlyphRunContent>().Shape().Glyphs
+				.Select(g => left + (g.PenXEm + g.XOffsetEm) * size).ToArray();
+			var baseline = top - atlas.Ascender * size;
+
+			for (var y = 0; y < height; y++)
+			{
+				for (var x = 0; x < width; x++)
+				{
+					var inside = false;
+					var nearest = double.MaxValue; // to the nearest edge, in font units
+					var glyph = -1;
+					var at = default(Vector2D);
+					for (var g = 0; g < outlines.Length; g++)
+					{
+						var p = new Vector2D((x + 0.5 - pens[g]) * unitsPerPixel, (baseline - y - 0.5) * unitsPerPixel);
+						var b = bounds[g];
+						if (p.X < b.Left - unitsPerPixel || p.X > b.Right + unitsPerPixel || p.Y < b.Bottom - unitsPerPixel || p.Y > b.Top + unitsPerPixel)
+							continue;
+						inside |= outlines[g].WindingAt(p) != 0;
+						foreach (var contour in outlines[g].Contours)
+						{
+							foreach (var edge in contour.Edges)
+							{
+								var d = Math.Abs(edge.SignedDistanceTo(p, out _).Distance);
+								if (d >= nearest)
+									continue;
+								nearest = d;
+								glyph = g;
+								at = p;
+							}
+						}
+					}
+					if (nearest < unitsPerPixel)
+						continue; // within the ramp's reach of an edge
+					var drawn = rasterizer.ReadLinear(x, y).W;
+					if (inside ? drawn < 0.98f : drawn > 0.02f)
+						failures.Add(glyph < 0
+							? $"({x},{y}) at phase {phase}, a pixel clear of every glyph: drew {drawn:0.##}"
+							: $"'{text[glyph]}' at ({at.X:0},{at.Y:0}) in font units, phase {phase}, {(inside ? "inside" : "outside")} by {nearest / unitsPerPixel:0.##} px: drew {drawn:0.##}");
+				}
+			}
+		}
+
+		failures.ShouldBeEmpty();
 	}
 }

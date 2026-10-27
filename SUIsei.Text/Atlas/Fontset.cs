@@ -44,7 +44,7 @@ public sealed class Fontset
 
 	/// <summary>
 	/// The full set of code points to attempt: the union of every font's ranges plus the top-level charset. When no
-	/// ranges are given anywhere, defaults to printable ASCII (matching the committed ui-default).
+	/// ranges are given anywhere, defaults to printable ASCII.
 	/// </summary>
 	public SortedSet<int> ResolveCharset()
 	{

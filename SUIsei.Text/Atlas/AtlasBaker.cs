@@ -123,6 +123,7 @@ internal static class AtlasBaker
 		boxLeft -= ex; boxRight = boxLeft + targetW;
 		boxBottom -= ey; boxTop = boxBottom + targetH;
 
+		shape.OrientLikeTrueType();
 		EdgeColoring.ColorSimple(shape);
 		var projection = new CellProjection(boxLeft, boxTop, unitsPerTexel);
 		w.Bitmap = MsdfGenerator.Generate(shape, pw, ph, rangeUnits, pxRange, projection, parallelRows: false);

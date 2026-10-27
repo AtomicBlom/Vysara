@@ -35,6 +35,28 @@ internal sealed class Shape
 				edge.AddRayCrossings(p.Y, p.X, ref winding);
 		return winding;
 	}
+
+	/// <summary>
+	/// Wind the shape as TrueType does, its outlines clockwise in y-up and its holes counter-clockwise, by reversing every
+	/// contour when the whole shape is wound the other way round (more area counter-clockwise than clockwise). Nonzero
+	/// winding fills either the same, but the generator reads a contour's orientation to tell an outline from a hole: drawn
+	/// the other way (Cascadia's <c>×</c>, two crossing bars both counter-clockwise), both would read as holes. This is
+	/// msdf-atlas-gen's check, by area rather than by the distance at a point outside.
+	/// </summary>
+	public void OrientLikeTrueType()
+	{
+		var area = 0.0;
+		foreach (var contour in Contours)
+		{
+			foreach (var edge in contour.Edges)
+				area += Vector2D.Cross(edge.Point(0), edge.Point(1));
+		}
+
+		if (area <= 0)
+			return;
+		foreach (var contour in Contours)
+			contour.Reverse();
+	}
 }
 
 /// <summary>Axis-aligned bounds in EM units (y-up).</summary>
