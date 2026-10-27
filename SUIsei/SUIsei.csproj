@@ -42,6 +42,14 @@
     <InternalsVisibleTo Include="SUIsei.Tests" />
   </ItemGroup>
 
+  <!-- The RoseMCP tap contract (the external/RoseMcp.Tap submodule), compiled in as source: the wire protocol and the
+       diagnostics endpoint SUIsei hosts behind SUIsei.Diagnostics.Enabled, so a tap can be loaded into a running game.
+       Its types stay internal, so a tap that compiles its own copy of the protocol never clashes with this one. -->
+  <ItemGroup>
+    <Compile Include="..\external\RoseMcp.Tap\Protocol\*.cs" Link="RoseMcp.Tap\Protocol\%(Filename)%(Extension)" />
+    <Compile Include="..\external\RoseMcp.Tap\Endpoint\*.cs" Link="RoseMcp.Tap\Endpoint\%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <!-- The engine's default baked font: the MTSDF atlas page + its JSON layout, embedded so FontAtlas.LoadEmbeddedDefault
        resolves them with no loose files. Explicit LogicalName because the filenames carry dots.
        A committed bake, not a build output: build/SUIsei.Fonts.targets runs SUIsei.Text.Tool, which depends on this

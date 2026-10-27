@@ -23,6 +23,13 @@ namespace SUIsei.SourceGen;
 /// resources; <c>{x:Null}</c> and <c>{x:Static}</c> resolve at compile time.
 /// Function paths and converters are outside the supported subset and diagnose.
 /// </para>
+/// <para>
+/// The source table: <c>InitializeComponent()</c> and each template factory end by recording, through
+/// <c>SUIsei.Diagnostics.RecordSource</c>, the file, line and column of every element they built and every style setter,
+/// with a <c>ControlTemplate</c>'s elements marked as template elements. The calls sit in one block behind
+/// <c>SUIsei.Diagnostics.Enabled</c>, so they cost one check where diagnostics are off and the trimmer removes them where
+/// the switch is fixed off, as under NativeAOT.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed partial class XamlSourceGenerator : IIncrementalGenerator
@@ -177,6 +184,12 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		public List<DiagnosticInfo> Diagnostics { get; } = [];
 		public HashSet<string> UsedNames { get; } = ["Root"];
 		public INamedTypeSymbol? RootType { get; set; }
+		// SUIsei.UIElement where the referenced SUIsei has the diagnostics source table to record elements into; null where
+		// it has none, and then nothing is recorded.
+		public INamedTypeSymbol? RecordableElement { get; } =
+			compilation.GetTypeByMetadataName("SUIsei.Diagnostics") is null ? null : compilation.GetTypeByMetadataName("SUIsei.UIElement");
+		// SUIsei.FrameworkElement, whose Name an x:Name is assigned to.
+		public INamedTypeSymbol? FrameworkElementType { get; } = compilation.GetTypeByMetadataName("SUIsei.FrameworkElement");
 		public int Counter;
 
 		public void Report(DiagnosticDescriptor descriptor, XObject node, params string[] args) =>
@@ -205,6 +218,9 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		// The {x:Bind}/{TemplateBinding} data-root expression (e.g. "__data" / "__tc") and its type, for a template.
 		public string DataRootExpr { get; init; } = "";
 		public INamedTypeSymbol? DataRootType { get; init; }
+		// The RecordSource calls for the elements and style setters this scope builds, emitted together at its end behind the
+		// diagnostics switch, so one check covers them and the trimmer drops the lot where the switch is off.
+		public List<string> SourceRecords { get; } = [];
 
 		// Append a statement at InitializeComponent / factory-body indentation (both are two tabs deep).
 		public void Emit(string statement) => Body.AppendLine("\t\t" + statement);
@@ -277,6 +293,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			sb.AppendLine($"\t\t__bindings = new {cls}_Bindings(this);");
 			sb.AppendLine("\t\t__bindings.Initialize();");
 		}
+		sb.Append(SourceRecordBlock(pageScope));
 		// Register for XAML Hot Reload with no-capture delegates (the registry holds only a weak reference). Inert
 		// unless hot reload is active; idempotent across rebuilds.
 		if (!rootIsSealed)
@@ -382,6 +399,11 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 
 		if (hasName)
 			scope.NamedElements[nameAttr!.Value] = (type, var);
+		RecordElementSource(gen, scope, el, type, var);
+
+		// The element carries its x:Name at run time, as in WinUI, which is what a diagnostics tool addresses it by.
+		if (hasName && gen.FrameworkElementType is { } frameworkElement && IsAssignableTo(type, frameworkElement))
+			scope.Emit($"{var}.Name = {Quote(nameAttr!.Value)};");
 
 		foreach (var attr in el.Attributes())
 		{
@@ -463,7 +485,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (TryParseTemplateBinding(inner, out var sourceProp))
 			{
 				if (!scope.IsControlTemplate) { gen.Report(TemplateBindingOutsideTemplate, attr); continue; }
-				EmitTemplateBinding(gen, scope, attr, var, prop, sourceProp);
+				EmitTemplateBinding(gen, scope, attr, var, type, prop, sourceProp);
 				continue;
 			}
 
@@ -513,6 +535,43 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 
 		return var;
 	}
+
+	// --- The source table: where each element and style setter was written, for SUIsei.Diagnostics ---
+
+	// Record where an element was written. Only a UIElement is recorded: an object element that is not one has no place in
+	// the tree a diagnostics tool walks. A ControlTemplate's elements are marked as template elements, so a pick can prefer
+	// the app's own markup.
+	private static void RecordElementSource(Gen gen, Scope scope, XElement el, INamedTypeSymbol type, string elementVar)
+	{
+		if (gen.RecordableElement is not { } uiElement || !IsAssignableTo(type, uiElement) || el is not IXmlLineInfo li || !li.HasLineInfo())
+			return;
+		var inTemplate = scope.IsControlTemplate ? "true" : "false";
+		scope.SourceRecords.Add($"global::SUIsei.Diagnostics.RecordSource({elementVar}, {Quote(gen.Path)}, {li.LineNumber}, {li.LinePosition}, {inTemplate});");
+	}
+
+	// Record where a style's setter was written; `setterExpr` reaches the Setter once the style is built.
+	private static void RecordSetterSource(Gen gen, Scope scope, XElement setterEl, string setterExpr)
+	{
+		if (gen.RecordableElement is null || setterEl is not IXmlLineInfo li || !li.HasLineInfo())
+			return;
+		scope.SourceRecords.Add($"global::SUIsei.Diagnostics.RecordSource({setterExpr}, {Quote(gen.Path)}, {li.LineNumber}, {li.LinePosition});");
+	}
+
+	// A scope's RecordSource calls as one block behind the diagnostics switch, at statement indentation; empty when the
+	// scope built nothing to record.
+	private static string SourceRecordBlock(Scope scope)
+	{
+		if (scope.SourceRecords.Count == 0)
+			return "";
+		var sb = new StringBuilder();
+		sb.AppendLine("\t\tif (global::SUIsei.Diagnostics.Enabled)");
+		sb.AppendLine("\t\t{");
+		foreach (var record in scope.SourceRecords)
+			sb.AppendLine("\t\t\t" + record);
+		sb.AppendLine("\t\t}");
+		return sb.ToString();
+	}
+
 	private static bool IsAssignableTo(ITypeSymbol type, ITypeSymbol targetType)
 	{
 		var current = (ITypeSymbol?)type;

@@ -42,6 +42,36 @@ public sealed class XamlGeneratorTests
 	}
 
 	[Test]
+	public void Named_elements_carry_their_x_name_at_run_time()
+	{
+		var view = BuiltView();
+
+		view.Title.Name.ShouldBe("Title");
+		view.Ok.Name.ShouldBe("Ok");
+		view.OkLabel.Name.ShouldBe("OkLabel");
+	}
+
+	[Test]
+	public void A_template_part_carries_its_x_name()
+	{
+		const string xaml = """
+			<ContentControl xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			                x:Class="Demo.V">
+			  <ContentControl.Template>
+			    <ControlTemplate TargetType="ContentControl">
+			      <Border x:Name="Chrome" />
+			    </ControlTemplate>
+			  </ContentControl.Template>
+			</ContentControl>
+			""";
+		const string vm = "namespace Demo { public partial class V { } }";
+
+		XamlGeneratorHarness.Run(xaml, vm).AllGeneratedText().ShouldContain("Chrome.Name = \"Chrome\";");
+		XamlGeneratorHarness.CompileErrors(xaml, vm).ShouldBeEmpty();
+	}
+
+	[Test]
 	public void Containers_are_wired_from_the_xaml_nesting()
 	{
 		var view = BuiltView();

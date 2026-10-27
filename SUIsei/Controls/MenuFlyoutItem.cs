@@ -18,7 +18,7 @@ public sealed class MenuFlyoutItem : ButtonBase
 	public MenuFlyoutItem()
 	{
 		HorizontalAlignment = HorizontalAlignment.Stretch;
-		Template = DefaultTemplate;
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
 	}
 
 	/// <summary>The menu row label (maps to <see cref="ContentControl.Content"/>).</summary>

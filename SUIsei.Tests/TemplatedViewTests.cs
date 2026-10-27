@@ -48,6 +48,19 @@ public sealed class TemplatedViewTests
 	}
 
 	[Test]
+	public void A_generated_template_binding_yields_to_a_local_value_on_the_part()
+	{
+		var view = Built();
+		view.Card.Opacity = 0.5f;
+		var border = (Border)view.Card.GetTemplateRoot()!;
+		border.Opacity.ShouldBe(0.5f); // {TemplateBinding Opacity}, on the part's Template rung
+
+		border.Opacity = 0.9f;
+		view.Card.Opacity = 0.3f;
+		border.Opacity.ShouldBe(0.9f); // the app's Local value wins and the template's push does not overwrite it
+	}
+
+	[Test]
 	public void Items_control_realizes_one_bound_container_per_item()
 	{
 		var view = Built();

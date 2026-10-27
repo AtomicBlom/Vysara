@@ -255,6 +255,7 @@ partial class XamlSourceGenerator
 		gen.Methods.AppendLine($"\tprivate static {returnType} {method}({paramDecl})");
 		gen.Methods.AppendLine("\t{");
 		gen.Methods.Append(body);
+		gen.Methods.Append(SourceRecordBlock(scope));
 		gen.Methods.AppendLine($"\t\treturn {rootVar};");
 		gen.Methods.AppendLine("\t}");
 		return method;
@@ -286,8 +287,8 @@ partial class XamlSourceGenerator
 		scope.Emit($"{targetVar}.{prop.Name} = {CoalesceRead(sb.ToString(), leafType, fallback, targetNull)};");
 	}
 
-	// A {TemplateBinding source} wire: the templated control's property flows OneWay into a child setter.
-	private static void EmitTemplateBinding(Gen gen, Scope scope, XAttribute attr, string targetVar, IPropertySymbol prop, string sourceProp)
+	// A {TemplateBinding source} wire: the templated control's property flows OneWay into a template part's property.
+	private static void EmitTemplateBinding(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop, string sourceProp)
 	{
 		// Content is a CLR property carrying a ContentChanged event (not a dependency property); wire via that event.
 		if (sourceProp == "Content")
@@ -299,15 +300,31 @@ partial class XamlSourceGenerator
 		}
 		// Otherwise the source must be a typed dependency property on the templated control; the push is typed too, so a
 		// value-type property reaches the child unboxed.
-		if (scope.DataRootType is null || FindDependencyProperty(scope.DataRootType, sourceProp) is not { } dp || DependencyValueType(dp) is null)
+		if (scope.DataRootType is null || FindDependencyProperty(scope.DataRootType, sourceProp) is not { } dp || DependencyValueType(dp) is not { } sourceType)
 		{
 			gen.Report(BadPropertyPath, attr, sourceProp,
 				$"{scope.DataRootType?.Name ?? "the templated control"} has no dependency property '{sourceProp}Property'");
 			return;
 		}
+		var source = $"{Fq(dp.ContainingType!)}.{dp.Name}";
+
+		// A dependency-property target takes the value on its Template rung, below Local, so a value the app sets on the
+		// part wins over the template and the template's next push does not overwrite it.
+		if (FindDependencyProperty(targetType, prop.Name) is { } targetDp && DependencyValueType(targetDp) is { } targetValueType)
+		{
+			var target = $"{Fq(targetDp.ContainingType!)}.{targetDp.Name}";
+			scope.Emit(SymbolEqualityComparer.IncludeNullability.Equals(sourceType, targetValueType)
+				? $"{scope.DataRootExpr}.RegisterTemplateBinding({source}, {targetVar}, {target});"
+				: $"{scope.DataRootExpr}.RegisterTemplateBinding({source}, {targetVar}, {target}, static __v => ({NullableCast(targetValueType)})__v);");
+			return;
+		}
+
+		// A CLR property has no precedence levels, so the push writes it through its setter.
+		scope.Emit($"{scope.DataRootExpr}.RegisterTemplateBinding({source}, __v => {targetVar}.{prop.Name} = ({NullableCast(prop.Type)})__v);");
+
 		// The cast keeps a nullable reference target nullable (a Brush? background), so pushing null is no warning.
-		var castType = prop.Type is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated } ? Fq(prop.Type) + "?" : Fq(prop.Type);
-		scope.Emit($"{scope.DataRootExpr}.RegisterTemplateBinding({Fq(dp.ContainingType!)}.{dp.Name}, __v => {targetVar}.{prop.Name} = ({castType})__v);");
+		static string NullableCast(ITypeSymbol type) =>
+			type is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated } ? Fq(type) + "?" : Fq(type);
 	}
 
 	// --- Resources + Style markup ---
@@ -389,6 +406,7 @@ partial class XamlSourceGenerator
 				gen.Report(UnsupportedMarkup, basedOn, $"BasedOn=\"{basedOn.Value.Trim()}\" (a base style is named with {{StaticResource Key}})");
 		}
 		scope.Emit($"var {styleVar} = new global::SUIsei.Style {{{basedOnInit} }};");
+		var setterCount = 0;
 
 		foreach (var setterEl in ObjectChildren(styleEl))
 		{
@@ -422,8 +440,10 @@ partial class XamlSourceGenerator
 				gen.Report(UnsupportedMarkup, valueAttr, valueAttr.Value.Trim());
 				continue;
 			}
-			if (code is not null)
-				scope.Emit($"{styleVar}.Setters.Add(new global::SUIsei.Setter {{ Property = {Fq(dp.ContainingType!)}.{dp.Name}, Value = {code} }});");
+			if (code is null)
+				continue;
+			scope.Emit($"{styleVar}.Setters.Add(new global::SUIsei.Setter {{ Property = {Fq(dp.ContainingType!)}.{dp.Name}, Value = {code} }});");
+			RecordSetterSource(gen, scope, setterEl, $"{styleVar}.Setters[{setterCount++}]");
 		}
 		return styleVar;
 	}

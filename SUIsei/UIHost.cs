@@ -35,6 +35,11 @@ public sealed class UIHost
 		// target is its non-focusable template root), matching WinUI.
 		Input.OnPress = el => Focus.FocusFromPointer(el);
 		HotReload.TrackHost(this);
+		Diagnostics.ViewsChanged();
+
+		// The first host brings up the endpoint a diagnostics tool loads its tap through.
+		if (Diagnostics.Enabled)
+			Diagnostics.StartEndpoint();
 	}
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
@@ -53,8 +58,13 @@ public sealed class UIHost
 	/// Recomputed each <see cref="Tick"/> from this frame's routed state, so a consumer that reads it between ticks
 	/// sees the last tick's result (one frame of coarse latency). It reflects the pointer's last known position, so
 	/// the host must feed a move-off (or window-leave) event for it to fall back to false when the pointer leaves.
+	/// A diagnostics tool picking an element holds it true with <see cref="Diagnostics.HoldPointer"/>.
 	/// </summary>
-	public bool WantsPointer { get; private set; }
+	public bool WantsPointer { get; internal set; }
+
+	/// <summary>Whether a diagnostics tool holds <see cref="WantsPointer"/> true, so a click it is about to pick with
+	/// never reaches the game.</summary>
+	internal bool PointerHeld { get; set; }
 
 	/// <summary>
 	/// True when this host would consume keyboard input — an element holds keyboard focus, so this frame's keys route
@@ -99,6 +109,7 @@ public sealed class UIHost
 		};
 		var view = new UIView(root, layer, interactive);
 		_views.Add(view);
+		Diagnostics.ViewsChanged();
 		return view;
 	}
 
@@ -106,8 +117,11 @@ public sealed class UIHost
 	/// (<see cref="ReleasedTextures"/>).</summary>
 	public void RemoveRoot(UIView view)
 	{
-		if (_views.Remove(view))
-			view.Textures.Clear(_textures);
+		if (!_views.Remove(view))
+			return;
+
+		view.Textures.Clear(_textures);
+		Diagnostics.ViewsChanged();
 	}
 
 	/// <summary>Queue a neutral pointer event for the next <see cref="Tick"/>.</summary>
@@ -131,6 +145,11 @@ public sealed class UIHost
 		// unless hot reload is active (HotReload.Enabled).
 		HotReload.ProcessPending();
 
+		// Run work a diagnostics tool posted from another thread, before layout so its edits lay out this frame and its
+		// reads see what was last drawn.
+		if (Diagnostics.Enabled)
+			Diagnostics.RunPosted();
+
 		// Advance animations FIRST: a clock write to a layout-affecting DP invalidates measure/arrange so the new
 		// value is reflected in this frame's LayoutPass; a visual-channel write (transform/opacity/brush) only marks
 		// the subtree dirty for the composite, with no relayout.
@@ -144,7 +163,7 @@ public sealed class UIHost
 		DrainKeyboard();
 
 		// Resolve the coarse capture report after routing/focus settle, so it is O(1) reads of this frame's state.
-		WantsPointer = Input.WantsPointer;
+		WantsPointer = Input.WantsPointer || PointerHeld;
 		WantsKeyboard = Focus.WantsKeyboard;
 	}
 
