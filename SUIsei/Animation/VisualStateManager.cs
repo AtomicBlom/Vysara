@@ -35,7 +35,8 @@ public static class VisualStateManager
 	/// <summary>
 	/// Transition <paramref name="control"/> to the state named <paramref name="stateName"/>. Returns false when no
 	/// group contains that state. The groups are read from the control's template root (falling back to the control
-	/// itself when it has no template).
+	/// itself when it has no template). Leaving a state releases every property its storyboard holds, whether that is
+	/// still running or has finished and holds its end values.
 	/// </summary>
 	public static bool GoToState(Control control, string stateName, bool useTransitions)
 	{
@@ -71,13 +72,13 @@ public static class VisualStateManager
 				// the transition hands over smoothly. Then release the previous state.
 				clock.Begin(next);
 				if (previous is not null && !ReferenceEquals(previous, next))
-					clock.Stop(previous);
+					Leave(clock, previous);
 			}
 			else
 			{
 				// Release the previous state first, so its release cannot wipe the end values snapped next.
 				if (previous is not null)
-					clock?.Stop(previous);
+					Leave(clock, previous);
 				if (next is not null)
 					SnapToEnd(next);
 			}
@@ -85,6 +86,16 @@ public static class VisualStateManager
 		}
 
 		return false;
+	}
+
+	// Leave a state: release what its storyboard holds, running or finished. A detached control has no clock, and its
+	// snapped values are released all the same.
+	private static void Leave(AnimationClock? clock, Storyboard storyboard)
+	{
+		if (clock is not null)
+			clock.Stop(storyboard);
+		else
+			AnimationClock.ReleaseAll(storyboard);
 	}
 
 	// Apply each animation's end value immediately (no clock) — used when transitions are off or the control is

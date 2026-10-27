@@ -19,4 +19,11 @@ public abstract class EasingFunctionBase : IEasingFunction
 		EasingMode.EaseOut => 1.0 - EaseCore(1.0 - t),
 		_ => t < 0.5 ? EaseCore(2.0 * t) * 0.5 : 1.0 - EaseCore(2.0 - 2.0 * t) * 0.5,
 	};
+
+	/// <summary>
+	/// The exponential ramp <c>(eᵃᵗ − 1)/(eᵃ − 1)</c>: <see cref="ExponentialEase"/>'s curve, and the envelope
+	/// <see cref="ElasticEase"/> swings within. An exponent within WinUI's epsilon of 0 gives the line it tends to, <c>t</c>.
+	/// </summary>
+	private protected static double ExponentialRamp(double t, double exponent) =>
+		Math.Abs(exponent) <= 1e-4 ? t : (Math.Exp(exponent * t) - 1.0) / (Math.Exp(exponent) - 1.0);
 }

@@ -23,9 +23,9 @@ public sealed class PropertyPath
 	public static implicit operator PropertyPath(DependencyProperty property) => new(property);
 
 	/// <summary>Walk the path from <paramref name="target"/> to the object that holds the animated property, and that
-	/// property. Throws when a step holds no object, holds one the next step does not apply to, or the last property is
-	/// not animatable.</summary>
-	internal (DependencyObject Owner, IAnimationTarget Target) Resolve(DependencyObject target)
+	/// property. Throws when a step holds no object, holds one the next step does not apply to, or, for an animation that
+	/// <paramref name="interpolates"/>, the last property is not animatable. A discrete animation sets any property.</summary>
+	internal (DependencyObject Owner, IAnimationTarget Target) Resolve(DependencyObject target, bool interpolates)
 	{
 		var owner = target;
 		for (var i = 0; i < _steps.Length - 1; i++)
@@ -40,7 +40,7 @@ public sealed class PropertyPath
 		var last = _steps[^1];
 		if (!last.AppliesTo(owner))
 			throw new InvalidOperationException($"Property path {this}: a {owner.GetType().Name} has no {last.Name}.");
-		if (!last.IsAnimatable)
+		if (interpolates && !last.IsAnimatable)
 			throw new InvalidOperationException($"Property path {this}: {last.Name} is not animatable; its type has no interpolation.");
 		return (owner, (IAnimationTarget)last);
 	}
