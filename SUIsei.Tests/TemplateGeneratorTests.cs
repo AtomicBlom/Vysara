@@ -59,6 +59,77 @@ public sealed class TemplateGeneratorTests
 		code.ShouldContain("((global::SUIsei.Controls.ContentControl)__tc).ContentChanged += (_, _) =>");
 	}
 
+	private const string DependencyTemplateBindingXaml = """
+		<ContentControl xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+		                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		                x:Class="Demo.V">
+		  <ContentControl.Template>
+		    <ControlTemplate TargetType="ContentControl">
+		      <Border x:Name="Chrome" Opacity="{TemplateBinding Opacity}" />
+		    </ControlTemplate>
+		  </ContentControl.Template>
+		</ContentControl>
+		""";
+
+	[Test]
+	public void Template_binding_to_a_dependency_property_writes_the_parts_template_rung()
+	{
+		var result = XamlGeneratorHarness.Run(DependencyTemplateBindingXaml, Vm);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		// The target resolves to its dependency property, so the push lands on the part's Template rung rather than
+		// through its CLR setter (Local).
+		code.ShouldContain("__tc.RegisterTemplateBinding(global::SUIsei.UIElement.OpacityProperty, Chrome, global::SUIsei.UIElement.OpacityProperty);");
+		code.ShouldNotContain("Chrome.Opacity =");
+		XamlGeneratorHarness.CompileErrors(DependencyTemplateBindingXaml, Vm).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void Template_binding_between_value_types_converts_on_the_way_to_the_template_rung()
+	{
+		const string xaml = """
+			<Slider xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			        x:Class="Demo.V">
+			  <Slider.Template>
+			    <ControlTemplate TargetType="Slider">
+			      <TextBlock x:Name="Readout" FontSize="{TemplateBinding Value}" />
+			    </ControlTemplate>
+			  </Slider.Template>
+			</Slider>
+			""";
+		var result = XamlGeneratorHarness.Run(xaml, Vm);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain("__tc.RegisterTemplateBinding(global::SUIsei.Controls.Slider.ValueProperty, Readout, global::SUIsei.Controls.TextBlock.FontSizeProperty, static __v => (float)__v);");
+		XamlGeneratorHarness.CompileErrors(xaml, Vm).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void Template_binding_to_a_clr_property_writes_through_its_setter()
+	{
+		const string xaml = """
+			<ContentControl xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			                x:Class="Demo.V">
+			  <ContentControl.Template>
+			    <ControlTemplate TargetType="ContentControl">
+			      <Popup x:Name="Flyout" IsLightDismissEnabled="{TemplateBinding IsEnabled}" />
+			    </ControlTemplate>
+			  </ContentControl.Template>
+			</ContentControl>
+			""";
+		var result = XamlGeneratorHarness.Run(xaml, Vm);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		// A CLR property has no precedence levels, so it is written as before.
+		code.ShouldContain("__tc.RegisterTemplateBinding(global::SUIsei.Controls.Control.IsEnabledProperty, __v => Flyout.IsLightDismissEnabled = (bool)__v);");
+		XamlGeneratorHarness.CompileErrors(xaml, Vm).ShouldBeEmpty();
+	}
+
 	[Test]
 	public void Control_template_compiles_against_the_runtime()
 	{

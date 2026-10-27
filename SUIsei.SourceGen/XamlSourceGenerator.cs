@@ -448,7 +448,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (TryParseTemplateBinding(inner, out var sourceProp))
 			{
 				if (!scope.IsControlTemplate) { gen.Report(TemplateBindingOutsideTemplate, attr); continue; }
-				EmitTemplateBinding(gen, scope, attr, var, prop, sourceProp);
+				EmitTemplateBinding(gen, scope, attr, var, type, prop, sourceProp);
 				continue;
 			}
 
