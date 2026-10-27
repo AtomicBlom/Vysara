@@ -182,9 +182,12 @@ public sealed class TemplateBindingTests
 
 		control.Content = "Again"; // a new text block takes the foreground too
 		control.VisualChildren[0].ShouldBeOfType<TextBlock>().Foreground.ShouldBeSameAs(Gold);
-		var element = new TextBlock { Text = "Own" };
+		var element = new TextBlock { Text = "Inherits" };
 		control.Content = element;
-		element.Foreground.ShouldBeNull(); // an element given as content keeps its own
+		element.Foreground.ShouldBeSameAs(Gold); // text given as element content inherits it too, as in WinUI
+		var own = new TextBlock { Text = "Own", Foreground = Ink };
+		control.Content = own;
+		own.Foreground.ShouldBeSameAs(Ink); // unless it sets its own
 	}
 
 	[Test]

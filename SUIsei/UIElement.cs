@@ -737,6 +737,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		child.Parent = this;
 		child.SetAttachedRoot(AttachedRoot);
 		child.InheritDisabled(InDisabledControl);
+		InheritedText.Adopt(this, child);
 	}
 
 	internal void DropChild(UIElement child)
@@ -746,6 +747,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 			child.Parent = null;
 			child.SetAttachedRoot(null);
 			child.InheritDisabled(false);
+			InheritedText.Drop(child);
 		}
 	}
 

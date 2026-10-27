@@ -12,8 +12,9 @@ namespace SUIsei;
 /// value overrides either, and a diagnostics read can tell them from the app's markup.
 /// A set recomputes the top of the ladder, coerces it, fires the typed change callback only when the
 /// <em>coerced resolved</em> value changes, and ORs the property's <see cref="InvalidationFlags"/> into the element (via
-/// <see cref="OnPropertyInvalidated"/>). Reflection-free: dispatch goes through the typed delegates on
-/// <see cref="DependencyProperty{TOwner, TValue}"/>.
+/// <see cref="OnPropertyInvalidated"/>). A property WinUI inherits (a text property such as <c>FontSize</c>) then passes
+/// the new value down to the elements below that hold it, as their Inherited value. Reflection-free: dispatch goes
+/// through the typed delegates on <see cref="DependencyProperty{TOwner, TValue}"/>.
 /// <para>
 /// The store is typed: each property's rungs live in a slot of the property's own value type, made on the first write
 /// of that property to this object. After that a write, its coercion, its change check and its change callback never
@@ -91,6 +92,10 @@ public abstract class DependencyObject
 	public void SetValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, TValue value) where TOwner : DependencyObject =>
 		SetRung(dp, ValueRung.Local, value, hasValue: true);
 
+	/// <summary>Clear the <b>Local</b> rung, as WinUI's <c>ClearValue</c> does: the property reads its style, inherited or
+	/// default value again (an animation still wins while it runs).</summary>
+	public void ClearValue(DependencyProperty dp) => dp.ClearRung(this, ValueRung.Local);
+
 	/// <summary>Push the <b>Animation</b> rung (the top of the ladder) — the storyboard/independent-animation path.</summary>
 	internal void SetAnimatedValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, TValue value) where TOwner : DependencyObject =>
 		SetRung(dp, ValueRung.Animation, value, hasValue: true);
@@ -150,6 +155,12 @@ public abstract class DependencyObject
 		return [.. indices];
 	}
 
+	/// <summary>True if any rung holds a value, a field-backed property's local value in its field included, so the
+	/// property reads something other than its default.</summary>
+	internal bool HasAnyValue(DependencyProperty dp) =>
+		(_fieldLocals & dp.FieldBit) != 0
+		|| (_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Set != 0);
+
 	/// <summary>Write (or, with <paramref name="hasValue"/> false, clear) one rung, then raise the change if the
 	/// coerced resolved value moved.</summary>
 	internal void SetRung<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueRung rung, TValue value, bool hasValue)
@@ -195,6 +206,7 @@ public abstract class DependencyObject
 			OnPropertyInvalidated(dp, dp.Invalidates);
 		if (_templateTargets is not null && _templateTargets.TryGetValue(dp.GlobalIndex, out var push))
 			((Action<TValue>)push)(newValue);
+		dp.Metadata.Inherits?.PassDown(this, newValue, slot.Set != 0);
 	}
 
 	// The local value of a field-backed property that holds no slot: it lives in the owner's field, and its bit in
@@ -223,6 +235,7 @@ public abstract class DependencyObject
 			OnPropertyInvalidated(dp, dp.Invalidates);
 		if (_templateTargets is not null && _templateTargets.TryGetValue(dp.GlobalIndex, out var push))
 			((Action<TValue>)push)(value);
+		dp.Metadata.Inherits?.PassDown(this, value, hasValue);
 	}
 
 	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> from <paramref name="source"/> on this object to a child setter.
