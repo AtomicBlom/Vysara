@@ -140,7 +140,8 @@ public abstract class DependencyProperty
 }
 
 /// <summary>The concrete, typed dependency property.</summary>
-public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAnimationTarget<TValue> where TOwner : DependencyObject
+public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAnimationTarget<TValue>, IInheritedMember<TValue>
+	where TOwner : DependencyObject
 {
 	internal DependencyProperty(string name, DependencyPropertyKind kind, PropertyMetadata<TOwner, TValue> metadata)
 		: base(name, kind, metadata.Invalidates, typeof(TOwner), typeof(TValue))
@@ -193,4 +194,13 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 	bool IAnimationTarget<TValue>.Validates => Metadata.Validate is not null;
 
 	void IAnimationTarget<TValue>.Validate(DependencyObject target, TValue value) => Metadata.Validate?.Invoke((TOwner)target, value);
+
+	void IInheritedMember<TValue>.SetInherited(DependencyObject target, TValue value, bool hasValue) =>
+		target.SetRung(this, DependencyObject.ValueRung.Inherited, value, hasValue);
+
+	bool IInheritedMember<TValue>.TryGetValue(DependencyObject target, out TValue value)
+	{
+		value = target.GetValue(this);
+		return target.HasAnyValue(this);
+	}
 }

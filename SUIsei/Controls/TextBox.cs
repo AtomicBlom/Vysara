@@ -77,9 +77,6 @@ public sealed class TextBox : Control
 		set => SetValue(TextProperty, value);
 	}
 
-	/// <summary>Font size in DIPs.</summary>
-	public float FontSize { get; set { if (field != value) { field = value; InvalidateMeasure(); } } } = 14f;
-
 	/// <summary>The caret position (also the moving end of a selection). Code outside places the caret with
 	/// <see cref="Select"/> or <see cref="SelectionStart"/>, as in WinUI.</summary>
 	internal int CaretIndex

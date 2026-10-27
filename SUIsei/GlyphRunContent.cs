@@ -10,7 +10,8 @@ namespace SUIsei;
 /// <see cref="UIPrimKind.Glyph"/> commands: the font and features the element measured the run with, so it draws in the
 /// space layout gave it. <see cref="FontSize"/> is in the visual's own units, as an element's layout is (DIPs); the
 /// transforms above it, the root's DIP→pixel scale included, take it to the surface. <see cref="Brush"/> colours the
-/// glyphs, a gradient measured over <see cref="Size"/>.
+/// glyphs, a gradient measured over <see cref="Size"/>. The text breaks into lines at its line breaks, each placed across
+/// <see cref="Size"/>'s width by <see cref="TextAlignment"/>.
 /// <para>
 /// A run can carry two effects drawn from the atlas's true-distance channel, both sized in EM so they scale with the
 /// text: an outline (<see cref="OutlineThickness"/>, <see cref="OutlineBrush"/>), the glyphs grown by the thickness, and a
@@ -28,7 +29,9 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 	{
 	}
 
-	/// <summary>The text to lay out.</summary>
+	/// <summary>The text to lay out. Each line break (a line feed, a carriage return, or another of Unicode's mandatory
+	/// breaks) starts a new line, the font's line height below the last, placed across <see cref="Size"/> by
+	/// <see cref="TextAlignment"/>.</summary>
 	public string Text { get; set => Change(ref field, value); } = text;
 
 	/// <summary>The font size, the EM, in the visual's own units (DIPs for an element's text).</summary>
@@ -48,6 +51,18 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 	/// <summary>The OpenType features the run is shaped with; <see cref="FontFeatureSet.Empty"/> unless set. Compared by
 	/// value, so an equal set does not advance <see cref="VisualContent.Version"/>.</summary>
 	public FontFeatureSet Features { get; set => Change(ref field, value ?? throw new ArgumentNullException(nameof(value))); } = features ?? FontFeatureSet.Empty;
+
+	/// <summary>How each line sits across <see cref="Size"/>'s width; <see cref="SUIsei.TextAlignment.Left"/> unless set.
+	/// Whitespace at a line's end hangs past where the line is placed.</summary>
+	public TextAlignment TextAlignment { get; set => Change(ref field, value); } = TextAlignment.Left;
+
+	/// <summary>Where <paramref name="line"/>'s pen starts across <see cref="Size"/>'s width, in the visual's units.</summary>
+	internal float LineStart(in ShapedLine line) => TextAlignment switch
+	{
+		TextAlignment.Center => (Size.X - line.PlacedWidthEm * FontSize) / 2f,
+		TextAlignment.Right => Size.X - line.PlacedWidthEm * FontSize,
+		_ => 0f, // Left (Start), and Justify: no line wraps, so none is stretched
+	};
 
 	/// <summary>How far the outline reaches past the glyphs' edges, in EM. 0, the default, draws no outline.</summary>
 	public float OutlineThickness { get; set => Change(ref field, value); }
@@ -116,6 +131,8 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 		sb.Append(CultureInfo.InvariantCulture, $" glyphs=\"{Text}\" size={FontSize:0.###}");
 		if (!Features.IsEmpty)
 			sb.Append(CultureInfo.InvariantCulture, $" features=\"{Features}\"");
+		if (TextAlignment != TextAlignment.Left)
+			sb.Append(TextAlignment switch { TextAlignment.Center => " align=center", TextAlignment.Right => " align=right", _ => " align=justify" });
 		if (Brush is { } b)
 		{
 			sb.Append(" brush=");

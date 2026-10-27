@@ -158,12 +158,12 @@ partial class XamlSourceGenerator
 		{
 			if (groupEl.Name.LocalName != "VisualStateGroup") { gen.Report(BadPropertyElement, groupEl, groupEl.Name.LocalName); continue; }
 			var groupVar = NewName(gen, "__vsgrp");
-			var groupName = groupEl.Attribute("Name")?.Value ?? "";
+			var groupName = StateName(groupEl);
 			scope.Emit($"var {groupVar} = new global::SUIsei.Animation.VisualStateGroup {{ Name = {Quote(groupName)} }};");
 			foreach (var stateEl in groupEl.Elements())
 			{
 				if (stateEl.Name.LocalName != "VisualState") { gen.Report(BadPropertyElement, stateEl, stateEl.Name.LocalName); continue; }
-				var stateName = stateEl.Attribute("Name")?.Value ?? "";
+				var stateName = StateName(stateEl);
 				var sbEl = stateEl.Elements().FirstOrDefault(e => e.Name.LocalName == "Storyboard");
 				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, scope, ownerVar, sbEl);
 				scope.Emit($"{groupVar}.States.Add(new global::SUIsei.Animation.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
@@ -173,21 +173,29 @@ partial class XamlSourceGenerator
 		scope.Emit($"global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
 	}
 
+	// A visual state's or group's name: x:Name, as WinUI markup writes it, or Name.
+	private static string StateName(XElement el) => el.Attribute(X + "Name")?.Value ?? el.Attribute("Name")?.Value ?? "";
+
 	// --- Templates: ControlTemplate / DataTemplate / ItemsPanelTemplate factories ---
 
 	private static void EmitControlTemplateProperty(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
 	{
 		var templateEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ControlTemplate");
 		if (templateEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
+		if (ControlTemplateValue(gen, templateEl, ownerType) is { } template)
+			scope.Emit($"{ownerVar}.Template = {template};");
+	}
 
-		// TargetType (optional) types the data root so non-Content {TemplateBinding}s and storyboard targets resolve;
-		// default to the owning control's type.
-		var targetType = ResolveTypeName(gen, templateEl, templateEl.Attribute("TargetType")?.Value) ?? ownerType;
+	// A ControlTemplate as a value: a template object whose static factory builds the tree for each control it is applied
+	// to, so one template is shared by every control that uses it, set directly, kept as a resource or set by a style.
+	// TargetType (optional) types the data root so non-Content {TemplateBinding}s and storyboard targets resolve; without
+	// one it is `targetType`, the control's type where that is known.
+	private static string? ControlTemplateValue(Gen gen, XElement templateEl, INamedTypeSymbol targetType)
+	{
+		var dataRootType = ResolveTypeName(gen, templateEl, templateEl.Attribute("TargetType")?.Value) ?? targetType;
 		var method = EmitTemplateFactory(gen, templateEl, isControlTemplate: true,
-			paramDecl: "global::SUIsei.Controls.Control __tc", castLocal: null, dataRootExpr: "__tc", dataRootType: targetType);
-		if (method is null)
-			return;
-		scope.Emit($"{ownerVar}.Template = new global::SUIsei.Controls.ControlTemplate {{ Factory = {method} }};");
+			paramDecl: "global::SUIsei.Controls.Control __tc", castLocal: null, dataRootExpr: "__tc", dataRootType: dataRootType);
+		return method is null ? null : $"new global::SUIsei.Controls.ControlTemplate {{ Factory = {method} }}";
 	}
 
 	private static void EmitDataTemplateProperty(Gen gen, Scope scope, string ownerVar, string targetProp, XElement propEl)
@@ -370,15 +378,21 @@ partial class XamlSourceGenerator
 		scope.ResourceOwners.Add(ownerVar);
 	}
 
-	// One keyed resource into the dictionary `dictionaryExpr`: a Style, or any other object, such as a brush shared by
-	// the elements that name it with {StaticResource}. A resource lookup made while building it (a BasedOn) starts from
-	// `ownerVar`. Templates are set with <X.Template>, not kept as resources.
+	// One keyed resource into the dictionary `dictionaryExpr`: a Style, a ControlTemplate shared by the controls that name
+	// it (Template="{StaticResource Key}"), or any other object, such as a brush shared by the elements that name it with
+	// {StaticResource}. A resource lookup made while building it (a BasedOn) starts from `ownerVar`. Data and items-panel
+	// templates are set with <X.ItemTemplate> and the like, not kept as resources.
 	private static void EmitResourceEntry(Gen gen, Scope scope, string ownerVar, string dictionaryExpr, XElement resEl)
 	{
 		var key = resEl.Attribute(X + "Key")?.Value;
 		if (key is null) { gen.Report(BadPropertyElement, resEl, $"{resEl.Name.LocalName} (resource needs an x:Key)"); return; }
-		if (resEl.Name.LocalName is "ControlTemplate" or "DataTemplate" or "ItemsPanelTemplate") { gen.Report(BadPropertyElement, resEl, resEl.Name.LocalName); return; }
-		var valueVar = resEl.Name.LocalName == "Style" ? EmitStyle(gen, scope, ownerVar, resEl) : EmitElement(gen, scope, resEl);
+		if (resEl.Name.LocalName is "DataTemplate" or "ItemsPanelTemplate") { gen.Report(BadPropertyElement, resEl, resEl.Name.LocalName); return; }
+		var valueVar = resEl.Name.LocalName switch
+		{
+			"Style" => EmitStyle(gen, scope, ownerVar, resEl),
+			"ControlTemplate" => ControlTemplateValue(gen, resEl, gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Control")!),
+			_ => EmitElement(gen, scope, resEl),
+		};
 		if (valueVar is not null)
 			scope.Emit($"{dictionaryExpr}.Add({Quote(key)}, {valueVar});");
 	}
@@ -432,7 +446,7 @@ partial class XamlSourceGenerator
 
 			string? code;
 			if (valueEl is not null)
-				code = SetterElementValue(gen, scope, valueEl, valueType, propName, dp);
+				code = SetterElementValue(gen, scope, valueEl, valueType, propName, dp, targetType);
 			else if (!IsMarkup(valueAttr!.Value, out var inner))
 				code = ConvertOrReport(gen, valueAttr, valueType, valueAttr.Value, propName, dp);
 			else if (!TryMarkupValue(gen, scope, valueAttr, ownerVar, inner, valueType, propName, out code))
@@ -471,16 +485,21 @@ partial class XamlSourceGenerator
 	}
 
 	// <Setter.Value>: text converted for the property, or one object, made once and shared by every element the style
-	// applies to. A template there would need a factory per element, which is outside the subset.
-	private static string? SetterElementValue(Gen gen, Scope scope, XElement valueEl, ITypeSymbol valueType, string propertyName, IFieldSymbol property)
+	// applies to; a ControlTemplate is such an object, its factory building a tree for each control, typed by the style's
+	// `targetType` unless it names its own. Data and items-panel templates are set with <X.ItemTemplate> and the like.
+	private static string? SetterElementValue(Gen gen, Scope scope, XElement valueEl, ITypeSymbol valueType, string propertyName, IFieldSymbol property,
+		INamedTypeSymbol targetType)
 	{
 		var children = ObjectChildren(valueEl);
 		var text = TextContent(valueEl);
 		if (children.Count == 0 && text is not null)
 			return ConvertOrReport(gen, valueEl, valueType, text, propertyName, property);
+		if (children.Count == 1 && text is null && children[0].Name.LocalName == "ControlTemplate"
+			&& SymbolEqualityComparer.Default.Equals(valueType, gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.ControlTemplate")))
+			return ControlTemplateValue(gen, children[0], targetType);
 		if (children.Count == 1 && text is null && children[0].Name.LocalName is not ("ControlTemplate" or "DataTemplate" or "ItemsPanelTemplate"))
 			return EmitElement(gen, scope, children[0]);
-		gen.Report(BadPropertyElement, valueEl, "Setter.Value (takes one value or object; templates are set with <X.Template>)");
+		gen.Report(BadPropertyElement, valueEl, "Setter.Value (takes one value or object; a ControlTemplate only for Template, and other templates are set with <X.ItemTemplate> and the like)");
 		return null;
 	}
 

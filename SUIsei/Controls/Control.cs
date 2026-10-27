@@ -106,11 +106,16 @@ public abstract class Control : FrameworkElement
 		DependencyProperty.Register(nameof(BorderBrush),
 			new PropertyMetadata<Control, Brush?> { PropertyChanged = static (c, old, @new) => c.OnBrushChanged(old, @new) });
 
-	/// <summary>The brush for the control's text: a built-in template passes it to the text its presenter makes for
-	/// string content. Null shows the template's own look.</summary>
+	/// <summary>The brush for the control's text, inherited as in WinUI: the text in its template, or made for its string
+	/// content, is painted with it unless that text sets its own, and so are the controls inside it. Null shows the
+	/// template's own look.</summary>
 	public static readonly DependencyProperty<Control, Brush?> ForegroundProperty =
 		DependencyProperty.Register(nameof(Foreground),
-			new PropertyMetadata<Control, Brush?> { PropertyChanged = static (c, _, value) => c.OnForegroundChanged(value) });
+			new PropertyMetadata<Control, Brush?>
+			{
+				Inherits = InheritedText.Foreground,
+				PropertyChanged = static (c, _, value) => c.OnForegroundChanged(value),
+			});
 
 	/// <summary>The thickness of the control's border, where its template draws one with <see cref="BorderBrush"/>.</summary>
 	public static readonly DependencyProperty<Control, Thickness> BorderThicknessProperty =
@@ -124,6 +129,15 @@ public abstract class Control : FrameworkElement
 	public Thickness BorderThickness { get => GetValue(BorderThicknessProperty); set => SetValue(BorderThicknessProperty, value); }
 
 	public Brush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
+
+	/// <summary>The size of the control's text in DIPs, inherited as in WinUI: the text in its template, or made for its
+	/// string content, takes it unless that text sets its own, and so do the controls inside it.</summary>
+	public static readonly DependencyProperty<Control, float> FontSizeProperty =
+		DependencyProperty.Register(nameof(FontSize),
+			new PropertyMetadata<Control, float> { DefaultValue = 14f, Invalidates = InvalidationFlags.Measure, Inherits = InheritedText.FontSize });
+
+	/// <summary>The size of the control's text in DIPs: 14 unless set here or inherited from above.</summary>
+	public float FontSize { get => GetValue(FontSizeProperty); set => SetValue(FontSizeProperty, value); }
 
 	/// <summary>The background changed; a control that paints it itself repaints. The default repaints in place.</summary>
 	private protected virtual void OnBackgroundChanged(Brush? old, Brush? @new) => OnBrushChanged(old, @new);

@@ -174,6 +174,74 @@ public sealed class TemplateGeneratorTests
 	}
 
 	[Test]
+	public void A_control_template_is_shared_from_a_resource_or_a_style_and_its_states_come_after_its_parts()
+	{
+		// As WinUI markup writes it: the template a keyed resource, its states first and named with x:Name, naming a part
+		// declared after them; and a style setting a template of its own through <Setter.Value>.
+		const string xaml = """
+			<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			            x:Class="Demo.V">
+			  <StackPanel.Resources>
+			    <ControlTemplate x:Key="Tab" TargetType="ContentControl">
+			      <Border>
+			        <VisualStateManager.VisualStateGroups>
+			          <VisualStateGroup x:Name="Emphasis">
+			            <VisualState x:Name="Lit">
+			              <Storyboard>
+			                <ColorAnimation Storyboard.TargetName="Label" Storyboard.TargetProperty="(ContentPresenter.Foreground).(SolidColorBrush.Color)" To="White" />
+			              </Storyboard>
+			            </VisualState>
+			          </VisualStateGroup>
+			        </VisualStateManager.VisualStateGroups>
+			        <ContentPresenter x:Name="Label" Content="{TemplateBinding Content}" Foreground="Gray" />
+			      </Border>
+			    </ControlTemplate>
+			    <Style x:Key="Tabbed" TargetType="ContentControl">
+			      <Setter Property="Template">
+			        <Setter.Value>
+			          <ControlTemplate><ContentPresenter Content="{TemplateBinding Content}" /></ControlTemplate>
+			        </Setter.Value>
+			      </Setter>
+			    </Style>
+			  </StackPanel.Resources>
+			  <ContentControl Template="{StaticResource Tab}" />
+			  <ContentControl Style="{StaticResource Tabbed}" />
+			</StackPanel>
+			""";
+		var result = XamlGeneratorHarness.Run(xaml, Vm);
+		var code = result.AllGeneratedText();
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		code.ShouldContain(".Add(\"Tab\", new global::SUIsei.Controls.ControlTemplate { Factory = __Template");
+		code.ShouldContain("Property = global::SUIsei.Controls.Control.TemplateProperty, Value = new global::SUIsei.Controls.ControlTemplate { Factory = __Template");
+		code.ShouldContain("new global::SUIsei.Animation.VisualStateGroup { Name = \"Emphasis\" }");
+		code.ShouldContain("new global::SUIsei.Animation.VisualState { Name = \"Lit\"");
+		XamlGeneratorHarness.CompileErrors(xaml, Vm).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void A_template_where_none_can_go_diagnoses()
+	{
+		// A ControlTemplate set by a style on a property that holds none, and a DataTemplate kept as a resource.
+		const string xaml = """
+			<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			            x:Class="Demo.V">
+			  <StackPanel.Resources>
+			    <Style x:Key="S" TargetType="ContentControl">
+			      <Setter Property="Background">
+			        <Setter.Value><ControlTemplate><Border /></ControlTemplate></Setter.Value>
+			      </Setter>
+			    </Style>
+			    <DataTemplate x:Key="D"><TextBlock /></DataTemplate>
+			  </StackPanel.Resources>
+			</StackPanel>
+			""";
+		XamlGeneratorHarness.Run(xaml, Vm).DiagnosticIds().Count(id => id == "SUISEI020").ShouldBe(2);
+	}
+
+	[Test]
 	public void Template_binding_outside_a_control_template_diagnoses()
 	{
 		// {TemplateBinding} on a plain page element (no enclosing ControlTemplate) is invalid.
