@@ -291,9 +291,11 @@ public sealed class DrawListCompositor : IUICompositor
 		return a;
 	}
 
-	// An image brush over vector geometry: the image placed in `box` by the brush's stretch and alignment and sampled
-	// through the Vector prim's texture slot at each point's place in it. Where the image does not cover the box (a
-	// letterboxed Uniform), the geometry is clipped to the image, to the bounds of its rect on the surface.
+	// An image brush over vector geometry: the image placed in `box` by the brush's stretch and alignment, sampled through
+	// the Vector prim's texture slot at each point's place in it, and painting only where it lies, as on a rect. The
+	// geometry is cut to the image in its own space, so that holds under any transform: a letterboxed image leaves the rest
+	// of a fill transparent, and a stroke, whose box is its outline's bounds as a gradient's is, paints only within them. A
+	// fill is left uncut where the image reaches the box's edge, so its antialiasing fringe there samples the image's edge.
 	private static void AddVectorImage(UIDrawList list, TessellatedPath path, PathTrim trim, CompositionSurfaceBrush surface, in Rect box,
 		in Matrix3x2 matrix, float alpha, in Rect clip, bool overlaps)
 	{
@@ -305,12 +307,19 @@ public sealed class DrawListCompositor : IUICompositor
 		if (image.IsEmpty)
 			return;
 		var localToUv = Matrix3x2.CreateTranslation(-image.X, -image.Y) * Matrix3x2.CreateScale(1f / image.Width, 1f / image.Height);
-		var covers = image.X <= box.X && image.Y <= box.Y && image.Right >= box.Right && image.Bottom >= box.Bottom;
-		var drawClip = covers ? clip : clip.Intersect(image.TransformBounds(matrix));
-		if (overlaps && a < 1f)
-			list.AddVector(path, trim, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, 1f), drawClip, a, source, localToUv);
+		var cutAll = path.IsStroke;
+		var keepMin = new Vector2(
+			cutAll || image.X > box.X ? MathF.Max(image.X, box.X) : float.NegativeInfinity,
+			cutAll || image.Y > box.Y ? MathF.Max(image.Y, box.Y) : float.NegativeInfinity);
+		var keepMax = new Vector2(
+			cutAll || image.Right < box.Right ? MathF.Min(image.Right, box.Right) : float.PositiveInfinity,
+			cutAll || image.Bottom < box.Bottom ? MathF.Min(image.Bottom, box.Bottom) : float.PositiveInfinity);
+		var groupOpacity = overlaps && a < 1f ? a : 1f;
+		var tint = PremultipliedHdrColor.FromStraight(1f, 1f, 1f, groupOpacity < 1f ? 1f : a);
+		if (float.IsInfinity(keepMin.X) && float.IsInfinity(keepMin.Y) && float.IsInfinity(keepMax.X) && float.IsInfinity(keepMax.Y))
+			list.AddVector(path, trim, matrix, tint, clip, groupOpacity, source, localToUv);
 		else
-			list.AddVector(path, trim, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, a), drawClip, 1f, source, localToUv);
+			list.AddVector(path, trim, matrix, tint, clip, groupOpacity, source, localToUv, keepMin, keepMax);
 	}
 
 	// A rect painted by a colour or a linear gradient: one quad for a colour, as many bands as the gradient needs.

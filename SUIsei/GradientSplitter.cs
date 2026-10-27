@@ -131,6 +131,33 @@ internal static class GradientSplitter
 			list.AddPolygon(local, uv, colors, custom, matrix, kind, clip, slot);
 	}
 
+	/// <summary>
+	/// Cut a convex polygon of at most <see cref="MaxCorners"/> corners to the box from <paramref name="min"/> to
+	/// <paramref name="max"/> (a side at an infinity is open), interpolating its corners' <paramref name="custom"/> params,
+	/// and return how many corners <paramref name="outPos"/> and <paramref name="outCustom"/> now hold (under 3 when
+	/// nothing is left). The cuts are made as the bands are, so the triangles of a mesh cut a shared edge at the same
+	/// points.
+	/// </summary>
+	public static int CutToBox(ReadOnlySpan<Vector2> pos, ReadOnlySpan<Vector4> custom, Vector2 min, Vector2 max,
+		Span<Vector2> outPos, Span<Vector4> outCustom)
+	{
+		var n = pos.Length;
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(n, MaxCorners);
+		Span<float> t = stackalloc float[MaxCut];
+		Span<float> cutT = stackalloc float[MaxCut];
+		Span<Vector2> midPos = stackalloc Vector2[MaxCut];
+		Span<Vector4> midCustom = stackalloc Vector4[MaxCut];
+		Span<Vector2> unusedUv = stackalloc Vector2[MaxCut];
+		for (var i = 0; i < n; i++)
+			t[i] = pos[i].X;
+		var m = CutToBand(pos, pos, custom, t[..n], min.X, max.X, midPos, unusedUv, midCustom, cutT);
+		if (m < 3)
+			return m;
+		for (var i = 0; i < m; i++)
+			t[i] = midPos[i].Y;
+		return CutToBand(midPos[..m], midPos[..m], midCustom[..m], t[..m], min.Y, max.Y, outPos, unusedUv, outCustom, cutT);
+	}
+
 	// The part of a convex polygon between the lines t = a and t = b, in order around it: each corner inside the band,
 	// and where an edge crosses either line, the crossing. A crossing is always computed from the original edge's two
 	// corners, never from a piece of it, so the band either side of a line gets bit-identical corners there and the

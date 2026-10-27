@@ -272,6 +272,28 @@ public sealed class ShapeContentTests
 	}
 
 	[Test]
+	[Arguments(CompositionColorSpace.Rgb)]
+	[Arguments(CompositionColorSpace.RgbLinear)]
+	public void Every_triangle_of_a_mesh_colours_a_shared_corner_the_same(CompositionColorSpace space)
+	{
+		// sRGB interpolation is drawn as chords between exact samples; a corner inside a chord must take the chord's colour
+		// in every triangle that meets it, not the exact curve's in one and the chord's in its neighbour.
+		var gradient = new CompositionLinearGradientBrush { EndPoint = new Vector2(1f, 0f), InterpolationSpace = space };
+		gradient.SetColorStops([new(0f, HdrColor.FromRgb(0, 0, 0)), new(1f, HdrColor.FromRgb(255, 255, 255))]);
+		var ellipse = new EllipseGeometry { Center = new Point(50, 50), RadiusX = 40, RadiusY = 30 }.CompositionPath;
+		var draw = Composite(new DrawListCompositor(), Scene(new ShapeContent { Path = ellipse, Fill = gradient }).Root);
+
+		var colours = new Dictionary<Vector2, HashSet<PremultipliedHdrColor>>();
+		foreach (var v in draw.Vertices.Span)
+		{
+			if (!colours.TryGetValue(v.Position, out var set))
+				colours[v.Position] = set = [];
+			set.Add(v.Color);
+		}
+		colours.Values.ShouldAllBe(set => set.Count == 1);
+	}
+
+	[Test]
 	public void An_image_paints_a_shape_through_the_vector_prims_texture()
 	{
 		// A 2×2 image over the square [20,60]²: each probe sits past its texel's centre, where clamped bilinear filtering
@@ -289,17 +311,41 @@ public sealed class ShapeContentTests
 	}
 
 	[Test]
-	public void A_letterboxed_image_is_clipped_to_the_image()
+	[Arguments(0f)]
+	[Arguments(45f)]
+	public void A_letterboxed_image_paints_only_where_it_lies_under_any_transform(float degrees)
 	{
-		// A square image in a 40×20 box, Uniform: it fills x 30..50 and leaves the rest of the box unpainted.
+		// A square image in a 40×20 box, Uniform: it fills x 30..50 and leaves the rest of the box unpainted, turned or not.
 		var image = new CompositionSurfaceBrush { Surface = ImageSource.FromRgba8(1, 1, [255, 255, 255, 255]), Stretch = Stretch.Uniform };
 		var shape = new ShapeContent { Path = PathOf("M 20,40 L 60,40 L 60,60 L 20,60 Z"), Fill = image };
-		var draw = Composite(new DrawListCompositor(), Scene(shape).Root);
+		var (root, sprite) = Scene(shape);
+		var turn = Matrix3x2.CreateRotation(degrees * MathF.PI / 180f, new Vector2(40f, 50f));
+		sprite.Transform = turn;
+		var raster = Raster(Composite(new DrawListCompositor(), root));
 
-		draw.Commands.Span[0].ClipRect.ShouldBe(new Rect(30, 40, 20, 20));
-		var raster = Raster(draw);
 		raster.ReadLinear(40, 50).X.ShouldBe(1f, 1e-3f);
-		raster.ReadLinear(25, 50).X.ShouldBe(0f);
+		foreach (var letterbox in new[] { new Vector2(24.5f, 50.5f), new Vector2(55.5f, 44.5f) })
+		{
+			var p = Vector2.Transform(letterbox, turn);
+			raster.ReadLinear((int)p.X, (int)p.Y).X.ShouldBe(0f);
+		}
+	}
+
+	[Test]
+	public void An_image_stroke_paints_only_over_its_outlines_bounds()
+	{
+		// The image maps over the outline's bounds, as a gradient does, and paints nothing past them: the outer half of the
+		// square's stroke is left transparent, and a horizontal line, whose bounds have no height, draws nothing.
+		var image = new CompositionSurfaceBrush { Surface = ImageSource.FromRgba8(1, 1, [255, 255, 255, 255]) };
+		var square = new ShapeContent { Path = PathOf("M 20,20 L 60,20 L 60,60 L 20,60 Z"), Stroke = image };
+		square.StrokeStyle.Thickness = 8f;
+		var raster = Raster(Composite(new DrawListCompositor(), Scene(square).Root));
+		raster.ReadLinear(21, 40).X.ShouldBe(1f, 1e-3f);
+		raster.ReadLinear(17, 40).X.ShouldBe(0f);
+
+		var line = new ShapeContent { Path = PathOf("M 20,50 L 80,50"), Stroke = image };
+		line.StrokeStyle.Thickness = 8f;
+		Composite(new DrawListCompositor(), Scene(line).Root).Commands.Length.ShouldBe(0);
 	}
 
 	[Test]
