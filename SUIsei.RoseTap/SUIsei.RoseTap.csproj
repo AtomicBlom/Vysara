@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- SUIsei's RoseMCP tap: one AnyCPU assembly a RoseMCP host drops into its taps folder and loads into a running game
+       through the diagnostics endpoint SUIsei hosts, where it answers RoseMCP's live UI tools over the host's pipe. It
+       reaches SUIsei only through the public SUIsei.Diagnostics API and runs only inside the game, never in RoseMCP.
+
+       SUIsei is referenced and not copied beside the tap: the endpoint hands the tap the game's own SUIsei, so a copy in
+       the drop-in folder would never be used. The tap compiles its own internal copy of the contract's protocol, which
+       never clashes with the copy compiled into SUIsei. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\external\RoseMcp.Tap\Protocol\*.cs" Link="RoseMcp.Tap\Protocol\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

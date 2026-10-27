@@ -4,6 +4,7 @@
     <File Path="build/SUIsei.props" />
     <File Path="build/SUIsei.targets" />
   </Folder>
+  <Project Path="SUIsei.RoseTap\SUIsei.RoseTap.csproj" />
   <Project Path="SUIsei.SourceGen\SUIsei.SourceGen.csproj" />
   <Project Path="SUIsei.Tests\SUIsei.Tests.csproj" />
   <Project Path="SUIsei.Gallery\SUIsei.Gallery.csproj" />
