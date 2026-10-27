@@ -184,6 +184,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		// it has none, and then nothing is recorded.
 		public INamedTypeSymbol? RecordableElement { get; } =
 			compilation.GetTypeByMetadataName("SUIsei.Diagnostics") is null ? null : compilation.GetTypeByMetadataName("SUIsei.UIElement");
+		// SUIsei.FrameworkElement, whose Name an x:Name is assigned to.
+		public INamedTypeSymbol? FrameworkElementType { get; } = compilation.GetTypeByMetadataName("SUIsei.FrameworkElement");
 		public int Counter;
 
 		public void Report(DiagnosticDescriptor descriptor, XObject node, params string[] args) =>
@@ -383,6 +385,10 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		if (hasName)
 			scope.NamedElements[nameAttr!.Value] = (type, var);
 		RecordElementSource(gen, scope, el, type, var);
+
+		// The element carries its x:Name at run time, as in WinUI, which is what a diagnostics tool addresses it by.
+		if (hasName && gen.FrameworkElementType is { } frameworkElement && IsAssignableTo(type, frameworkElement))
+			scope.Emit($"{var}.Name = {Quote(nameAttr!.Value)};");
 
 		foreach (var attr in el.Attributes())
 		{
