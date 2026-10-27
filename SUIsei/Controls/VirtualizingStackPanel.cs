@@ -14,7 +14,12 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 {
 	private IItemContainerSource? _source;
 	private readonly Dictionary<int, UIElement> _realized = [];
-	private UIElement[] _ordered = [];
+
+	// VisualChildren: the realized containers in item order, rebuilt in place at each measure.
+	private readonly List<UIElement> _ordered = [];
+
+	// The realized indices a measure found outside the window, kept so that recycling them allocates nothing.
+	private readonly List<int> _outside = [];
 
 	/// <summary>The vertical scroll position, in pixels.</summary>
 	public float VerticalOffset { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
@@ -33,7 +38,7 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 			_source?.RecycleContainer(container);
 		}
 		_realized.Clear();
-		_ordered = [];
+		_ordered.Clear();
 		InvalidateMeasure();
 	}
 
@@ -53,19 +58,16 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 		var last = Math.Min(count - 1, first + visible - 1);
 
 		// Recycle containers now outside the window.
-		List<int>? drop = null;
+		_outside.Clear();
 		foreach (var index in _realized.Keys)
 			if (index < first || index > last)
-				(drop ??= []).Add(index);
-		if (drop is not null)
+				_outside.Add(index);
+		foreach (var index in _outside)
 		{
-			foreach (var index in drop)
-			{
-				var container = _realized[index];
-				_realized.Remove(index);
-				DropChild(container);
-				_source.RecycleContainer(container);
-			}
+			var container = _realized[index];
+			_realized.Remove(index);
+			DropChild(container);
+			_source.RecycleContainer(container);
 		}
 
 		// Realize containers now inside the window.
@@ -78,7 +80,7 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 			AdoptChild(container);
 		}
 
-		RebuildOrdered();
+		RebuildOrdered(first, last);
 		foreach (var container in _ordered)
 			container.Measure(new Size(available.Width, rowHeight));
 
@@ -95,12 +97,12 @@ public sealed class VirtualizingStackPanel : Panel, IVirtualizingItemsHost
 		return finalSize;
 	}
 
-	private void RebuildOrdered()
+	// The realized containers in item order. Measure has just recycled every container outside the window and realized
+	// every one inside it, so the realized indices are exactly first to last.
+	private void RebuildOrdered(int first, int last)
 	{
-		var keys = new List<int>(_realized.Keys);
-		keys.Sort();
-		_ordered = new UIElement[keys.Count];
-		for (var i = 0; i < keys.Count; i++)
-			_ordered[i] = _realized[keys[i]];
+		_ordered.Clear();
+		for (var index = first; index <= last; index++)
+			_ordered.Add(_realized[index]);
 	}
 }

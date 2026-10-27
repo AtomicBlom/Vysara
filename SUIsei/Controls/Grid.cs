@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace SUIsei.Controls;
 
 /// <summary>
@@ -34,17 +36,30 @@ public sealed class Grid : Panel
 	public static void SetColumnSpan(UIElement e, int v) => e.SetValue(ColumnSpanProperty, v);
 	public static int GetColumnSpan(UIElement e) => e.GetValue(ColumnSpanProperty);
 
+	// The definitions, kept as lists so layout reads them as spans rather than copying them on every pass.
+	private readonly List<GridLength> _columnDefinitions = [];
+	private readonly List<GridLength> _rowDefinitions = [];
+
 	/// <summary>Column track lengths (empty ⇒ a single Star column).</summary>
-	public IList<GridLength> ColumnDefinitions { get; } = [];
+	public IList<GridLength> ColumnDefinitions => _columnDefinitions;
 
 	/// <summary>Row track lengths (empty ⇒ a single Star row).</summary>
-	public IList<GridLength> RowDefinitions { get; } = [];
+	public IList<GridLength> RowDefinitions => _rowDefinitions;
 
+	// What an empty definition list lays out as.
+	private static readonly GridLength[] OneStar = [GridLength.Star];
+
+	// Each track's size and offset, and the largest single-cell child in each track, kept from pass to pass: a buffer is
+	// replaced only when the number of tracks changes (the extents, shared by both axes, only when it grows), so a layout
+	// pass allocates nothing.
 	private float[] _colSizes = [];
 	private float[] _rowSizes = [];
+	private float[] _colOffsets = [];
+	private float[] _rowOffsets = [];
+	private float[] _extents = [];
 
-	private GridLength[] Cols => ColumnDefinitions.Count > 0 ? [.. ColumnDefinitions] : [GridLength.Star];
-	private GridLength[] Rows => RowDefinitions.Count > 0 ? [.. RowDefinitions] : [GridLength.Star];
+	private ReadOnlySpan<GridLength> Cols => _columnDefinitions.Count > 0 ? CollectionsMarshal.AsSpan(_columnDefinitions) : OneStar;
+	private ReadOnlySpan<GridLength> Rows => _rowDefinitions.Count > 0 ? CollectionsMarshal.AsSpan(_rowDefinitions) : OneStar;
 
 	protected override Size MeasureOverride(Size available)
 	{
@@ -65,8 +80,8 @@ public sealed class Grid : Panel
 				CellConstraint(rows, ri, GetRowSpan(child))));
 		}
 
-		_colSizes = ResolveTracks(cols, available.Width, horizontal: true);
-		_rowSizes = ResolveTracks(rows, available.Height, horizontal: false);
+		ResolveTracks(cols, available.Width, horizontal: true, ref _colSizes);
+		ResolveTracks(rows, available.Height, horizontal: false, ref _rowSizes);
 		return new Size(Sum(_colSizes), Sum(_rowSizes));
 	}
 
@@ -76,18 +91,18 @@ public sealed class Grid : Panel
 		// an unconstrained ancestor cell) size Measure saw — otherwise a Star track that measured content-sized under
 		// an infinite constraint never claims the real leftover space it's entitled to at arrange time. Auto/Pixel
 		// tracks are unaffected (ResolveTracks only reads children's already-computed DesiredSize; it never remeasures).
-		_colSizes = ResolveTracks(Cols, finalSize.Width, horizontal: true);
-		_rowSizes = ResolveTracks(Rows, finalSize.Height, horizontal: false);
+		ResolveTracks(Cols, finalSize.Width, horizontal: true, ref _colSizes);
+		ResolveTracks(Rows, finalSize.Height, horizontal: false, ref _rowSizes);
 
-		var xs = Offsets(_colSizes);
-		var ys = Offsets(_rowSizes);
+		Offsets(_colSizes, ref _colOffsets);
+		Offsets(_rowSizes, ref _rowOffsets);
 		foreach (var child in Children.Items)
 		{
 			var ci = Math.Clamp(GetColumn(child), 0, _colSizes.Length - 1);
 			var ri = Math.Clamp(GetRow(child), 0, _rowSizes.Length - 1);
 			var w = SpanSum(_colSizes, ci, GetColumnSpan(child));
 			var h = SpanSum(_rowSizes, ri, GetRowSpan(child));
-			child.Arrange(new Rect(xs[ci], ys[ri], w, h));
+			child.Arrange(new Rect(_colOffsets[ci], _rowOffsets[ri], w, h));
 		}
 		return finalSize;
 	}
@@ -102,25 +117,29 @@ public sealed class Grid : Panel
 		return s;
 	}
 
-	// Resolve one axis: Pixel fixed, Auto = max child desired in that track, Star = proportional share of the leftover
-	// when the axis is finite — and content-sized (like Auto) when it is infinite. Reads the children's already-
-	// computed DesiredSize; it never measures.
-	private float[] ResolveTracks(GridLength[] defs, float available, bool horizontal)
+	// Resolve one axis into sizes: Pixel fixed, Auto = max child desired in that track, Star = proportional share of
+	// the leftover when the axis is finite — and content-sized (like Auto) when it is infinite. Reads the children's
+	// already-computed DesiredSize; it never measures.
+	private void ResolveTracks(ReadOnlySpan<GridLength> defs, float available, bool horizontal, ref float[] sizes)
 	{
-		var sizes = new float[defs.Length];
+		if (sizes.Length != defs.Length)
+			sizes = new float[defs.Length];
+		else
+			Array.Clear(sizes);
 		float used = 0f, starWeight = 0f;
 		var finite = !float.IsPositiveInfinity(available);
+		var extents = NeedsExtents(defs, finite) ? Extents(defs.Length, horizontal) : [];
 
 		for (var i = 0; i < defs.Length; i++)
 		{
 			var d = defs[i];
 			if (d.IsPixel) { sizes[i] = d.Value; used += d.Value; }
-			else if (d.IsAuto) { sizes[i] = AutoExtent(i, horizontal); used += sizes[i]; }
+			else if (d.IsAuto) { sizes[i] = extents[i]; used += sizes[i]; }
 			else starWeight += d.Value;
 		}
 
 		if (starWeight <= 0f)
-			return sizes;
+			return;
 
 		if (finite)
 		{
@@ -137,31 +156,43 @@ public sealed class Grid : Panel
 			// nothing and render nothing.
 			for (var i = 0; i < defs.Length; i++)
 				if (defs[i].IsStar)
-					sizes[i] = AutoExtent(i, horizontal);
+					sizes[i] = extents[i];
 		}
-		return sizes;
 	}
 
-	// Max desired extent of the single-cell children in a track. Children were measured once in MeasureOverride
-	// (Auto/Star cells unconstrained), so this only reads DesiredSize. Spanning children are excluded — a span's
-	// desired size is not distributed across its Auto tracks (documented).
-	private float AutoExtent(int track, bool horizontal)
+	// Whether an axis sizes any track to its content: an Auto track, or a Star track under an infinite constraint.
+	private static bool NeedsExtents(ReadOnlySpan<GridLength> defs, bool finite)
 	{
-		var max = 0f;
+		foreach (var d in defs)
+			if (d.IsAuto || (!finite && d.IsStar))
+				return true;
+		return false;
+	}
+
+	// Max desired extent of the single-cell children in each track, in one walk over the children. Children were
+	// measured once in MeasureOverride (Auto/Star cells unconstrained), so this only reads DesiredSize. Spanning
+	// children are excluded — a span's desired size is not distributed across its Auto tracks (documented) — and so is
+	// a child whose row or column is out of range, though it is arranged in the nearest track.
+	private ReadOnlySpan<float> Extents(int tracks, bool horizontal)
+	{
+		if (_extents.Length < tracks)
+			_extents = new float[tracks];
+		var extents = _extents.AsSpan(0, tracks);
+		extents.Clear();
 		foreach (var child in Children.Items)
 		{
 			var t = horizontal ? GetColumn(child) : GetRow(child);
 			var span = Math.Max(1, horizontal ? GetColumnSpan(child) : GetRowSpan(child));
-			if (t != track || span != 1)
+			if ((uint)t >= (uint)tracks || span != 1)
 				continue;
-			max = MathF.Max(max, horizontal ? child.DesiredSize.Width : child.DesiredSize.Height);
+			extents[t] = MathF.Max(extents[t], horizontal ? child.DesiredSize.Width : child.DesiredSize.Height);
 		}
-		return max;
+		return extents;
 	}
 
 	// The measure constraint for a child's cell: the summed extent of the Pixel tracks it spans, or unbounded if any
 	// spanned track is Auto/Star (so the child reports its content size for that track's sizing).
-	private static float CellConstraint(GridLength[] defs, int start, int span)
+	private static float CellConstraint(ReadOnlySpan<GridLength> defs, int start, int span)
 	{
 		var end = Math.Min(defs.Length, start + Math.Max(1, span));
 		var sum = 0f;
@@ -178,11 +209,12 @@ public sealed class Grid : Panel
 
 	private static float Sum(float[] a) { float s = 0f; foreach (var v in a) s += v; return s; }
 
-	private static float[] Offsets(float[] sizes)
+	// Each track's offset from the grid's origin: the sum of the tracks before it.
+	private static void Offsets(float[] sizes, ref float[] offsets)
 	{
-		var o = new float[sizes.Length];
+		if (offsets.Length != sizes.Length)
+			offsets = new float[sizes.Length];
 		float acc = 0f;
-		for (var i = 0; i < sizes.Length; i++) { o[i] = acc; acc += sizes[i]; }
-		return o;
+		for (var i = 0; i < sizes.Length; i++) { offsets[i] = acc; acc += sizes[i]; }
 	}
 }
