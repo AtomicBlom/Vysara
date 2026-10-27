@@ -4,21 +4,22 @@ namespace SUIsei.Shapes;
 
 /// <summary>
 /// The outline of a <see cref="Polyline"/> or a <see cref="Polygon"/>: one figure through its points, closed for a
-/// polygon, rebuilt in place on the first read after they change, so moving the points allocates nothing.
+/// polygon, rebuilt in place on the first read after the points or the fill rule change, so moving the points allocates
+/// nothing. It is keyed by the collection's own version, so a change made while the shape was not listening (before it
+/// joined a live tree) is still seen.
 /// </summary>
 internal sealed class PointOutline(bool closed)
 {
 	private readonly CompositionPath _path = new();
-	private bool _current;
-
-	/// <summary>The points or the fill rule changed: rebuild on the next read.</summary>
-	public void Invalidate() => _current = false;
+	private (PointCollection? Points, uint Version, FillRule FillRule) _built = (null, 0, FillRule.EvenOdd);
 
 	/// <summary>The outline through <paramref name="points"/>, filled by <paramref name="fillRule"/>.</summary>
 	public CompositionPath Build(PointCollection? points, FillRule fillRule)
 	{
-		if (_current)
+		var source = (points, points?.Version ?? 0, fillRule);
+		if (_built == source)
 			return _path;
+		_built = source;
 		_path.Clear();
 		_path.FillRule = fillRule;
 		var span = points is null ? default : points.AsSpan();
@@ -30,7 +31,6 @@ internal sealed class PointOutline(bool closed)
 			if (closed)
 				_path.Close();
 		}
-		_current = true;
 		return _path;
 	}
 

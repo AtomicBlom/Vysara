@@ -243,6 +243,36 @@ public sealed class ShapeTests
 	}
 
 	[Test]
+	public void Changes_made_while_a_shape_is_not_listening_are_drawn_when_it_joins_a_live_tree()
+	{
+		// Points added after the fill was set, before the polygon is in a tree, are not heard; they are drawn all the same.
+		var polygon = new Polygon();
+		polygon.Points.Add(new Point(0, 0));
+		polygon.Fill = new SolidColorBrush(Red);
+		polygon.Points.Add(new Point(20, 0));
+		polygon.Points.Add(new Point(20, 10));
+		var data = Geometry.Parse("M 0,0 L 10,0");
+		var path = new Path { Data = data, Stroke = new SolidColorBrush(Red), StrokeDashArray = [2, 1] };
+		var canvas = CanvasOf(polygon, path);
+		var root = Laid(canvas);
+		Drawn(polygon).Path!.ToString().ShouldBe("M 0,0 L 20,0 L 20,10 Z");
+		polygon.DesiredSize.ShouldBe(new Size(20, 10));
+
+		// Out of the tree the points, the geometry and the dashes change; back in, all of it is drawn and laid out.
+		root.Content = null;
+		polygon.Points.SetAll([new Point(0, 0), new Point(30, 0), new Point(30, 30)]);
+		((LineSegment)data.Figures[0].Segments[0]).Point = new Point(40, 0);
+		path.StrokeDashArray[0] = 4;
+		root.Content = canvas;
+		root.LayoutPass(new Size(100f, 100f));
+
+		Drawn(polygon).Path!.ToString().ShouldBe("M 0,0 L 30,0 L 30,30 Z");
+		polygon.DesiredSize.ShouldBe(new Size(30, 30));
+		Drawn(path).Path!.ToString().ShouldBe("M 0,0 L 40,0");
+		Drawn(path).StrokeStyle.DashArray.ToArray().ShouldBe([4f, 1f]);
+	}
+
+	[Test]
 	public void A_shape_listens_to_its_brushes_dashes_and_outline_only_while_in_a_live_tree()
 	{
 		var fill = new SolidColorBrush(Red);

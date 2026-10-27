@@ -19,7 +19,6 @@ public sealed class Polyline : Shape
 					PointOutline.Listen(shape, oldValue, false);
 					PointOutline.Listen(shape, newValue, true);
 				}
-				shape._outline.Invalidate();
 				shape.OnOutlineChanged();
 			},
 		});
@@ -27,11 +26,7 @@ public sealed class Polyline : Shape
 	public static readonly DependencyProperty<Polyline, FillRule> FillRuleProperty =
 		DependencyProperty.Register(nameof(FillRule), new PropertyMetadata<Polyline, FillRule>
 		{
-			PropertyChanged = static (shape, _, _) =>
-			{
-				shape._outline.Invalidate();
-				shape.InvalidateContent();
-			},
+			PropertyChanged = static (shape, _, _) => shape.InvalidateContent(),
 		});
 
 	private readonly PointOutline _outline = new(closed: false);
@@ -68,7 +63,6 @@ public sealed class Polyline : Shape
 			base.OnSubPropertyChanged(source);
 			return;
 		}
-		_outline.Invalidate();
 		OnOutlineChanged();
 	}
 }

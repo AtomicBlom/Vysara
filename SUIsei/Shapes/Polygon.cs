@@ -19,7 +19,6 @@ public sealed class Polygon : Shape
 					PointOutline.Listen(shape, oldValue, false);
 					PointOutline.Listen(shape, newValue, true);
 				}
-				shape._outline.Invalidate();
 				shape.OnOutlineChanged();
 			},
 		});
@@ -27,11 +26,7 @@ public sealed class Polygon : Shape
 	public static readonly DependencyProperty<Polygon, FillRule> FillRuleProperty =
 		DependencyProperty.Register(nameof(FillRule), new PropertyMetadata<Polygon, FillRule>
 		{
-			PropertyChanged = static (shape, _, _) =>
-			{
-				shape._outline.Invalidate();
-				shape.InvalidateContent();
-			},
+			PropertyChanged = static (shape, _, _) => shape.InvalidateContent(),
 		});
 
 	private readonly PointOutline _outline = new(closed: true);
@@ -69,7 +64,6 @@ public sealed class Polygon : Shape
 			base.OnSubPropertyChanged(source);
 			return;
 		}
-		_outline.Invalidate();
 		OnOutlineChanged();
 	}
 }

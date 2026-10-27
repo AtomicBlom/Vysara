@@ -299,6 +299,10 @@ public abstract class Shape : FrameworkElement
 		Listen(Stroke, attached);
 		ListenToDashes(GetValue(StrokeDashArrayProperty), attached);
 		base.OnLiveTreeChanged(attached);
+		// The outline, its points or the dash array may have changed while the shape was away and not listening: lay it
+		// out again, which redraws it, since its last measure is no longer to be trusted.
+		if (attached)
+			InvalidateMeasure();
 	}
 
 	private protected override void OnSubPropertyChanged(object source)
