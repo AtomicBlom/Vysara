@@ -504,11 +504,17 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		// <X.Resources> among them makes this element a resource owner for the rest of its subtree only.
 		var content = ContainerKind(type);
 		var resourceDepth = scope.ResourceOwners.Count;
+		List<XElement>? stateGroups = null;
 		foreach (var childEl in el.Elements())
 		{
 			gen.Ct.ThrowIfCancellationRequested();
 			if (IsIgnorable(childEl, childEl.Name.Namespace))
 				continue;
+			if (childEl.Name.LocalName == "VisualStateManager.VisualStateGroups")
+			{
+				(stateGroups ??= []).Add(childEl);
+				continue;
+			}
 			if (childEl.Name.LocalName.Contains('.'))
 			{
 				HandlePropertyElement(gen, scope, var, type, childEl);
@@ -521,6 +527,13 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				scope.Emit(target.IsCollection ? $"{var}.{target.Name}.Add({childVar});" : $"{var}.{target.Name} = {childVar};");
 			else
 				gen.Report(NoContentModel, childEl, typeName, childEl.Name.LocalName);
+		}
+		// The visual states come after the children, so their storyboards can name the parts declared below them: WinUI
+		// markup puts a template root's states before its content.
+		if (stateGroups is not null)
+		{
+			foreach (var groups in stateGroups)
+				HandlePropertyElement(gen, scope, var, type, groups);
 		}
 		scope.ResourceOwners.RemoveRange(resourceDepth, scope.ResourceOwners.Count - resourceDepth);
 

@@ -281,6 +281,21 @@ public sealed class InheritedTextTests
 		host.Tick(0.3, 0f, new Vector2(300f, 300f));
 		ShouldBeNear(label.ShownColor(), dim);
 
+		// The other tab shares the template, from the resources, but each realization has a brush of its own.
+		view.OtherTab.Template.ShouldBeSameAs(view.Tab.Template);
+		var other = TextOf(PresenterOf(view.OtherTab));
+		other.FontSize.ShouldBe(20f);
+		VisualStateManager.GoToState(view.OtherTab, "Lit", useTransitions: true);
+		host.Tick(0.3, 0f, new Vector2(300f, 300f));
+		ShouldBeNear(other.ShownColor(), HdrColor.FromRgb(255, 255, 255));
+		ShouldBeNear(label.ShownColor(), dim);
+
+		// A style's template: its presenter sizes the label and passes on the tab's own brush.
+		var styled = TextOf(view.StyledTab.GetTemplateRoot().ShouldBeOfType<ContentPresenter>());
+		styled.Text.ShouldBe("Laps");
+		styled.FontSize.ShouldBe(16f);
+		styled.Foreground.ShouldBeSameAs(view.StyledTab.Foreground);
+
 		// The card passes its size and brush through its panel and a border; its own and its styled text keep theirs.
 		view.Title.FontSize.ShouldBe(18f);
 		view.Title.Foreground.SolidColor().ShouldBe(HdrColor.FromRgb(255, 215, 0));
