@@ -75,8 +75,9 @@ public sealed class FontAtlas : IGlyphSource
 	public bool TryGetGlyphId(int codepoint, out int glyphId) => _codepointToGid.TryGetValue(codepoint, out glyphId);
 
 	/// <summary>
-	/// The MTSDF distance range in screen pixels for a glyph run drawn at <paramref name="fontSizePx"/>.
-	/// Fed to the shader as the smoothstep scale; scales with the on-screen size vs the baked EM size.
+	/// The MTSDF distance range in screen pixels for glyphs whose EM lands at <paramref name="fontSizePx"/> pixels, after every
+	/// transform above them (the layout scale included). Fed to the shader as the coverage scale, so the edge ramp is one pixel
+	/// wide; scales with the on-screen size vs the baked EM size.
 	/// </summary>
 	public float ScreenPxRange(float fontSizePx) => DistanceRange * fontSizePx / BakeSize;
 

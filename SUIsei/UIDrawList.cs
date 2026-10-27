@@ -213,16 +213,23 @@ internal sealed class UIDrawList
 	/// so kerning / ligatures / contextual forms apply when a real shaper is installed (the default is advance-based
 	/// LTR). The run's local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the
 	/// first line's ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by
-	/// <paramref name="fontSizePx"/>) with its atlas UV and the shared per-run <c>screenPxRange</c> in
-	/// <see cref="OverlayVertex.Custom"/>.x; all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw.
-	/// The atlas page is an ordinary texture source: the glyphs sample it through its slot in this list.
+	/// <paramref name="fontSize"/>, in the run's local units) with its atlas UV and the shared per-run
+	/// <c>screenPxRange</c> in <see cref="OverlayVertex.Custom"/>.x; all glyphs share <c>(Glyph, atlas, clip)</c> so they
+	/// batch into one draw. The atlas page is an ordinary texture source: the glyphs sample it through its slot in this list.
+	/// <para>
+	/// <c>screenPxRange</c> is the atlas's distance range in surface pixels at the size the glyphs land at: the local size
+	/// times the smallest stretch of <paramref name="matrix"/> (a layout scale, a render transform), so the coverage ramp is
+	/// one surface pixel wide at any scale. Under a non-uniform scale or a skew it is one pixel across the most squeezed
+	/// direction and wider along the others; an exact ramp in every direction would need the shader to divide by the
+	/// distance's screen-space gradient, as the analytic prims do.
+	/// </para>
 	/// <para>
 	/// With a <paramref name="gradient"/> the glyphs are painted by it instead of <paramref name="color"/>: each glyph quad
 	/// is cut where the gradient's colour stops being linear (<see cref="GradientSplitter"/>), its pieces keeping their
 	/// atlas uv, so text takes a gradient exactly, as rectangles do.
 	/// </para>
 	/// </summary>
-	public void AddGlyphRun(string text, float fontSizePx, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip,
+	public void AddGlyphRun(string text, float fontSize, PremultipliedHdrColor color, FontAtlas font, in Matrix3x2 matrix, in Rect clip,
 		CompositionGradientBrush? gradient = null, in GradientLine line = default, float opacity = 1f)
 	{
 		if (clip.IsEmpty || string.IsNullOrEmpty(text))
@@ -230,8 +237,8 @@ internal sealed class UIDrawList
 		var slot = SlotFor(font.Image);
 		EnsureRun(UIPrimKind.Glyph, slot, clip);
 
-		var @params = new Vector4(font.ScreenPxRange(fontSizePx), 0f, 0f, 0f);
-		var baselineY = -font.Ascender * fontSizePx; // ascender is negative (y-down), so the top sits near y=0
+		var @params = new Vector4(font.ScreenPxRange(fontSize * TransformStretch.Of(matrix).Smallest), 0f, 0f, 0f);
+		var baselineY = -font.Ascender * fontSize; // ascender is negative (y-down), so the top sits near y=0
 
 		_glyphBuf.Clear();
 		font.Shaper.Shape(text, font, _glyphBuf);
@@ -240,11 +247,11 @@ internal sealed class UIDrawList
 		foreach (var sg in _glyphBuf)
 		{
 			var g = sg.Glyph; // the shaper omits zero-geometry glyphs, so every entry draws a quad
-			var penX = (sg.PenXEm + sg.XOffsetEm) * fontSizePx;
-			var x0 = penX + g.PlaneLeft * fontSizePx;
-			var x1 = penX + g.PlaneRight * fontSizePx;
-			var y0 = baselineY + (sg.YOffsetEm + g.PlaneTop) * fontSizePx;
-			var y1 = baselineY + (sg.YOffsetEm + g.PlaneBottom) * fontSizePx;
+			var penX = (sg.PenXEm + sg.XOffsetEm) * fontSize;
+			var x0 = penX + g.PlaneLeft * fontSize;
+			var x1 = penX + g.PlaneRight * fontSize;
+			var y0 = baselineY + (sg.YOffsetEm + g.PlaneTop) * fontSize;
+			var y1 = baselineY + (sg.YOffsetEm + g.PlaneBottom) * fontSize;
 
 			if (gradient is not null)
 			{

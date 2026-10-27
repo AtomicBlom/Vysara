@@ -183,11 +183,11 @@ public sealed class DrawListCompositor : IUICompositor
 				switch (gr.Brush)
 				{
 					case CompositionColorBrush color:
-						list.AddGlyphRun(gr.Text, gr.FontSizePx, color.Color.ToPremultiplied(alpha * color.Opacity), _font, matrix, localClip);
+						list.AddGlyphRun(gr.Text, gr.FontSize, color.Color.ToPremultiplied(alpha * color.Opacity), _font, matrix, localClip);
 						break;
 					case CompositionLinearGradientBrush gradient:
 						gradient.ThrowIfUndefined();
-						list.AddGlyphRun(gr.Text, gr.FontSizePx, default, _font, matrix, localClip,
+						list.AddGlyphRun(gr.Text, gr.FontSize, default, _font, matrix, localClip,
 							gradient, GradientLine.For(gradient, gr.Size), alpha * gradient.Opacity);
 						break;
 					case CompositionSurfaceBrush:
