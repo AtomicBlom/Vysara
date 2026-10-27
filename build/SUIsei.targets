@@ -21,10 +21,13 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(SUIseiXamlEnable)' == 'true'">
-    <!-- Recurse the source dir, excluding the build output trees. The .xaml sources exist at evaluation, so a
-         static glob is correct here (unlike the shaders' generated .spv, which must be registered in a target). -->
+    <!-- Recurse the source dir, excluding the build output trees and whatever the project keeps out of its default
+         item globs (DefaultItemExcludes), as its Compile glob does: a project that holds another repository's
+         projects beneath it, such as a submodule with views of its own, excludes them there once. The .xaml
+         sources exist at evaluation, so a static glob is correct here (unlike the shaders' generated .spv, which
+         must be registered in a target). -->
     <SUIseiXaml Include="$(SUIseiXamlSourceDir)\**\*.xaml"
-              Exclude="$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
+              Exclude="$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
     <AdditionalFiles Include="@(SUIseiXaml)" />
     <UpToDateCheckInput Include="@(SUIseiXaml)" />
     <!-- dotnet watch does not monitor AdditionalFiles by default; opt the .xaml in so a `dotnet watch` loop
