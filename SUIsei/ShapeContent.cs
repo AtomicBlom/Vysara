@@ -59,6 +59,13 @@ public sealed class ShapeContent : VisualContent
 	public PathTrim Trim { get; set => Change(ref field, value); } = PathTrim.None;
 
 	/// <summary>
+	/// Whether a gradient <see cref="Stroke"/> runs along the stroke rather than across space: its offsets measure the
+	/// outline's untrimmed length, 0 at its start and 1 at its end, all its figures in order, and its start and end points
+	/// are not used. Exact, as every vertex of a stroke carries its arc length. False by default.
+	/// </summary>
+	public bool StrokeBrushAlongLength { get; set => Change(ref field, value); }
+
+	/// <summary>
 	/// The tight bounds of the path through <see cref="PathTransform"/>, in the visual's local space, or
 	/// <see cref="Rect.Zero"/> without a path: the box the brushes are measured over, as WinUI measures a shape's brushes
 	/// over its geometry's bounds. Recomputed only when the path or the transform changes.
@@ -179,6 +186,8 @@ public sealed class ShapeContent : VisualContent
 		{
 			sb.Append(c, $" stroke={style.Thickness:0.###}");
 			stroke.Describe(sb);
+			if (StrokeBrushAlongLength)
+				sb.Append(" along-length");
 			if (style.LineJoin != PenLineJoin.Miter)
 				sb.Append(c, $" join={style.LineJoin}");
 			else if (style.MiterLimit != 10f)

@@ -228,17 +228,18 @@ public sealed class DrawListCompositor : IUICompositor
 		if (fill is not null)
 			AddPaintedVector(list, shape.TessellateFill(scale)!, PathTrim.None, fill, box, matrix, alpha, clip);
 		if (stroke is not null)
-			AddPaintedVector(list, shape.TessellateStroke(scale)!, shape.Trim, stroke, box, matrix, alpha, clip);
+			AddPaintedVector(list, shape.TessellateStroke(scale)!, shape.Trim, stroke, box, matrix, alpha, clip, shape.StrokeBrushAlongLength);
 		if (grouped)
 			list.EndLayer(clip);
 	}
 
-	// Tessellated geometry painted by a colour, a linear gradient over `box`, or an image placed in `box`. A stroke that
-	// can overlap itself (more than one segment) painted with one alpha below 1 is drawn opaque inside a layer that
-	// carries the alpha, so its joins and crossings blend once and look like the rest of it. Paint whose alpha varies (a
-	// gradient whose stops differ in alpha, an image) still blends twice where such a stroke overlaps itself.
+	// Tessellated geometry painted by a colour, a linear gradient over `box` (or along the stroke's length, with
+	// `alongLength`), or an image placed in `box`. A stroke that can overlap itself (more than one segment) painted with
+	// one alpha below 1 is drawn opaque inside a layer that carries the alpha, so its joins and crossings blend once and
+	// look like the rest of it. Paint whose alpha varies (a gradient whose stops differ in alpha, an image) still blends
+	// twice where such a stroke overlaps itself.
 	private static void AddPaintedVector(UIDrawList list, TessellatedPath path, PathTrim trim, CompositionBrush paint, in Rect box,
-		in Matrix3x2 matrix, float alpha, in Rect clip)
+		in Matrix3x2 matrix, float alpha, in Rect clip, bool alongLength = false)
 	{
 		var overlaps = path.IsStroke && path.SegmentCount > 1;
 		switch (paint)
@@ -259,13 +260,14 @@ public sealed class DrawListCompositor : IUICompositor
 					gradient.ThrowIfUndefined();
 					var line = GradientLine.For(gradient, box);
 					var opacity = alpha * gradient.Opacity;
+					alongLength &= path.IsStroke;
 					if (overlaps && UniformStopAlpha(gradient) is { } stopAlpha && stopAlpha * opacity < 1f)
 					{
 						if (stopAlpha * opacity > 0f)
-							list.AddVectorGradient(path, trim, matrix, gradient, line, 1f / stopAlpha, clip, groupOpacity: stopAlpha * opacity);
+							list.AddVectorGradient(path, trim, matrix, gradient, line, 1f / stopAlpha, clip, stopAlpha * opacity, alongLength);
 					}
 					else
-						list.AddVectorGradient(path, trim, matrix, gradient, line, opacity, clip);
+						list.AddVectorGradient(path, trim, matrix, gradient, line, opacity, clip, alongLength: alongLength);
 					break;
 				}
 			case CompositionSurfaceBrush surface:

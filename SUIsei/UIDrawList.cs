@@ -454,24 +454,31 @@ internal sealed class UIDrawList
 	/// pieces' corners take the gradient's colours (<see cref="GradientSplitter"/>), so the gradient is exact, colours above
 	/// paper white included, and the pieces keep the triangle's edge distances, so its antialiasing is unchanged.
 	/// <paramref name="groupOpacity"/> is as for <see cref="AddVector(TessellatedPath, PathTrim, in Matrix3x2, PremultipliedHdrColor, in Rect, float, TextureSource?, Matrix3x2)"/>.
+	/// <para>
+	/// With <paramref name="alongLength"/> a stroke's gradient runs along it instead of along <paramref name="line"/>: each
+	/// vertex is measured by its arc length over the stroke's untrimmed <see cref="TessellatedPath.Length"/>, which is linear
+	/// across every triangle, so the cut lands exactly on each stop's offset along the length.
+	/// </para>
 	/// </summary>
 	public void AddVectorGradient(TessellatedPath path, PathTrim trim, in Matrix3x2 matrix, CompositionGradientBrush gradient, in GradientLine line,
-		float opacity, in Rect clip, float groupOpacity = 1f)
+		float opacity, in Rect clip, float groupOpacity = 1f, bool alongLength = false)
 	{
 		if (clip.IsEmpty || path.TriangleCount == 0 || groupOpacity <= 0f || gradient.ColorStops.Length == 0)
 			return;
 		var grouped = groupOpacity < 1f;
 		if (grouped)
 			BeginLayer(clip, groupOpacity, Vector4.Zero);
-		var sink = new GradientVectorEmitter(this, matrix, gradient, line, opacity, clip);
+		var length = alongLength && path.IsStroke ? MathF.Max(path.Length, float.Epsilon) : 0f;
+		var sink = new GradientVectorEmitter(this, matrix, gradient, line, length, opacity, clip);
 		path.Emit(ref sink, trim);
 		if (grouped)
 			EndLayer(clip);
 	}
 
-	/// <summary>Writes a tessellated path's triangles into the draw list, each cut into the gradient's bands.</summary>
+	/// <summary>Writes a tessellated path's triangles into the draw list, each cut into the gradient's bands: measured along
+	/// the line, or along the stroke over <c>length</c> when it is above 0.</summary>
 	private readonly struct GradientVectorEmitter(UIDrawList list, Matrix3x2 matrix, CompositionGradientBrush gradient, GradientLine line,
-		float opacity, Rect clip) : IVectorSink
+		float length, float opacity, Rect clip) : IVectorSink
 	{
 		public void AddTriangles(ReadOnlySpan<VectorVertex> vertices)
 		{
@@ -479,6 +486,7 @@ internal sealed class UIDrawList
 			Span<Vector2> uv = stackalloc Vector2[3]; // slot 0 is one white texel: any uv samples it
 			Span<Vector4> distances = stackalloc Vector4[3];
 			Span<float> t = stackalloc float[3];
+			var degenerate = length <= 0f && line.IsDegenerate;
 			for (var i = 0; i + 2 < vertices.Length; i += 3)
 			{
 				for (var k = 0; k < 3; k++)
@@ -486,9 +494,9 @@ internal sealed class UIDrawList
 					ref readonly var v = ref vertices[i + k];
 					position[k] = v.Position;
 					distances[k] = v.Distances;
-					t[k] = line.IsDegenerate ? 0f : line.T(v.Position);
+					t[k] = length > 0f ? v.ArcLength / length : degenerate ? 0f : line.T(v.Position);
 				}
-				GradientSplitter.AddVectorTriangle(list, position, uv, distances, t, line.IsDegenerate, gradient, opacity, matrix, clip, slot: 0);
+				GradientSplitter.AddVectorTriangle(list, position, uv, distances, t, degenerate, gradient, opacity, matrix, clip, slot: 0);
 			}
 		}
 	}

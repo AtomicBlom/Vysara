@@ -379,7 +379,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				continue;
 			if (attrNs == ExtensionNs || attr.Name.LocalName.Contains('.'))
 			{
-				EmitAttachedProperty(gen, scope, var, attr);
+				EmitAttachedProperty(gen, scope, var, type, attr);
 				continue;
 			}
 			if (attrNs != XNamespace.None)

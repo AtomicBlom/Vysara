@@ -110,6 +110,25 @@ public sealed class XamlMarkupGeneratorTests
 	}
 
 	[Test]
+	public void The_stroke_extensions_set_on_a_shape()
+	{
+		var code = Generates("""<Path Data="M 0,0 L 10,0" Stroke="Red" suisei:StrokeTrim.End="0.5" suisei:StrokeBrushMapping.Mode="AlongLength" />""");
+		code.ShouldContain("global::SUIsei.Extensions.StrokeTrim.SetEnd(");
+		code.ShouldContain("global::SUIsei.Extensions.StrokeBrushMappingMode.AlongLength");
+	}
+
+	[Test]
+	[Arguments("<Border suisei:StrokeTrim.End=\"0.5\" />")]
+	[Arguments("<Border><suisei:StrokeTrim.End>0.5</suisei:StrokeTrim.End></Border>")]
+	public void An_attached_property_on_an_element_its_setter_does_not_take_is_SUISEI004_at_its_line(string body)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI004");
+		diagnostic.GetMessage().ShouldContain("'StrokeTrim.End'");
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
 	public void An_element_in_a_foreign_namespace_is_unknown_and_a_foreign_attribute_is_ignored_with_a_warning()
 	{
 		Fails("<f:Widget />").Id.ShouldBe("SUISEI003");

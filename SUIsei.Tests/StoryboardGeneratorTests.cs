@@ -202,6 +202,15 @@ public sealed class StoryboardGeneratorTests
 			.DiagnosticIds().ShouldBe([id]);
 
 	[Test]
+	public void An_attached_property_animated_on_an_object_its_setter_does_not_take_is_SUISEI021()
+	{
+		var diagnostic = XamlGeneratorHarness.Run(PrefixedView("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(suisei:StrokeTrim.End)" To="1" />"""),
+			ExtensionCodeBehind).Diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("SUISEI021");
+		diagnostic.GetMessage().ShouldContain("is set on a Shape, not a Border");
+	}
+
+	[Test]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\" Bogus=\"2\" />", "SUISEI004")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"lots\" />", "SUISEI012")]
 	[Arguments("<ColorAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"(Border.Background).(SolidColorBrush.Color)\" From=\"Blurple\" />", "SUISEI012")]

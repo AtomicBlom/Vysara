@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Extensions;
 using SUIsei.Media;
 
 namespace SUIsei.Shapes;
@@ -287,8 +288,24 @@ public abstract class Shape : FrameworkElement
 		for (var i = 0; i < count; i++)
 			_dashes[i] = (float)dashes![i];
 		style.SetDashArray(_dashes.AsSpan(0, count));
+		content.Trim = CurrentTrim;
+		content.StrokeBrushAlongLength = StrokeBrushMapping.GetMode(this) == StrokeBrushMappingMode.AlongLength;
 		return content;
 	}
+
+	// The part of the stroke suisei:StrokeTrim leaves.
+	private PathTrim CurrentTrim => new(StrokeTrim.GetStart(this), StrokeTrim.GetEnd(this), StrokeTrim.GetOffset(this));
+
+	/// <summary>A <c>suisei:StrokeTrim</c> value changed: trim the drawn stroke in place, with no layout and no
+	/// tessellation.</summary>
+	internal void ApplyTrim()
+	{
+		_content.Trim = CurrentTrim;
+		Visual.MarkDirty();
+	}
+
+	/// <summary><c>suisei:StrokeBrushMapping.Mode</c> changed: repaint the stroke in place.</summary>
+	internal void OnStrokeMappingChanged() => InvalidateContent();
 
 	/// <summary>The outline changed in a way that can move its bounds: lay the shape out again, which redraws it.</summary>
 	private protected void OnOutlineChanged() => InvalidateMeasure();

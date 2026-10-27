@@ -60,7 +60,10 @@ partial class XamlSourceGenerator
 		// Otherwise an attached property of the Owner type: <Grid.Row>, <suisei:Owner.Prop>.
 		if (FindAttachedSetter(gen, ns, owner, prop, out var attachedOwner) is { } setter)
 		{
-			EmitAttachedPropertyElement(gen, scope, ownerVar, attachedOwner!, setter, propEl);
+			if (AttachesTo(setter, ownerType))
+				EmitAttachedPropertyElement(gen, scope, ownerVar, attachedOwner!, setter, propEl);
+			else
+				gen.Report(UnknownProperty, propEl, ownerType.ToDisplayString(), propEl.Name.LocalName);
 			return;
 		}
 
