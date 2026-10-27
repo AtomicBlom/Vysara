@@ -18,9 +18,15 @@ namespace SUIsei.RoseTap;
 internal sealed class TapSession
 {
 	// What this tap serves. A host refuses anything not named here without sending it, so a command is added here only
-	// once it is served.
-	private static readonly TapCapabilities Capabilities =
-		TapCapabilities.Of(TapCommands.Tree, TapCommands.Properties, TapCommands.SelectHandle, TapCommands.Detach);
+	// once it is served. SetResource is left out of apply: SUIsei's StaticResource is resolved as the tree is built, so
+	// replacing one changes nothing on screen.
+	private static readonly TapCapabilities Capabilities = TapCapabilities.Of(
+		TapCommands.Tree,
+		TapCommands.Properties,
+		TapCommands.PropertiesWritable,
+		TapCommands.SelectHandle,
+		TapCommands.Detach,
+		$"{TapCommands.Apply}:{TapCommands.AddChild},{TapCommands.ClearProperty},{TapCommands.RemoveChild},{TapCommands.SetProperty}");
 
 	private static readonly TimeSpan ConnectBound = TimeSpan.FromSeconds(10);
 	private static readonly TimeSpan UIThreadBound = TimeSpan.FromSeconds(30);
@@ -29,6 +35,12 @@ internal sealed class TapSession
 	private readonly string _key;
 	private readonly TapLog _log;
 	private readonly TapHandles _handles = new();
+	private readonly TapEdits _edits;
+
+	/// <summary>Every property change live edits made in this session, oldest first: what the overlay's change marks
+	/// show. Touched on the UI thread only.</summary>
+	public List<TapChange> History { get; } = [];
+
 	private readonly CancellationTokenSource _stopping = new();
 	private readonly NamedPipeClientStream _pipe;
 	private readonly Thread _reader;
@@ -41,6 +53,7 @@ internal sealed class TapSession
 		_pipeName = pipeName;
 		_key = key;
 		_log = log;
+		_edits = new TapEdits(_handles);
 		_pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 		_reader = new Thread(Run) { IsBackground = true, Name = "suisei-rosetap" };
 		_log.Write($"Session for pipe {pipeName}, working in {workDir}.");
@@ -98,6 +111,17 @@ internal sealed class TapSession
 						_selected = new WeakReference<UIElement>(element);
 						return "selected";
 					}, onFailure: "none"), false);
+				}
+
+			case TapCommands.Apply:
+				{
+					var commands = request.Split('\n').Skip(1).Select(TapRows.ReadCommand).OfType<TapApplyCommand>().ToList();
+					return (OnUIThread(() =>
+					{
+						var rows = _edits.Apply(commands);
+						History.AddRange(_edits.Changes);
+						return rows;
+					}, onFailure: ""), false);
 				}
 
 			case TapCommands.Detach:
@@ -206,6 +230,7 @@ internal sealed class TapSession
 			return false;
 		_handles.Clear();
 		_selected = null;
+		History.Clear();
 		return true;
 	}
 

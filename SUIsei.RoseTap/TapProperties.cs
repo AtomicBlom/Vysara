@@ -43,7 +43,7 @@ internal static class TapProperties
 				property.Source?.Line ?? 0,
 				property.Source?.Column ?? 0,
 				unavailable,
-				writable: null)).Append('\n');
+				Writable(property.ValueType))).Append('\n');
 		}
 		return rows.ToString();
 	}
@@ -59,6 +59,16 @@ internal static class TapProperties
 		Diagnostics.ValueLevel.Inherited => "Inherited",
 		_ => "Default",
 	};
+
+	/// <summary>Whether a property of <paramref name="valueType"/> can be set live: <see cref="TapRows.Writable"/>, or why
+	/// it cannot.</summary>
+	public static string Writable(Type valueType) => Diagnostics.CanParseValue(valueType)
+		? TapRows.Writable
+		: $"not settable live: SUIsei has no markup syntax for a {FriendlyName(valueType)}";
+
+	/// <summary>A type as a sentence names it: its short name, with a <c>?</c> for a nullable value type.</summary>
+	public static string FriendlyName(Type type) =>
+		Nullable.GetUnderlyingType(type) is { } underlying ? underlying.Name + "?" : type.Name;
 
 	/// <summary>
 	/// A value as markup writes it, or null for null. The second item is true when the value could not be written at

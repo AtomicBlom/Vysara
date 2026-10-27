@@ -28,6 +28,8 @@ public static partial class Diagnostics
 		if (text.Trim() == "{x:Null}")
 			return underlying is not null || !type.IsValueType;
 		var target = underlying ?? type;
+		if (!Parsable(target))
+			return false;
 		var s = text.Trim();
 
 		if (target == typeof(string) || target == typeof(object))
@@ -77,4 +79,22 @@ public static partial class Diagnostics
 		};
 		return value is not null;
 	}
+
+	/// <summary>Whether <see cref="TryParseValue"/> has a syntax for <paramref name="type"/>, so a value of it can be set
+	/// from markup text.</summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static bool CanParseValue(Type type)
+	{
+		ArgumentNullException.ThrowIfNull(type);
+		RequireEnabled();
+		return Parsable(Nullable.GetUnderlyingType(type) ?? type);
+	}
+
+	// The types TryParseValue converts text to: one list, so the two members cannot disagree.
+	private static bool Parsable(Type target) =>
+		target.IsEnum
+		|| target == typeof(string) || target == typeof(object) || target == typeof(bool) || target == typeof(int)
+		|| target == typeof(float) || target == typeof(double) || target == typeof(HdrColor) || target == typeof(Thickness)
+		|| target == typeof(Point) || target == typeof(Vector2) || target == typeof(Vector3) || target == typeof(GridLength)
+		|| target == typeof(TimeSpan) || target == typeof(RepeatBehavior);
 }

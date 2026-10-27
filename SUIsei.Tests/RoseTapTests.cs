@@ -40,6 +40,22 @@ public sealed class RoseTapTests
 
 	private static string WorkDir() => Path.Combine(Path.GetTempPath(), "suisei-rosetap-tests", Guid.NewGuid().ToString("N"));
 
+	// The writable field of a property row: settable live, or why not.
+	private const string Settable = TapRows.Writable;
+
+	private static string NoSyntax(string type) => $"not settable live: SUIsei has no markup syntax for a {type}";
+
+	// An apply request, one command row per edit, in the shape RoseMCP's host sends.
+	private static string Apply(params TapApplyCommand[] commands) =>
+		"apply\n" + string.Join("\n", commands.Select(static c =>
+			TapWire.Row(c.Op, c.Target, c.Property, c.ValueType, c.Value, c.Arg, c.Index.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+
+	private static TapApplyCommand Command(string op, string target, string property = "", string value = "", string arg = "", int index = 0) =>
+		new(op, target, property, "", value, arg, index);
+
+	// The status field of each result row.
+	private static string[] Statuses(string[] rows) => [.. rows.Select(static r => TapWire.Fields(r)[3])];
+
 	// RoseMCP's end of a session: the pipe it makes and names in the startup data, and the key the greeting presents.
 	private sealed class FakeHost : IDisposable
 	{
@@ -129,11 +145,11 @@ public sealed class RoseTapTests
 			Tap.Start(fake.StartupData(WorkDir()));
 			var greeting = fake.Greeting();
 
-			greeting.ShouldBe($"RoseTap/{TapGreeting.ProtocolVersion}/{fake.Key}\ndetach properties selecthandle tree");
+			greeting.ShouldBe($"RoseTap/{TapGreeting.ProtocolVersion}/{fake.Key}\napply:AddChild,ClearProperty,RemoveChild,SetProperty detach properties properties.writable selecthandle tree");
 			TapGreeting.TryRead(greeting, out var version, out var key, out var capabilities).ShouldBeTrue();
 			version.ShouldBe(5);
 			key.ShouldBe(fake.Key);
-			capabilities.Names.Order(StringComparer.Ordinal).ShouldBe(["detach", "properties", "selecthandle", "tree"]);
+			capabilities.Names.Order(StringComparer.Ordinal).ShouldBe(["apply", "detach", "properties", "properties.writable", "selecthandle", "tree"]);
 		}
 		finally
 		{
@@ -239,9 +255,9 @@ public sealed class RoseTapTests
 			[
 				"ok",
 				TapRows.Element("SUIsei.Controls.TextBlock", f, 16, 3),
-				TapRows.Property("Style", "SUIsei.Style", "SUIsei.Style", "SUIsei.FrameworkElement", "Local", "", 0, 0, false, null),
-				TapRows.Property("Text", "Hello", "System.String", "SUIsei.Controls.TextBlock", "Local", "", 0, 0, false, null),
-				TapRows.Property("FontSize", "18", "System.Single", "SUIsei.Controls.TextBlock", "Style", f, 13, 5, false, null),
+				TapRows.Property("Style", "SUIsei.Style", "SUIsei.Style", "SUIsei.FrameworkElement", "Local", "", 0, 0, false, NoSyntax("Style")),
+				TapRows.Property("Text", "Hello", "System.String", "SUIsei.Controls.TextBlock", "Local", "", 0, 0, false, Settable),
+				TapRows.Property("FontSize", "18", "System.Single", "SUIsei.Controls.TextBlock", "Style", f, 13, 5, false, Settable),
 			]);
 		}
 		finally
@@ -261,11 +277,11 @@ public sealed class RoseTapTests
 			var rows = fake.Rows("properties 4 all");
 
 			rows[0].ShouldBe("ok");
-			rows.ShouldContain(TapRows.Property("Opacity", "1", "System.Single", "SUIsei.UIElement", "Default", "", 0, 0, false, null));
-			rows.ShouldContain(TapRows.Property("Visibility", "Visible", "SUIsei.Visibility", "SUIsei.UIElement", "Default", "", 0, 0, false, null));
-			rows.ShouldContain(TapRows.Property("IsHitTestVisible", "True", "System.Boolean", "SUIsei.UIElement", "Default", "", 0, 0, false, null));
-			rows.ShouldContain(TapRows.Property("Style", null, "SUIsei.Style", "SUIsei.FrameworkElement", "Default", "", 0, 0, false, null));
-			rows.ShouldContain(TapRows.Property("Text", "first", "System.String", "SUIsei.Controls.TextBlock", "Local", "", 0, 0, false, null));
+			rows.ShouldContain(TapRows.Property("Opacity", "1", "System.Single", "SUIsei.UIElement", "Default", "", 0, 0, false, Settable));
+			rows.ShouldContain(TapRows.Property("Visibility", "Visible", "SUIsei.Visibility", "SUIsei.UIElement", "Default", "", 0, 0, false, Settable));
+			rows.ShouldContain(TapRows.Property("IsHitTestVisible", "True", "System.Boolean", "SUIsei.UIElement", "Default", "", 0, 0, false, Settable));
+			rows.ShouldContain(TapRows.Property("Style", null, "SUIsei.Style", "SUIsei.FrameworkElement", "Default", "", 0, 0, false, NoSyntax("Style")));
+			rows.ShouldContain(TapRows.Property("Text", "first", "System.String", "SUIsei.Controls.TextBlock", "Local", "", 0, 0, false, Settable));
 			TapWire.Fields(rows.Single(r => r.StartsWith("P\tStyle\t", StringComparison.Ordinal)))[9].ShouldBe("1");
 		}
 		finally
@@ -284,9 +300,9 @@ public sealed class RoseTapTests
 			fake.Rows("tree");
 
 			fake.Rows("properties 10").ShouldContain(
-				TapRows.Property("Opacity", "0.5", "System.Single", "SUIsei.UIElement", "ParentTemplate", "", 0, 0, false, null));
+				TapRows.Property("Opacity", "0.5", "System.Single", "SUIsei.UIElement", "ParentTemplate", "", 0, 0, false, Settable));
 			fake.Rows("properties 7").ShouldContain(
-				TapRows.Property("Grid.Row", "2", "System.Int32", "SUIsei.Controls.Grid", "Local", "", 0, 0, false, null));
+				TapRows.Property("Grid.Row", "2", "System.Int32", "SUIsei.Controls.Grid", "Local", "", 0, 0, false, Settable));
 		}
 		finally
 		{
@@ -304,9 +320,9 @@ public sealed class RoseTapTests
 			fake.Rows("tree");
 			var rows = fake.Rows("properties 11");
 
-			rows.ShouldContain(TapRows.Property("IsTabStop", "True", "System.Boolean", "SUIsei.UIElement", "BuiltInStyle", "", 0, 0, false, null));
+			rows.ShouldContain(TapRows.Property("IsTabStop", "True", "System.Boolean", "SUIsei.UIElement", "BuiltInStyle", "", 0, 0, false, Settable));
 			rows.ShouldContain(TapRows.Property("Template", "SUIsei.Controls.ControlTemplate", "SUIsei.Controls.ControlTemplate", "SUIsei.Controls.Control",
-				"BuiltInStyle", "", 0, 0, false, null));
+				"BuiltInStyle", "", 0, 0, false, NoSyntax("ControlTemplate")));
 			rows.ShouldNotContain(r => r.Contains("\tLocal\t", StringComparison.Ordinal) && !r.StartsWith("P\tContent", StringComparison.Ordinal));
 		}
 		finally
@@ -327,6 +343,228 @@ public sealed class RoseTapTests
 			fake.Ask("properties 999").ShouldBe("error");
 			fake.Ask("properties 0").ShouldBe("error");
 			fake.Ask("properties x").ShouldBe("error");
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	// --- apply ---
+
+	[Test]
+	public void Apply_sets_properties_by_name_and_by_address_answering_each_with_its_handle_and_old_value()
+	{
+		var (host, view) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+			var first = (TextBlock)((Border)view.Root.Children[1]).Child!;
+			var oldSize = first.FontSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+			var text = Command(TapCommands.SetProperty, "#Title", "Text", "Changed");
+			var size = Command(TapCommands.SetProperty, "StackPanel[0]/Border[0]/TextBlock[0]", "FontSize", "30");
+			var row = Command(TapCommands.SetProperty, "StackPanel[0]/Border[1]/StackPanel[0]/TextBlock[0]", "Grid.Row", "5");
+			var width = Command(TapCommands.SetProperty, "#Title", "Width", "120");
+
+			fake.Rows(Apply(text, size, row, width)).ShouldBe(
+			[
+				TapRows.ApplyResult(text, "applied", 2, "Hello"),
+				TapRows.ApplyResult(size, "applied", 4, oldSize),
+				TapRows.ApplyResult(row, "applied", 7, "2"),
+				TapRows.ApplyResult(width, "applied", 2, "NaN"),
+			]);
+			view.Title.Text.ShouldBe("Changed");
+			first.FontSize.ShouldBe(30f);
+			Grid.GetRow(((StackPanel)((Border)view.Root.Children[2]).Child!).Children[0]).ShouldBe(5);
+			view.Title.Width.ShouldBe(120f);
+			fake.Rows("properties 2").ShouldContain(TapRows.Property("Text", "Changed", "System.String", "SUIsei.Controls.TextBlock", "Local", "", 0, 0, false, Settable));
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Apply_refuses_a_property_it_cannot_set_saying_why()
+	{
+		var (host, view) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+
+			Statuses(fake.Rows(Apply(
+				Command(TapCommands.SetProperty, "#Title", "FontSize", "big"),
+				Command(TapCommands.SetProperty, "#Title", "Nonsense", "1"),
+				Command(TapCommands.SetProperty, "#Title", "Text", "{x:Bind Caption}"),
+				Command(TapCommands.SetProperty, "#Title", "Style", "{StaticResource Caption}"),
+				Command(TapCommands.SetProperty, "#Nobody", "Text", "x"),
+				Command(TapCommands.SetProperty, "StackPanel[0]/Border[7]", "Width", "1"),
+				Command(TapCommands.ClearProperty, "#Title", "Width"),
+				Command("Unheard", "#Title")))).ShouldBe(
+			[
+				"cannot set FontSize: 'big' is not a Single",
+				"property not found",
+				"cannot set Text: {x:Bind Caption} is a markup extension, which is compiled rather than set live",
+				"cannot set Style: {StaticResource Caption} is a markup extension, which is compiled rather than set live",
+				"target not found: no element is named 'Nobody'",
+				"target not found: no Border[7] here, among 2 element(s) of type Border",
+				"cannot clear Width: it is a plain property with no local value to clear, so set the value wanted instead",
+				"unsupported op",
+			]);
+			view.Title.Text.ShouldBe("Hello");
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Apply_clears_a_local_value_back_to_what_lies_beneath_it()
+	{
+		var (host, view) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+			var clear = Command(TapCommands.ClearProperty, "#Chrome", "Opacity");
+			fake.Rows(Apply(Command(TapCommands.SetProperty, "#Chrome", "Opacity", "0.9")));
+
+			fake.Rows(Apply(clear)).ShouldBe([TapRows.ApplyResult(clear, "applied", 10, "0.9")]);
+			view.Card.GetTemplateRoot()!.Opacity.ShouldBe(0.5f); // the template's value again
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Apply_builds_an_element_with_nested_children_and_adds_it_last()
+	{
+		var (host, view) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+			var create = Command(TapCommands.CreateInstance, "$0", "Border");
+			var width = Command(TapCommands.SetProperty, "$0", "Width", "50");
+			var createText = Command(TapCommands.CreateInstance, "$1", "TextBlock");
+			var text = Command(TapCommands.SetProperty, "$1", "Text", "Nested");
+			var nest = Command(TapCommands.AddChild, "$0", arg: "$1", index: 0);
+			var attach = Command(TapCommands.AddChild, "StackPanel[0]", arg: "$0", index: 2);
+
+			var rows = fake.Rows(Apply(create, width, createText, text, nest, attach));
+
+			Statuses(rows).ShouldAllBe(status => status == "applied");
+			var added = view.Root.Children[2].ShouldBeOfType<Border>();
+			added.Width.ShouldBe(50f);
+			added.Child.ShouldBeOfType<TextBlock>().Text.ShouldBe("Nested");
+			var builtBorder = TapWire.Fields(rows[0])[5];
+			TapWire.Fields(rows[4])[5].ShouldBe(builtBorder); // a nest lands on its parent
+			TapWire.Fields(rows[5])[5].ShouldBe("1"); // the attach lands on the root panel
+
+			host.Tick(0.016, 0f, Surface);
+			var tree = fake.Rows("tree").Select(TapWire.Fields).ToList();
+			tree.Single(f => f[0] == builtBorder)[8].ShouldBe("StackPanel[0]/Border[1]");
+			tree.Single(f => f[0] == "5")[8].ShouldBe("StackPanel[0]/Border[2]"); // the border that was second moved up one
+			tree.Single(f => f[1] == builtBorder)[8].ShouldBe("StackPanel[0]/Border[1]/TextBlock[0]");
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Apply_refuses_an_addition_it_cannot_make_saying_why()
+	{
+		var (host, _) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+
+			Statuses(fake.Rows(Apply(
+				Command(TapCommands.CreateInstance, "$0", "Nope"),
+				Command(TapCommands.CreateInstance, "$1", "TextBlock"),
+				Command(TapCommands.AddChild, "#Title", arg: "$1"),
+				Command(TapCommands.AddChild, "StackPanel[0]/Border[0]", arg: "$1"),
+				Command(TapCommands.AddChild, "StackPanel[0]", arg: "$1", index: 99),
+				Command(TapCommands.AddChild, "StackPanel[0]", arg: "$7")))).ShouldBe(
+			[
+				"cannot build: no element type is named 'Nope'",
+				"applied",
+				"cannot add: its parent exposes no children collection",
+				"cannot add: its parent's Child already holds a TextBlock",
+				"cannot add: index 99 is outside its parent's Children, which holds 5",
+				"target not found: nothing has been built into $7",
+			]);
+
+			// A slot belongs to the batch that built it.
+			Statuses(fake.Rows(Apply(Command(TapCommands.AddChild, "StackPanel[0]", arg: "$1"))))
+				.ShouldBe(["target not found: nothing has been built into $1"]);
+			fake.Ask("apply").ShouldBe("\n"); // an empty batch still answers
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Apply_removes_an_element_from_wherever_it_sits()
+	{
+		var (host, view) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+			var removeBorder = Command(TapCommands.RemoveChild, "StackPanel[0]/Border[1]");
+			var removeInner = Command(TapCommands.RemoveChild, "StackPanel[0]/Border[0]/TextBlock[0]");
+
+			fake.Rows(Apply(removeBorder, removeInner)).ShouldBe(
+			[
+				TapRows.ApplyResult(removeBorder, "applied", 5, ""),
+				TapRows.ApplyResult(removeInner, "applied", 4, ""),
+			]);
+			view.Root.Children.Count.ShouldBe(4);
+			((Border)view.Root.Children[1]).Child.ShouldBeNull();
+
+			Statuses(fake.Rows(Apply(
+				Command(TapCommands.RemoveChild, "StackPanel[0]"),
+				Command(TapCommands.RemoveChild, "#Chrome")))).ShouldBe(
+			[
+				"cannot remove: it has no parent in the tree",
+				"cannot remove: it is not in any collection its parent exposes",
+			]);
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Apply_refuses_a_name_two_elements_share()
+	{
+		var (host, _) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows(Apply(
+				Command(TapCommands.CreateInstance, "$0", "TextBlock"),
+				Command(TapCommands.SetProperty, "$0", "Name", "Twin"),
+				Command(TapCommands.CreateInstance, "$1", "TextBlock"),
+				Command(TapCommands.SetProperty, "$1", "Name", "Twin"),
+				Command(TapCommands.AddChild, "StackPanel[0]", arg: "$0"),
+				Command(TapCommands.AddChild, "StackPanel[0]", arg: "$1")));
+
+			Statuses(fake.Rows(Apply(Command(TapCommands.SetProperty, "#Twin", "Text", "x"))))
+				.ShouldBe(["target ambiguous: 2 elements are named 'Twin'; address one of them by its path instead"]);
 		}
 		finally
 		{
