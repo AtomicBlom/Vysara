@@ -52,6 +52,25 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 		Features = features;
 	}
 
+	/// <summary>
+	/// This run shaped, cached on the content and keyed by its <see cref="VisualContent.Version"/>: a recomposite of an
+	/// unchanged run reads the glyphs it shaped before, so a surface recompositing every frame (an animation beside the text,
+	/// a colour animation on it) never re-shapes. When the version has moved the cache checks what shaping reads, the text,
+	/// font, features and the font's shaper, and re-shapes only if one of them changed, into the same retained list.
+	/// </summary>
+	internal ShapedGlyphRun Shape()
+	{
+		// The shaper can be swapped on the font without the content changing, so even a current run checks it.
+		var run = Derived as ShapedGlyphRun;
+		if (run is not null && HasCurrentDerived && ReferenceEquals(run.Shaper, Font.Shaper))
+			return run;
+		run ??= new ShapedGlyphRun();
+		if (!run.IsShapingOf(Text, Font, Features))
+			run.Reshape(Text, Font, Features);
+		SetDerived(run);
+		return run;
+	}
+
 	internal override void Describe(StringBuilder sb)
 	{
 		sb.Append(CultureInfo.InvariantCulture, $" glyphs=\"{Text}\" size={FontSize:0.###}");

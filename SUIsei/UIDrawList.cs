@@ -33,7 +33,6 @@ internal sealed class UIDrawList
 
 	private readonly DrawListBuffers[] _sets = [new(), new()];
 	private readonly DrawListData[] _views = [new(), new(), new(), new()];
-	private readonly List<ShapedGlyph> _glyphBuf = [];
 	private DrawListBuffers _set; // the set this composite fills
 	private Vector2 _surfaceSize;
 
@@ -244,11 +243,10 @@ internal sealed class UIDrawList
 		var @params = new Vector4(font.ScreenPxRange(fontSize * TransformStretch.Of(matrix).Smallest), 0f, 0f, 0f);
 		var baselineY = -font.Ascender * fontSize; // ascender is negative (y-down), so the top sits near y=0
 
-		_glyphBuf.Clear();
-		font.Shaper.Shape(text, font, run.Features, _glyphBuf);
+		var shaped = run.Shape().Glyphs;
 		Span<Vector2> corners = stackalloc Vector2[4];
 		Span<Vector2> uvs = stackalloc Vector2[4];
-		foreach (var sg in _glyphBuf)
+		foreach (var sg in shaped)
 		{
 			var g = sg.Glyph; // the shaper omits zero-geometry glyphs, so every entry draws a quad
 			var penX = (sg.PenXEm + sg.XOffsetEm) * fontSize;

@@ -194,7 +194,7 @@ public sealed class TabularFiguresTests
 	}
 
 	// Any glyph id resolves, so the HarfBuzz shaper's output can be read without an atlas holding every glyph it picks.
-	private sealed class AnyGlyph : IGlyphSource
+	internal sealed class AnyGlyph : IGlyphSource
 	{
 		public bool TryGetGlyph(int codepoint, out Glyph glyph) { glyph = default; return false; }
 		public bool TryGetGlyphById(int glyphId, out Glyph glyph)

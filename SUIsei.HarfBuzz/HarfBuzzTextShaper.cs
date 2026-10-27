@@ -14,6 +14,12 @@ namespace SUIsei.HarfBuzz;
 /// it with <c>fontAtlas.Shaper = new HarfBuzzTextShaper(fontBytes)</c>. A run's <see cref="FontFeatureSet"/> reaches
 /// HarfBuzz as features over the whole run (<c>tnum</c>, <c>calt=0</c>), on top of the font's defaults; the atlas must
 /// hold the glyphs they substitute, which a glyph-id atlas baked with GSUB-reachable glyphs does.
+/// <para>
+/// It shapes into one retained HarfBuzz buffer, read through spans, so a run shaped with no features allocates nothing;
+/// with features, HarfBuzzSharp's <c>Font.Shape</c> copies them into a new array on every call (a gap; the shaped-run
+/// cache keeps shaping off steady and animating frames). One run is shaped at a time: share a shaper between threads
+/// only if they never shape at once (SUIsei measures and composites on one thread).
+/// </para>
 /// </summary>
 public sealed class HarfBuzzTextShaper : ITextShaper, IDisposable
 {
@@ -22,6 +28,7 @@ public sealed class HarfBuzzTextShaper : ITextShaper, IDisposable
 	private readonly Font _font;
 	private readonly float _unitsPerEm;
 	private readonly Dictionary<FontFeatureSet, Feature[]> _features = [];
+	private readonly Buffer _buffer = new();
 
 	public HarfBuzzTextShaper(byte[] fontData)
 	{
@@ -47,9 +54,9 @@ public sealed class HarfBuzzTextShaper : ITextShaper, IDisposable
 	{
 		if (text.IsEmpty)
 			return 0f;
-		using var buffer = ShapeRun(text, features);
+		ShapeRun(text, features);
 		var width = 0;
-		foreach (var p in buffer.GlyphPositions)
+		foreach (var p in _buffer.GetGlyphPositionSpan())
 			width += p.XAdvance;
 		return width / _unitsPerEm;
 	}
@@ -58,9 +65,9 @@ public sealed class HarfBuzzTextShaper : ITextShaper, IDisposable
 	{
 		if (text.IsEmpty)
 			return 0f;
-		using var buffer = ShapeRun(text, features);
-		var infos = buffer.GlyphInfos;
-		var positions = buffer.GlyphPositions;
+		ShapeRun(text, features);
+		var infos = _buffer.GetGlyphInfoSpan();
+		var positions = _buffer.GetGlyphPositionSpan();
 
 		var pen = 0f;
 		for (var i = 0; i < infos.Length; i++)
@@ -75,20 +82,21 @@ public sealed class HarfBuzzTextShaper : ITextShaper, IDisposable
 		return pen;
 	}
 
-	private Buffer ShapeRun(ReadOnlySpan<char> text, FontFeatureSet features)
+	// Shape into the one retained buffer, read straight from the span: shaping allocates nothing.
+	private void ShapeRun(ReadOnlySpan<char> text, FontFeatureSet features)
 	{
-		var buffer = new Buffer();
-		buffer.AddUtf16(text.ToString());
-		buffer.GuessSegmentProperties(); // direction / script / language from the run's content
-		_font.Shape(buffer, FeaturesFor(features));
-		return buffer;
+		_buffer.ClearContents();
+		_buffer.AddUtf16(text);
+		_buffer.GuessSegmentProperties(); // direction / script / language from the run's content
+		_font.Shape(_buffer, FeaturesFor(features));
 	}
 
-	// HarfBuzz's form of a feature set, each over the whole run, converted once per set the shaper sees.
-	private Feature[] FeaturesFor(FontFeatureSet features)
+	// HarfBuzz's form of a feature set, each over the whole run, converted once per set the shaper sees; null for none,
+	// which HarfBuzzSharp passes through without copying.
+	private Feature[]? FeaturesFor(FontFeatureSet features)
 	{
 		if (features.IsEmpty)
-			return [];
+			return null;
 		if (_features.TryGetValue(features, out var converted))
 			return converted;
 		converted = new Feature[features.Features.Length];
@@ -100,6 +108,7 @@ public sealed class HarfBuzzTextShaper : ITextShaper, IDisposable
 
 	public void Dispose()
 	{
+		_buffer.Dispose();
 		_font.Dispose();
 		_face.Dispose();
 		_blob.Dispose();
