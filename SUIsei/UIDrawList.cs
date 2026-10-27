@@ -213,9 +213,9 @@ internal sealed class UIDrawList
 	/// contextual forms / tabular figures apply when the shaper supports them (the default is advance-based LTR). The
 	/// run's local origin <c>(0,0)</c> is the text block's top-left; the baseline drops by the ascent so the first line's
 	/// ascenders sit at the top. Each shaped glyph emits a quad at its EM pen position (scaled by the run's font size, in
-	/// its local units) with its atlas UV and the shared per-run <c>screenPxRange</c> in <see cref="OverlayVertex.Custom"/>.x;
-	/// all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw. The atlas page is an ordinary texture
-	/// source: the glyphs sample it through its slot in this list.
+	/// its local units) with its atlas UV and the shared per-run <c>(screenPxRange, bias, softness, 0)</c> in
+	/// <see cref="OverlayVertex.Custom"/>; all glyphs share <c>(Glyph, atlas, clip)</c> so they batch into one draw. The
+	/// atlas page is an ordinary texture source: the glyphs sample it through its slot in this list.
 	/// <para>
 	/// <c>screenPxRange</c> is the atlas's distance range in surface pixels at the size the glyphs land at: the local size
 	/// times the smallest stretch of <paramref name="matrix"/> (a layout scale, a render transform), so the coverage ramp is
@@ -224,24 +224,51 @@ internal sealed class UIDrawList
 	/// distance's screen-space gradient, as the analytic prims do.
 	/// </para>
 	/// <para>
+	/// <paramref name="layer"/> picks what the quads draw. <see cref="GlyphLayer.Fill"/> draws the glyphs, bias and softness
+	/// 0. <see cref="GlyphLayer.Outline"/> draws them grown by the run's <see cref="GlyphRunContent.OutlineThickness"/>, the
+	/// bias; <see cref="GlyphLayer.Shadow"/> moved by its <see cref="GlyphRunContent.ShadowOffset"/> with an edge
+	/// <see cref="GlyphRunContent.ShadowSoftness"/> wide. Both are in units of the atlas's distance range, and clamped to
+	/// what its field holds: a softness of at most the whole range, and a bias that leaves half a pixel of field outside
+	/// the outline's edge, so the ramp never reaches the end of the field, where each quad's far corners would read as
+	/// half covered. A caller draws a run's shadow, then its outline, then its fill, so no glyph's effect lands on a
+	/// neighbouring glyph.
+	/// </para>
+	/// <para>
 	/// With a <paramref name="gradient"/> the glyphs are painted by it instead of <paramref name="color"/>: each glyph quad
 	/// is cut where the gradient's colour stops being linear (<see cref="GradientSplitter"/>), its pieces keeping their
-	/// atlas uv, so text takes a gradient exactly, as rectangles do.
+	/// atlas uv, so text takes a gradient exactly, as rectangles do. A shadow's gradient moves with the shadow.
 	/// </para>
 	/// </summary>
 	public void AddGlyphRun(GlyphRunContent run, PremultipliedHdrColor color, in Matrix3x2 matrix, in Rect clip,
-		CompositionGradientBrush? gradient = null, in GradientLine line = default, float opacity = 1f)
+		CompositionGradientBrush? gradient = null, in GradientLine line = default, float opacity = 1f, GlyphLayer layer = GlyphLayer.Fill)
 	{
 		var text = run.Text;
 		if (clip.IsEmpty || string.IsNullOrEmpty(text))
 			return;
 		var font = run.Font;
 		var fontSize = run.FontSize;
+		var screenPxRange = font.ScreenPxRange(fontSize * TransformStretch.Of(matrix).Smallest);
+		var offset = Vector2.Zero;
+		float bias = 0f, softness = 0f;
+		var paintLine = line;
+		switch (layer)
+		{
+			case GlyphLayer.Outline:
+				bias = MathF.Min(run.OutlineThickness / font.DistanceRangeEm, 0.5f - 0.5f / screenPxRange);
+				if (!(bias > 0f))
+					return; // no outline, or text so small the field cannot hold one past the ramp
+				break;
+			case GlyphLayer.Shadow:
+				offset = run.ShadowOffset * fontSize;
+				softness = MathF.Min(MathF.Max(run.ShadowSoftness / font.DistanceRangeEm, 0f), 1f);
+				paintLine = line.Offset(offset);
+				break;
+		}
 		var slot = SlotFor(font.Image);
 		EnsureRun(UIPrimKind.Glyph, slot, clip);
 
-		var @params = new Vector4(font.ScreenPxRange(fontSize * TransformStretch.Of(matrix).Smallest), 0f, 0f, 0f);
-		var baselineY = -font.Ascender * fontSize; // ascender is negative (y-down), so the top sits near y=0
+		var @params = new Vector4(screenPxRange, bias, softness, 0f);
+		var baselineY = -font.Ascender * fontSize + offset.Y; // ascender is negative (y-down), so the top sits near y=0
 
 		var shaped = run.Shape().Glyphs;
 		Span<Vector2> corners = stackalloc Vector2[4];
@@ -249,7 +276,7 @@ internal sealed class UIDrawList
 		foreach (var sg in shaped)
 		{
 			var g = sg.Glyph; // the shaper omits zero-geometry glyphs, so every entry draws a quad
-			var penX = (sg.PenXEm + sg.XOffsetEm) * fontSize;
+			var penX = (sg.PenXEm + sg.XOffsetEm) * fontSize + offset.X;
 			var x0 = penX + g.PlaneLeft * fontSize;
 			var x1 = penX + g.PlaneRight * fontSize;
 			var y0 = baselineY + (sg.YOffsetEm + g.PlaneTop) * fontSize;
@@ -261,7 +288,7 @@ internal sealed class UIDrawList
 				corners[1] = new Vector2(x1, y0); uvs[1] = new Vector2(g.U1, g.V0);
 				corners[2] = new Vector2(x1, y1); uvs[2] = new Vector2(g.U1, g.V1);
 				corners[3] = new Vector2(x0, y1); uvs[3] = new Vector2(g.U0, g.V1);
-				GradientSplitter.AddPolygon(this, corners, uvs, gradient, line, opacity, matrix, UIPrimKind.Glyph, @params, clip, slot);
+				GradientSplitter.AddPolygon(this, corners, uvs, gradient, paintLine, opacity, matrix, UIPrimKind.Glyph, @params, clip, slot);
 				continue;
 			}
 

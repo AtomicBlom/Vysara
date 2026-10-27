@@ -172,22 +172,50 @@ public sealed class DrawListCompositor : IUICompositor
 					break;
 				}
 			case GlyphRunContent gr:
-				switch (gr.Brush)
-				{
-					case CompositionColorBrush color:
-						list.AddGlyphRun(gr, color.Color.ToPremultiplied(alpha * color.Opacity), matrix, localClip);
-						break;
-					case CompositionLinearGradientBrush gradient:
-						gradient.ThrowIfUndefined();
-						list.AddGlyphRun(gr, default, matrix, localClip, gradient, GradientLine.For(gradient, gr.Size), alpha * gradient.Opacity);
-						break;
-					case CompositionSurfaceBrush:
-						throw new NotSupportedException("An image brush cannot paint text yet: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
-				}
+				EmitGlyphRun(list, gr, matrix, alpha, localClip);
 				break;
 			case ShapeContent shape:
 				EmitShape(list, shape, matrix, alpha, localClip);
 				break;
+		}
+	}
+
+	// A glyph run: every glyph's shadow, then every glyph's outline, then the glyphs, so no glyph's effect lands on a
+	// neighbouring glyph. Faded with an effect, the glyphs lie over their effects and would show them through, so the run
+	// is drawn into one layer that the fade applies to once, as a shape with both a fill and a stroke is.
+	private static void EmitGlyphRun(UIDrawList list, GlyphRunContent run, in Matrix3x2 matrix, float alpha, in Rect clip)
+	{
+		var grouped = alpha is < 1f and > 0f && run.HasEffects && !clip.IsEmpty;
+		if (grouped)
+		{
+			list.BeginLayer(clip, alpha, Vector4.Zero);
+			alpha = 1f;
+		}
+		if (run.ShadowBrush is { } shadow)
+			AddGlyphLayer(list, run, shadow, GlyphLayer.Shadow, matrix, alpha, clip);
+		if (run.OutlineBrush is { } outline && run.OutlineThickness > 0f)
+			AddGlyphLayer(list, run, outline, GlyphLayer.Outline, matrix, alpha, clip);
+		if (run.Brush is { } fill)
+			AddGlyphLayer(list, run, fill, GlyphLayer.Fill, matrix, alpha, clip);
+		if (grouped)
+			list.EndLayer(clip);
+	}
+
+	// One layer of a glyph run, painted by a colour or a linear gradient over the run's layout box.
+	private static void AddGlyphLayer(UIDrawList list, GlyphRunContent run, CompositionBrush paint, GlyphLayer layer, in Matrix3x2 matrix,
+		float alpha, in Rect clip)
+	{
+		switch (paint)
+		{
+			case CompositionColorBrush color:
+				list.AddGlyphRun(run, color.Color.ToPremultiplied(alpha * color.Opacity), matrix, clip, layer: layer);
+				break;
+			case CompositionLinearGradientBrush gradient:
+				gradient.ThrowIfUndefined();
+				list.AddGlyphRun(run, default, matrix, clip, gradient, GradientLine.For(gradient, run.Size), alpha * gradient.Opacity, layer);
+				break;
+			case CompositionSurfaceBrush:
+				throw new NotSupportedException("An image brush cannot paint text yet: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
 		}
 	}
 
