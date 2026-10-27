@@ -40,4 +40,14 @@ public sealed class PropertyMetadata<TOwner, TValue> where TOwner : DependencyOb
 	/// and any other type is not animatable.
 	/// </summary>
 	public Lerp<TValue>? Lerp { get; init; }
+
+	/// <summary>
+	/// The owner's field that holds the property's value, as WinUI's core keeps <c>Width</c> in a field. Reading the
+	/// property reads the field, and a local value lives there, so an object on which only code or markup set the property
+	/// holds no slot for it in the store; a style, inherited or animated value makes one as for any property, and the field
+	/// then follows the resolved value. The field starts at <see cref="DefaultValue"/>. Internal, for SUIsei's own layout
+	/// properties, which layout reads on every pass; such a property has no <see cref="Coerce"/> or
+	/// <see cref="DefaultValueFor"/>, and is not attached.
+	/// </summary>
+	internal FieldAccessor<TOwner, TValue>? Field { get; init; }
 }

@@ -404,7 +404,7 @@ public sealed class RoseTapTests
 				Command(TapCommands.SetProperty, "#Title", "Style", "{StaticResource Caption}"),
 				Command(TapCommands.SetProperty, "#Nobody", "Text", "x"),
 				Command(TapCommands.SetProperty, "StackPanel[0]/Border[7]", "Width", "1"),
-				Command(TapCommands.ClearProperty, "#Title", "Width"),
+				Command(TapCommands.ClearProperty, "#Title", "Translation"),
 				Command("Unheard", "#Title")))).ShouldBe(
 			[
 				"cannot set FontSize: 'big' is not a Single",
@@ -413,7 +413,7 @@ public sealed class RoseTapTests
 				"cannot set Style: {StaticResource Caption} is a markup extension, which is compiled rather than set live",
 				"target not found: no element is named 'Nobody'",
 				"target not found: no Border[7] here, among 2 element(s) of type Border",
-				"cannot clear Width: it is a plain property with no local value to clear, so set the value wanted instead",
+				"cannot clear Translation: it is a plain property with no local value to clear, so set the value wanted instead",
 				"unsupported op",
 			]);
 			view.Title.Text.ShouldBe("Hello");

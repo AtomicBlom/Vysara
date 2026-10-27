@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace SUIsei;
 
 /// <summary>
@@ -16,6 +18,11 @@ namespace SUIsei;
 /// The store is typed: each property's rungs live in a slot of the property's own value type, made on the first write
 /// of that property to this object. After that a write, its coercion, its change check and its change callback never
 /// box, so animating a value-type property every frame allocates nothing.
+/// </para>
+/// <para>
+/// A field-backed property (SUIsei's layout properties, such as <c>Width</c>) keeps its resolved value in a field of its
+/// owner, which a read returns. Its local value lives there too until a style, inherited or animated value makes it a
+/// slot, so an element whose layout only code or markup set holds no store at all for it.
 /// </para>
 /// </summary>
 public abstract class DependencyObject
@@ -65,14 +72,19 @@ public abstract class DependencyObject
 
 	private Dictionary<int, ValueSlot>? _slots;
 
+	// The field-backed properties (PropertyMetadata.Field) whose local value is in the owner's field rather than a slot, by
+	// DependencyProperty.FieldBit. A property that has a slot keeps its local value there instead.
+	private ulong _fieldLocals;
+
 	// {TemplateBinding} targets keyed by the source DP: a OneWay push from this object's property to a child setter,
 	// fired on every resolved-value change (and once at registration). Each is an Action<TValue> of its property's
 	// value type. Only allocated when a template wires one.
 	private Dictionary<int, Delegate>? _templateTargets;
 
-	/// <summary>Read the property's resolved value (top of the precedence ladder, else its typed default), coerced.</summary>
+	/// <summary>Read the property's resolved value (top of the precedence ladder, else its typed default), coerced. A
+	/// field-backed property's field holds it already.</summary>
 	public TValue GetValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
-		Effective(dp, Slot(dp));
+		dp.FieldBit != 0 ? dp.Metadata.Field!((TOwner)this) : Effective(dp, Slot(dp));
 
 	/// <summary>Write the <b>Local</b> rung (the public set). Never clobbers an active Animation value — animation
 	/// still wins until cleared.</summary>
@@ -110,11 +122,14 @@ public abstract class DependencyObject
 
 	/// <summary>True if a Local value is currently set (independent of the resolved value).</summary>
 	internal bool HasLocalValue(DependencyProperty dp) =>
-		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Has(ValueRung.Local);
+		(_fieldLocals & dp.FieldBit) != 0
+		|| (_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Has(ValueRung.Local));
 
 	/// <summary>The highest rung holding a value for <paramref name="dp"/>, or null when it resolves to its default.</summary>
 	internal ValueRung? TopRung(DependencyProperty dp)
 	{
+		if ((_fieldLocals & dp.FieldBit) != 0)
+			return ValueRung.Local; // a local value held in its field, which means the property has no slot
 		if (_slots is null || !_slots.TryGetValue(dp.GlobalIndex, out var slot))
 			return null;
 		for (var rung = ValueRung.Animation; rung <= ValueRung.Inherited; rung++)
@@ -126,9 +141,14 @@ public abstract class DependencyObject
 	}
 
 	/// <summary>The <see cref="DependencyProperty.GlobalIndex"/> of each property this object holds a value for on some
-	/// rung.</summary>
-	internal int[] StoredPropertyIndices() =>
-		_slots is null ? [] : [.. _slots.Where(static s => s.Value.Set != 0).Select(static s => s.Key)];
+	/// rung, a field-backed property's local value in its field included.</summary>
+	internal int[] StoredPropertyIndices()
+	{
+		var indices = _slots is null ? [] : _slots.Where(static s => s.Value.Set != 0).Select(static s => s.Key).ToList();
+		for (var locals = _fieldLocals; locals != 0; locals &= locals - 1)
+			indices.Add(DependencyProperty.FieldGlobalIndex(BitOperations.TrailingZeroCount(locals)));
+		return [.. indices];
+	}
 
 	/// <summary>Write (or, with <paramref name="hasValue"/> false, clear) one rung, then raise the change if the
 	/// coerced resolved value moved.</summary>
@@ -144,10 +164,21 @@ public abstract class DependencyObject
 		var slot = Slot(dp);
 		if (slot is null)
 		{
+			if (rung == ValueRung.Local && dp.Metadata.Field is { } fieldOf)
+			{
+				SetLocalField(dp, fieldOf, value, hasValue);
+				return;
+			}
 			if (!hasValue)
 				return; // clearing a rung of a property this object never held changes nothing
 			_slots ??= [];
 			_slots[dp.GlobalIndex] = slot = new ValueSlot<TValue>();
+			if ((_fieldLocals & dp.FieldBit) != 0)
+			{
+				// The local value moves from the field into the slot, which ranks it against the rung being written.
+				_fieldLocals &= ~dp.FieldBit;
+				slot.Put(ValueRung.Local, dp.Metadata.Field!((TOwner)this), true);
+			}
 		}
 
 		var oldValue = Effective(dp, slot);
@@ -157,11 +188,41 @@ public abstract class DependencyObject
 		if (EqualityComparer<TValue>.Default.Equals(oldValue, newValue))
 			return;
 
+		if (dp.Metadata.Field is { } resolvedField)
+			resolvedField((TOwner)this) = newValue;
 		dp.Metadata.PropertyChanged?.Invoke((TOwner)this, oldValue, newValue);
 		if (dp.Invalidates != InvalidationFlags.None)
 			OnPropertyInvalidated(dp, dp.Invalidates);
 		if (_templateTargets is not null && _templateTargets.TryGetValue(dp.GlobalIndex, out var push))
 			((Action<TValue>)push)(newValue);
+	}
+
+	// The local value of a field-backed property that holds no slot: it lives in the owner's field, and its bit in
+	// _fieldLocals records that it was set, so a style or animated value written later still ranks below it. The change is
+	// raised as SetRung raises it.
+	private void SetLocalField<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, FieldAccessor<TOwner, TValue> fieldOf, TValue value, bool hasValue)
+		where TOwner : DependencyObject
+	{
+		if (hasValue)
+			_fieldLocals |= dp.FieldBit;
+		else if ((_fieldLocals & dp.FieldBit) == 0)
+			return;
+		else
+		{
+			_fieldLocals &= ~dp.FieldBit;
+			value = dp.Metadata.DefaultValue;
+		}
+
+		ref var stored = ref fieldOf((TOwner)this);
+		var oldValue = stored;
+		if (EqualityComparer<TValue>.Default.Equals(oldValue, value))
+			return;
+		stored = value;
+		dp.Metadata.PropertyChanged?.Invoke((TOwner)this, oldValue, value);
+		if (dp.Invalidates != InvalidationFlags.None)
+			OnPropertyInvalidated(dp, dp.Invalidates);
+		if (_templateTargets is not null && _templateTargets.TryGetValue(dp.GlobalIndex, out var push))
+			((Action<TValue>)push)(value);
 	}
 
 	/// <summary>Wire a OneWay <c>{TemplateBinding}</c> from <paramref name="source"/> on this object to a child setter.

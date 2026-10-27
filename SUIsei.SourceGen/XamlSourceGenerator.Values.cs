@@ -104,9 +104,12 @@ partial class XamlSourceGenerator
 		}
 	}
 
-	// Convert, reporting a bad or unsupported value against `node`; null when it was reported.
-	private static string? ConvertOrReport(Gen gen, XObject node, ITypeSymbol type, string raw, string propertyName)
+	// Convert, reporting a bad or unsupported value against `node`; null when it was reported. `member` is the property
+	// being set (its CLR property or its dependency-property field), where its own syntax matters.
+	private static string? ConvertOrReport(Gen gen, XObject node, ITypeSymbol type, string raw, string propertyName, ISymbol? member = null)
 	{
+		if (IsAutoLength(member, raw))
+			return "float.NaN";
 		switch (TryConvertValue(type, raw, out var code, out var expected))
 		{
 			case LiteralStatus.Ok:
@@ -123,6 +126,13 @@ partial class XamlSourceGenerator
 				return null;
 		}
 	}
+
+	// "Auto" (any case) for FrameworkElement.Width or Height, which WinUI's parser reads as NaN through its LengthConverter;
+	// it takes no other property.
+	private static bool IsAutoLength(ISymbol? member, string raw) =>
+		member is { Name: "Width" or "Height" or "WidthProperty" or "HeightProperty", ContainingType: { } owner }
+		&& owner.ToDisplayString() == "SUIsei.FrameworkElement"
+		&& string.Equals(raw.Trim(), "Auto", StringComparison.OrdinalIgnoreCase);
 
 	private static bool ConvertColor(string raw, out string code)
 	{

@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Runtime.CompilerServices;
+
 namespace SUIsei.Animation;
 
 /// <summary>
@@ -148,13 +151,15 @@ public sealed class AnimationClock
 		where TTarget : class
 	{
 		lerp ??= Lerps.For<T>() ?? throw new ArgumentException($"{typeof(T).Name} has no standard interpolation; pass one.", nameof(lerp));
+		var from = get(target);
+		ThrowIfNoStart(from, null); // before a running tween is taken over or a new one listed
 		SetterTween<TTarget, T>? tween = null;
 		for (var i = 0; tween is null && i < _tweens.Count; i++)
 			if (_tweens[i] is SetterTween<TTarget, T> running && running.Matches(target, set))
 				tween = running;
 		if (tween is null)
 			_tweens.Add(tween = SetterTween<TTarget, T>.Rent());
-		tween.Start(target, set, lerp, get(target), to, duration, easing);
+		tween.Start(target, set, lerp, from, to, duration, easing);
 	}
 
 	/// <summary>
@@ -168,13 +173,15 @@ public sealed class AnimationClock
 		where TOwner : DependencyObject
 	{
 		var lerp = property.Lerp ?? throw new ArgumentException($"{property.Name} is not animatable; its type has no interpolation.", nameof(property));
+		var from = target.GetValue(property);
+		ThrowIfNoStart(from, property); // before a running tween is taken over or a new one listed
 		PropertyTween<TOwner, T>? tween = null;
 		for (var i = 0; tween is null && i < _tweens.Count; i++)
 			if (_tweens[i] is PropertyTween<TOwner, T> running && running.Matches(target, property))
 				tween = running;
 		if (tween is null)
 			_tweens.Add(tween = PropertyTween<TOwner, T>.Rent());
-		tween.Start(target, property, lerp, target.GetValue(property), to, duration, easing);
+		tween.Start(target, property, lerp, from, to, duration, easing);
 	}
 
 	/// <summary>Stop every tween running on <paramref name="target"/>, leaving its properties where they are.</summary>
@@ -188,6 +195,17 @@ public sealed class AnimationClock
 			_tweens.RemoveAt(i);
 			tween.Recycle();
 		}
+	}
+
+	// A float or double tween starts from the value now, which must be a number: a size left Auto is NaN, and a MaxWidth is
+	// infinite by default, and interpolating from either never arrives. The type tests fold away, so nothing is boxed.
+	private static void ThrowIfNoStart<T>(T from, DependencyProperty? property)
+	{
+		if (typeof(T) == typeof(float) ? !float.IsFinite(Unsafe.As<T, float>(ref from))
+			: typeof(T) == typeof(double) && !double.IsFinite(Unsafe.As<T, double>(ref from)))
+			throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture,
+				$"A tween starts from {property?.Name ?? "the property"}'s value now, which is {from}" +
+				$"{(from is float.NaN or double.NaN ? " (Auto, for a size)" : "")}: set it to a number first."));
 	}
 
 	// One running tween: its timing and easing here, its target and values in a typed subclass. Subclasses are pooled

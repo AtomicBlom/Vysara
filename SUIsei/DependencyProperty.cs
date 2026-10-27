@@ -38,6 +38,28 @@ public abstract class DependencyProperty
 	/// <summary>What a resolved-value change invalidates.</summary>
 	public InvalidationFlags Invalidates { get; }
 
+	// Field-backed properties (PropertyMetadata.Field) each take one bit of an object's record of the local values it
+	// holds in fields, so there can be 64 of them; the GlobalIndex of each, by its bit, for diagnostics to list them.
+	private static int _nextField;
+	private static readonly int[] FieldIndices = new int[64];
+
+	/// <summary>This property's bit in <see cref="DependencyObject"/>'s record of the local values it holds in fields, for a
+	/// field-backed property (<see cref="PropertyMetadata{TOwner, TValue}.Field"/>); 0 for any other.</summary>
+	internal ulong FieldBit { get; private protected init; }
+
+	/// <summary>The <see cref="GlobalIndex"/> of the field-backed property whose <see cref="FieldBit"/> is bit
+	/// <paramref name="bit"/>.</summary>
+	internal static int FieldGlobalIndex(int bit) => FieldIndices[bit];
+
+	private protected ulong NextFieldBit()
+	{
+		var index = Interlocked.Increment(ref _nextField) - 1;
+		if (index >= 64)
+			throw new InvalidOperationException($"{Name} would be field-backed property {index + 1}; DependencyObject records 64.");
+		FieldIndices[index] = GlobalIndex;
+		return 1UL << index;
+	}
+
 	/// <summary>The type that registered the property: the declaring control, or for an attached property the type
 	/// that declares it (<c>Grid</c> for <c>Grid.Row</c>).</summary>
 	internal Type OwnerType { get; }
@@ -125,6 +147,13 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 	{
 		Metadata = metadata;
 		Lerp = metadata.Lerp ?? Lerps.For<TValue>();
+		if (metadata.Field is not null)
+		{
+			// The field holds the resolved value as is, so nothing may change it on the way out, and it starts at one default.
+			if (metadata.Coerce is not null || metadata.DefaultValueFor is not null || kind == DependencyPropertyKind.Attached)
+				throw new ArgumentException($"{name} keeps its value in a field, so it can have no Coerce or DefaultValueFor and cannot be attached.", nameof(metadata));
+			FieldBit = NextFieldBit();
+		}
 	}
 
 	public PropertyMetadata<TOwner, TValue> Metadata { get; }
