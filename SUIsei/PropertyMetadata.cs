@@ -12,6 +12,15 @@ namespace SUIsei;
 public sealed class PropertyMetadata<TOwner, TValue> where TOwner : DependencyObject
 {
 	public TValue DefaultValue { get; init; } = default!;
+
+	/// <summary>
+	/// The default for one object, where it depends on the object's type, as a WinUI class overrides the default of a
+	/// property it inherits (a <c>Rectangle</c>'s <c>Stretch</c> is <c>Fill</c>, a <c>Path</c>'s <c>None</c>). It takes
+	/// <see cref="DefaultValue"/>'s place when set; a style or a local value still overrides it. Not for attached
+	/// properties, whose owner is not the object holding them.
+	/// </summary>
+	public Func<TOwner, TValue>? DefaultValueFor { get; init; }
+
 	public Action<TOwner, TValue, TValue>? PropertyChanged { get; init; }
 	public Func<TOwner, TValue, TValue>? Coerce { get; init; }
 	public InvalidationFlags Invalidates { get; init; }

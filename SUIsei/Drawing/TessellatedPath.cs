@@ -67,13 +67,23 @@ public sealed class TessellatedPath
 	/// <summary>Advances every time the path is tessellated into this object.</summary>
 	public uint Version { get; private set; }
 
-	/// <summary>The path version, style version and scale the triangles were built from.</summary>
-	internal (uint Path, uint Style, TessellationScale Scale) Source { get; private set; }
+	// What the triangles were built from: the path and style objects and their versions (two paths can share a version
+	// number), the transform the path's points went through, and the scale bucket.
+	private CompositionPath? _sourcePath;
+	private CompositionStrokeStyle? _sourceStyle;
+	private (uint Path, Matrix3x2 Transform, uint Style, TessellationScale Scale) _source;
 
 	/// <summary>Whether the triangles were built from this version of <paramref name="path"/> and
 	/// <paramref name="style"/> (null for a fill) at this scale bucket, so drawing it needs no re-tessellation.</summary>
 	public bool IsCurrentFor(CompositionPath path, CompositionStrokeStyle? style, TessellationScale scale) =>
-		Version != 0 && IsStroke == style is not null && Source == (path.Version, style?.Version ?? 0, scale);
+		IsCurrentFor(path, Matrix3x2.Identity, style, scale);
+
+	/// <summary>Whether the triangles were built from this version of <paramref name="path"/>, mapped through
+	/// <paramref name="pathTransform"/>, and of <paramref name="style"/> (null for a fill) at this scale bucket, so drawing
+	/// it needs no re-tessellation.</summary>
+	public bool IsCurrentFor(CompositionPath path, in Matrix3x2 pathTransform, CompositionStrokeStyle? style, TessellationScale scale) =>
+		Version != 0 && ReferenceEquals(_sourcePath, path) && ReferenceEquals(_sourceStyle, style)
+		&& _source == (path.Version, pathTransform, style?.Version ?? 0, scale);
 
 	// What rebuilding a cut piece needs: the stroke's half thickness, margin and tolerance, and the caps a trim takes.
 	internal float HalfThickness;
@@ -82,7 +92,7 @@ public sealed class TessellatedPath
 	internal PenLineCap TrimStartCap;
 	internal PenLineCap TrimEndCap;
 
-	internal void Begin(bool isStroke, CompositionPath path, CompositionStrokeStyle? style, TessellationScale scale)
+	internal void Begin(bool isStroke, CompositionPath path, in Matrix3x2 pathTransform, CompositionStrokeStyle? style, TessellationScale scale)
 	{
 		Triangles.Clear();
 		Pieces.Clear();
@@ -91,7 +101,9 @@ public sealed class TessellatedPath
 		IsStroke = isStroke;
 		Length = 0;
 		SegmentCount = 0;
-		Source = (path.Version, style?.Version ?? 0, scale);
+		_sourcePath = path;
+		_sourceStyle = style;
+		_source = (path.Version, pathTransform, style?.Version ?? 0, scale);
 	}
 
 	internal void Finish(float length, int segmentCount)

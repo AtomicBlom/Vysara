@@ -47,13 +47,21 @@ public sealed partial class Tessellator
 	/// interior over, and corners sharper than about 30° have their fringe cut short.
 	/// </para>
 	/// </summary>
-	public void Fill(CompositionPath path, TessellationScale scale, TessellatedPath output)
+	public void Fill(CompositionPath path, TessellationScale scale, TessellatedPath output) =>
+		Fill(path, Matrix3x2.Identity, scale, output);
+
+	/// <summary>
+	/// Tessellate the fill of <paramref name="path"/> with its points mapped through <paramref name="pathTransform"/>,
+	/// as a geometry's <c>Transform</c> maps it, into <paramref name="output"/>, in the mapped coordinates; otherwise as
+	/// <see cref="Fill(CompositionPath, TessellationScale, TessellatedPath)"/>.
+	/// </summary>
+	public void Fill(CompositionPath path, in Matrix3x2 pathTransform, TessellationScale scale, TessellatedPath output)
 	{
 		ArgumentNullException.ThrowIfNull(path);
 		ArgumentNullException.ThrowIfNull(output);
-		output.Begin(isStroke: false, path, null, scale);
+		output.Begin(isStroke: false, path, pathTransform, null, scale);
 		var margin = scale.HalfPixel;
-		Flatten(path, scale.Tolerance);
+		Flatten(path, pathTransform, scale.Tolerance);
 		CollectContours();
 		if (_contours.Count == 0)
 		{

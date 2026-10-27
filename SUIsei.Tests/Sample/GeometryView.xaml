@@ -2,8 +2,9 @@
 <!--
 	Geometry end-to-end fixture. SUIsei.SourceGen turns this into a partial SUIsei.Tests.Sample.GeometryView at build
 	time, so its compilation proves the emitted geometry code is valid C#; GeometryViewTests then checks the tree it
-	builds. It covers UIElement.Clip as a property element, path markup checked at compile time and parsed at runtime,
-	the same figure written as elements, and the point and number list converters.
+	builds. It covers UIElement.Clip as a property element, one of them through its geometry's Transform, path markup
+	checked at compile time and parsed at runtime, the same figure written as elements, and the point and number list
+	converters.
 -->
 <StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
 			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -12,6 +13,15 @@
 	<Border x:Name="Clipped" Width="40" Height="40" Background="Red">
 		<Border.Clip>
 			<RectangleGeometry Rect="5,5,20,10" />
+		</Border.Clip>
+	</Border>
+	<Border x:Name="SlidClip" Width="40" Height="40" Background="Blue">
+		<Border.Clip>
+			<RectangleGeometry Rect="0,0,10,10">
+				<RectangleGeometry.Transform>
+					<TranslateTransform X="6" Y="2" />
+				</RectangleGeometry.Transform>
+			</RectangleGeometry>
 		</Border.Clip>
 	</Border>
 	<local:GeometryHost x:Name="FromMarkup"

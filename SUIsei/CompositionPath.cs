@@ -78,12 +78,19 @@ public sealed class CompositionPath
 		{
 			if (_boundsVersion != Version)
 			{
-				_bounds = ComputeBounds();
+				_bounds = ComputeBounds(Matrix3x2.Identity);
 				_boundsVersion = Version;
 			}
 			return _bounds;
 		}
 	}
+
+	/// <summary>
+	/// The tight axis-aligned bounds of the path with every point mapped through <paramref name="transform"/>: the bounds
+	/// of the mapped curves, which under a rotation are tighter than the mapped <see cref="Bounds"/>. Computed on each
+	/// call, with no allocation.
+	/// </summary>
+	public Rect GetBounds(in Matrix3x2 transform) => transform.IsIdentity ? Bounds : ComputeBounds(transform);
 
 	/// <summary>Remove every figure, keeping the storage, so the path can be rebuilt without allocating.</summary>
 	public void Clear()
@@ -218,11 +225,58 @@ public sealed class CompositionPath
 		Version++;
 	}
 
+	/// <summary>Add a closed figure of <paramref name="rect"/> with its corners rounded by quarter-ellipse arcs of
+	/// <paramref name="radii"/>, each at most half the side it rounds, clockwise from the top edge; square corners when
+	/// either radius is 0, and nothing when the rectangle is empty.</summary>
+	internal void AddRoundedRectangle(in Rect rect, Vector2 radii)
+	{
+		if (!(rect.Width > 0f) || !(rect.Height > 0f))
+			return;
+		var r = new Vector2(Math.Clamp(radii.X, 0f, rect.Width / 2f), Math.Clamp(radii.Y, 0f, rect.Height / 2f));
+		if (r.X == 0f || r.Y == 0f)
+			r = Vector2.Zero;
+		float x0 = rect.X, y0 = rect.Y, x1 = rect.Right, y1 = rect.Bottom;
+		MoveTo(new Vector2(x0 + r.X, y0));
+		Side(new Vector2(x1 - r.X, y0), new Vector2(x1, y0 + r.Y));
+		Side(new Vector2(x1, y1 - r.Y), new Vector2(x1 - r.X, y1));
+		Side(new Vector2(x0 + r.X, y1), new Vector2(x0, y1 - r.Y));
+		Side(new Vector2(x0, y0 + r.Y), new Vector2(x0 + r.X, y0));
+		Close();
+
+		// A side up to where the next corner starts, then the corner; a square corner adds nothing.
+		void Side(Vector2 end, Vector2 cornerEnd)
+		{
+			LineTo(end);
+			if (r != Vector2.Zero)
+				ArcTo(r, 0f, false, SweepDirection.Clockwise, cornerEnd);
+		}
+	}
+
+	/// <summary>Add a closed figure of the ellipse inscribed in <paramref name="rect"/>, clockwise from its rightmost
+	/// point, as WinUI's ellipse runs; nothing when the rectangle is empty.</summary>
+	internal void AddEllipse(in Rect rect)
+	{
+		if (!(rect.Width > 0f) || !(rect.Height > 0f))
+			return;
+		var radii = new Vector2(rect.Width / 2f, rect.Height / 2f);
+		var center = new Vector2(rect.X, rect.Y) + radii;
+		MoveTo(center + new Vector2(radii.X, 0f));
+		ArcTo(radii, 0f, false, SweepDirection.Clockwise, center - new Vector2(radii.X, 0f));
+		ArcTo(radii, 0f, false, SweepDirection.Clockwise, center + new Vector2(radii.X, 0f));
+		Close();
+	}
+
 	/// <summary>Add every figure of <paramref name="other"/> to this path, as they are, keeping this path's fill rule.
 	/// A figure this path has open stays open; the next drawing call after this one continues the last figure
 	/// appended.</summary>
-	public void Append(CompositionPath other)
+	public void Append(CompositionPath other) => Append(other, Matrix3x2.Identity);
+
+	/// <summary>Add every figure of <paramref name="other"/> to this path with its points mapped through
+	/// <paramref name="transform"/>, which maps its curves exactly; otherwise as <see cref="Append(CompositionPath)"/>.</summary>
+	public void Append(CompositionPath other, in Matrix3x2 transform)
 	{
+		var identity = transform.IsIdentity;
+		var m = transform;
 		var points = other.Points;
 		for (var f = 0; f < other.FigureCount; f++)
 		{
@@ -233,14 +287,16 @@ public sealed class CompositionPath
 			{
 				switch (verb)
 				{
-					case PathVerb.Move: MoveTo(points[p++], figure.IsFilled); break;
-					case PathVerb.Line: LineTo(points[p++]); break;
-					case PathVerb.Quadratic: QuadraticTo(points[p], points[p + 1]); p += 2; break;
-					case PathVerb.Cubic: CubicTo(points[p], points[p + 1], points[p + 2]); p += 3; break;
+					case PathVerb.Move: MoveTo(Map(points[p++]), figure.IsFilled); break;
+					case PathVerb.Line: LineTo(Map(points[p++])); break;
+					case PathVerb.Quadratic: QuadraticTo(Map(points[p]), Map(points[p + 1])); p += 2; break;
+					case PathVerb.Cubic: CubicTo(Map(points[p]), Map(points[p + 1]), Map(points[p + 2])); p += 3; break;
 					default: Close(); break;
 				}
 			}
 		}
+
+		Vector2 Map(Vector2 v) => identity ? v : Vector2.Transform(v, m);
 	}
 
 	/// <summary>The path as WinUI path markup (<c>F1</c> when nonzero, then <c>M</c>, <c>L</c>, <c>Q</c>, <c>C</c> and
@@ -280,11 +336,14 @@ public sealed class CompositionPath
 			throw new InvalidOperationException("A path draws inside a figure: start one with MoveTo first, including after Close.");
 	}
 
-	private Rect ComputeBounds()
+	private Rect ComputeBounds(Matrix3x2 transform)
 	{
 		var points = Points;
 		if (points.Length == 0)
 			return Rect.Zero;
+		// An affine map takes a Bézier's control points to the control points of the mapped curve, so the extremes are
+		// found the same way on the mapped points.
+		var identity = transform.IsIdentity;
 		var min = new Vector2(float.MaxValue);
 		var max = new Vector2(float.MinValue);
 		var p = 0;
@@ -294,12 +353,12 @@ public sealed class CompositionPath
 			switch (verb)
 			{
 				case PathVerb.Move or PathVerb.Line:
-					last = points[p++];
+					last = Map(points[p++]);
 					Grow(last);
 					break;
 				case PathVerb.Quadratic:
 					{
-						var (c, e) = (points[p], points[p + 1]);
+						var (c, e) = (Map(points[p]), Map(points[p + 1]));
 						p += 2;
 						Grow(e);
 						// The quadratic's derivative is zero where t = (p0 - c) / (p0 - 2c + e), per axis.
@@ -310,7 +369,7 @@ public sealed class CompositionPath
 					}
 				case PathVerb.Cubic:
 					{
-						var (c1, c2, e) = (points[p], points[p + 1], points[p + 2]);
+						var (c1, c2, e) = (Map(points[p]), Map(points[p + 1]), Map(points[p + 2]));
 						p += 3;
 						Grow(e);
 						GrowCubicExtremes(last.X, c1.X, c2.X, e.X, last, c1, c2, e);
@@ -321,6 +380,8 @@ public sealed class CompositionPath
 			}
 		}
 		return new Rect(min.X, min.Y, max.X - min.X, max.Y - min.Y);
+
+		Vector2 Map(Vector2 v) => identity ? v : Vector2.Transform(v, transform);
 
 		void Grow(Vector2 v)
 		{

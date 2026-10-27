@@ -1,3 +1,4 @@
+using System.Numerics;
 using SUIsei.Markup;
 
 namespace SUIsei.Media;
@@ -12,12 +13,28 @@ namespace SUIsei.Media;
 /// neutral path the compositor and the tessellator read, and rebuilds it in place after a change, reusing its storage.
 /// </para>
 /// <para>
-/// WinUI's <c>Geometry.Transform</c> is not here yet, a gap the <see cref="Transform"/> family can now fill. A
-/// geometry is drawn in the local space of the element that draws it.
+/// A geometry is drawn in the local space of the element that draws it, through its <see cref="Transform"/> if it has
+/// one. The transform is applied where the geometry is used rather than to its path, so moving it does not rebuild the
+/// path.
 /// </para>
 /// </summary>
 public abstract class Geometry : DependencyObject, ISubPropertyListener
 {
+	/// <summary>The transform applied to the geometry where it is used, as WinUI's <c>Geometry.Transform</c>.</summary>
+	public static readonly DependencyProperty<Geometry, Transform?> TransformProperty =
+		DependencyProperty.Register(nameof(Transform), new PropertyMetadata<Geometry, Transform?>
+		{
+			PropertyChanged = static (geometry, oldValue, newValue) =>
+			{
+				if (geometry._listeners.Count > 0)
+				{
+					oldValue?.RemoveListener(geometry);
+					newValue?.AddListener(geometry);
+				}
+				geometry._listeners.Notify(geometry);
+			},
+		});
+
 	private readonly CompositionPath _path = new();
 	private ListenerList _listeners;
 	private bool _pathCurrent;
@@ -26,9 +43,22 @@ public abstract class Geometry : DependencyObject, ISubPropertyListener
 	{
 	}
 
-	/// <summary>The tight axis-aligned bounds of the geometry, in its own coordinates: the extremes of its curves, not
-	/// their control points.</summary>
-	public Rect Bounds => CompositionPath.Bounds;
+	/// <summary>
+	/// A transform applied to the geometry's points where it is used: what a shape or a group draws, and what a clip clips
+	/// to. A stroke follows the transformed points at its own thickness, so a scale here stretches the outline and not the
+	/// pen. Null, the default, uses the geometry as it is. A change to the transform reaches the geometry's users like any
+	/// other change. The geometry's own path is not rebuilt, though what uses it may redo its own work: a group rebuilds its
+	/// combined path, and a tessellation of the geometry is redone. To move a drawing without that, animate the element's
+	/// <see cref="UIElement.RenderTransform"/>.
+	/// </summary>
+	public Transform? Transform { get => GetValue(TransformProperty); set => SetValue(TransformProperty, value); }
+
+	/// <summary>The <see cref="Transform"/> as a matrix, identity without one.</summary>
+	internal Matrix3x2 TransformMatrix => Transform?.ToMatrix() ?? Matrix3x2.Identity;
+
+	/// <summary>The tight axis-aligned bounds of the geometry through its <see cref="Transform"/>: the extremes of its
+	/// curves, not their control points.</summary>
+	public Rect Bounds => CompositionPath.GetBounds(TransformMatrix);
 
 	/// <summary>
 	/// The geometry as a neutral path, rebuilt in place on the first read after a change. Its
@@ -70,9 +100,22 @@ public abstract class Geometry : DependencyObject, ISubPropertyListener
 	/// <summary>Draw this geometry into <paramref name="path"/>, which is empty, with the even-odd fill rule.</summary>
 	private protected abstract void BuildPath(CompositionPath path);
 
-	internal void AddListener(ISubPropertyListener listener) => _listeners.Add(listener);
+	// The geometry hears its transform only while something hears the geometry, so a shared transform keeps no unused
+	// geometry alive, as an element hears a brush only while it is in a live tree.
+	internal void AddListener(ISubPropertyListener listener)
+	{
+		_listeners.Add(listener);
+		if (_listeners.Count == 1)
+			Transform?.AddListener(this);
+	}
 
-	internal void RemoveListener(ISubPropertyListener listener) => _listeners.Remove(listener);
+	internal void RemoveListener(ISubPropertyListener listener)
+	{
+		var before = _listeners.Count;
+		_listeners.Remove(listener);
+		if (before == 1 && _listeners.Count == 0)
+			Transform?.RemoveListener(this);
+	}
 
 	/// <summary>How many listeners hear this geometry's changes: the elements using it while they are in a live tree, and
 	/// the groups holding it.</summary>
@@ -85,7 +128,14 @@ public abstract class Geometry : DependencyObject, ISubPropertyListener
 		_listeners.Notify(this);
 	}
 
-	void ISubPropertyListener.OnSubPropertyChanged(object source) => Changed();
+	void ISubPropertyListener.OnSubPropertyChanged(object source)
+	{
+		// The transform moved: the path is unchanged, and only its users need to hear. Anything else changed the path.
+		if (ReferenceEquals(source, Transform))
+			_listeners.Notify(this);
+		else
+			Changed();
+	}
 
 	/// <summary>The change callback of a property that only changes what the geometry draws.</summary>
 	private protected static void OnChanged<TOwner, TValue>(TOwner geometry, TValue oldValue, TValue newValue) where TOwner : Geometry =>

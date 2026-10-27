@@ -23,6 +23,14 @@ public sealed class GeometryViewTests
 	}
 
 	[Test]
+	public void A_clip_geometry_takes_its_transform_from_markup()
+	{
+		var border = Build().SlidClip;
+		border.Clip.ShouldNotBeNull().Transform.ShouldBeOfType<TranslateTransform>().X.ShouldBe(6f);
+		border.EffectiveClip().ShouldBe(new Rect(6, 2, 10, 10));
+	}
+
+	[Test]
 	public void Path_markup_and_the_element_form_build_the_same_geometry()
 	{
 		var view = Build();

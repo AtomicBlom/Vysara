@@ -105,10 +105,48 @@ public sealed class GeometryGeneratorTests
 	}
 
 	[Test]
+	public void Shapes_are_elements_with_the_stroke_set_as_attributes()
+	{
+		var code = Generates("""
+			<Polyline Points="0,0 10,5" Stroke="Red" StrokeThickness="2" StrokeDashArray="2 1" StrokeLineJoin="Round"
+			          StrokeStartLineCap="Round" Stretch="Uniform" />
+			<Path Data="M 0,0 L 10,10" Fill="Blue" />
+			<Rectangle RadiusX="4" RadiusY="4" Fill="Gold" />
+			""");
+
+		code.ShouldContain("new SUIsei.Shapes.Polyline()");
+		code.ShouldContain("new SUIsei.Shapes.Path()");
+		code.ShouldContain("new SUIsei.Shapes.Rectangle()");
+		code.ShouldContain(".StrokeLineJoin = global::SUIsei.Media.PenLineJoin.Round;");
+		code.ShouldContain(".Stretch = global::SUIsei.Stretch.Uniform;");
+		code.ShouldContain("""global::SUIsei.Media.Geometry.Parse("M 0,0 L 10,10")""");
+	}
+
+	[Test]
+	[Arguments("""<Path Data="M 0,0 L" />""", "SUISEI024")]
+	[Arguments("""<Polygon Points="0,0 10" />""", "SUISEI012")]
+	[Arguments("""<Line StrokeDashArray="2 dash" />""", "SUISEI012")]
+	public void A_bad_shape_value_is_reported_at_its_line(string body, string id) => Fails(body).Id.ShouldBe(id);
+
+	[Test]
 	public void A_clip_is_a_RectangleGeometry_property_element()
 	{
 		Generates("""<Border><Border.Clip><RectangleGeometry Rect="0,0,50,20" /></Border.Clip></Border>""")
 			.ShouldContain(".Clip = ");
+	}
+
+	[Test]
+	public void A_geometry_takes_its_transform_as_a_property_element()
+	{
+		Generates("""
+			<Border>
+			  <Border.Clip>
+			    <RectangleGeometry Rect="0,0,50,20">
+			      <RectangleGeometry.Transform><RotateTransform Angle="30" /></RectangleGeometry.Transform>
+			    </RectangleGeometry>
+			  </Border.Clip>
+			</Border>
+			""").ShouldContain(".Transform = ");
 	}
 
 	[Test]

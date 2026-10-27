@@ -232,6 +232,13 @@ partial class XamlSourceGenerator
 				gen.Report(BadPropertyPath, attr, raw, $"'{declaring.Name}.{step.Property}' does not apply to a {current.Name}");
 				return false;
 			}
+			// An attached property applies to what its setter takes, which may name a more derived type, as above.
+			if (current is not null && AttachedSetter(declaring, step.Property) is { } setter
+				&& setter.Parameters[0].Type is INamedTypeSymbol holder && !AttachesTo(setter, current) && !InheritsFrom(holder, current))
+			{
+				gen.Report(BadPropertyPath, attr, raw, $"'{declaring.Name}.{step.Property}' is set on a {holder.Name}, not a {current.Name}");
+				return false;
+			}
 			fields.Add($"{Fq(declaring)}.{dp.Name}");
 
 			if (i == steps.Count - 1)
@@ -344,8 +351,10 @@ partial class XamlSourceGenerator
 		: valueType.SpecialType is SpecialType.System_Single or SpecialType.System_Double;
 
 	// An attached property's owner declares a static Set<Name>(target, value), as WinUI's do.
-	private static bool IsAttachedProperty(INamedTypeSymbol owner, string property) =>
-		owner.GetMembers("Set" + property).OfType<IMethodSymbol>().Any(m => m is { IsStatic: true, Parameters.Length: 2 });
+	private static bool IsAttachedProperty(INamedTypeSymbol owner, string property) => AttachedSetter(owner, property) is not null;
+
+	private static IMethodSymbol? AttachedSetter(INamedTypeSymbol owner, string property) =>
+		owner.GetMembers("Set" + property).OfType<IMethodSymbol>().FirstOrDefault(m => m is { IsStatic: true, Parameters.Length: 2 });
 
 	private static bool InheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
 	{

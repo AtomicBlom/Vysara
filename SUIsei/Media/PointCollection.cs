@@ -28,11 +28,14 @@ public sealed class PointCollection : Collection<Point>
 	{
 		_items.Clear();
 		_items.AddRange(points);
-		_listeners.Notify(this);
+		Changed();
 	}
 
 	/// <summary>The points, over the live storage: valid until the collection next changes.</summary>
 	internal ReadOnlySpan<Point> AsSpan() => CollectionsMarshal.AsSpan(_items);
+
+	/// <summary>Advances on every change, heard or not, so what derives from the points can tell when they moved.</summary>
+	internal uint Version { get; private set; } = 1;
 
 	internal void AddListener(ISubPropertyListener listener) => _listeners.Add(listener);
 
@@ -41,24 +44,30 @@ public sealed class PointCollection : Collection<Point>
 	protected override void InsertItem(int index, Point item)
 	{
 		base.InsertItem(index, item);
-		_listeners.Notify(this);
+		Changed();
 	}
 
 	protected override void SetItem(int index, Point item)
 	{
 		base.SetItem(index, item);
-		_listeners.Notify(this);
+		Changed();
 	}
 
 	protected override void RemoveItem(int index)
 	{
 		base.RemoveItem(index);
-		_listeners.Notify(this);
+		Changed();
 	}
 
 	protected override void ClearItems()
 	{
 		base.ClearItems();
+		Changed();
+	}
+
+	private void Changed()
+	{
+		Version++;
 		_listeners.Notify(this);
 	}
 }

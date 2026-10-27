@@ -28,9 +28,13 @@ public sealed partial class Tessellator
 	/// <summary>The most curve segments one Bézier is flattened into.</summary>
 	private const int MaxCurveSegments = 4096;
 
-	// Flatten every figure of `path` to within `tolerance`, dropping points that repeat the one before.
-	private void Flatten(CompositionPath path, float tolerance)
+	// Flatten every figure of `path`, its points mapped through `transform`, to within `tolerance`, dropping points that
+	// repeat the one before. Mapping a curve's control points maps the curve exactly, so the tolerance holds where it
+	// is drawn.
+	private void Flatten(CompositionPath path, in Matrix3x2 transform, float tolerance)
 	{
+		var identity = transform.IsIdentity;
+		var m = transform;
 		_points.Clear();
 		_corners.Clear();
 		_figures.Clear();
@@ -48,17 +52,17 @@ public sealed partial class Tessellator
 				switch (verb)
 				{
 					case PathVerb.Move:
-						current = points[p++];
+						current = Map(points[p++]);
 						Add(current, true);
 						break;
 					case PathVerb.Line:
-						current = points[p++];
+						current = Map(points[p++]);
 						Add(current, true);
 						draws = true;
 						break;
 					case PathVerb.Quadratic:
 						{
-							var (c, e) = (points[p], points[p + 1]);
+							var (c, e) = (Map(points[p]), Map(points[p + 1]));
 							p += 2;
 							var n = Steps(2f * (current - 2f * c + e).Length(), tolerance);
 							for (var i = 1; i < n; i++)
@@ -74,7 +78,7 @@ public sealed partial class Tessellator
 						}
 					case PathVerb.Cubic:
 						{
-							var (c1, c2, e) = (points[p], points[p + 1], points[p + 2]);
+							var (c1, c2, e) = (Map(points[p]), Map(points[p + 1]), Map(points[p + 2]));
 							p += 3;
 							var bend = MathF.Max((current - 2f * c1 + c2).Length(), (c1 - 2f * c2 + e).Length());
 							var n = Steps(6f * bend, tolerance);
@@ -111,6 +115,8 @@ public sealed partial class Tessellator
 				_corners.Add(corner);
 			}
 		}
+
+		Vector2 Map(Vector2 v) => identity ? v : Vector2.Transform(v, m);
 	}
 
 	// The segments to flatten a curve whose second derivative is at most `bend` into, so it strays from its chords by at

@@ -28,6 +28,21 @@ internal readonly struct GradientLine
 		return new GradientLine(start, end);
 	}
 
+	/// <summary>The line of <paramref name="brush"/> over <paramref name="box"/>: relative points measure across the box
+	/// from its corner, absolute ones are in the box's own space, as for a shape whose geometry does not start at the
+	/// origin.</summary>
+	public static GradientLine For(CompositionLinearGradientBrush brush, in Rect box)
+	{
+		brush.Map(new Vector2(box.Width, box.Height), out var start, out var end);
+		if (brush.MappingMode == CompositionMappingMode.Relative)
+		{
+			var corner = new Vector2(box.X, box.Y);
+			start += corner;
+			end += corner;
+		}
+		return new GradientLine(start, end);
+	}
+
 	/// <summary>Whether the start and end coincide, so the gradient has no direction.</summary>
 	public bool IsDegenerate { get; }
 

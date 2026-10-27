@@ -174,6 +174,86 @@ public sealed class GeometryTests
 	}
 
 	[Test]
+	public void A_transform_maps_the_bounds_and_leaves_the_path_as_it_is()
+	{
+		var ellipse = new EllipseGeometry { RadiusX = 20, RadiusY = 10 };
+		var markup = ellipse.CompositionPath.ToString();
+		var version = ellipse.CompositionPath.Version;
+
+		ellipse.Transform = new RotateTransform { Angle = 90 };
+		ellipse.Bounds.ShouldBeNear(new Rect(-10, -20, 20, 40), 1e-3f);
+
+		// Turned 45°, the bounds are the turned curve's, √(20²/2 + 10²/2) either side, not the turned upright box's.
+		ellipse.Transform = new RotateTransform { Angle = 45 };
+		var reach = MathF.Sqrt(250f);
+		ellipse.Bounds.ShouldBeNear(new Rect(-reach, -reach, 2 * reach, 2 * reach), 1e-3f);
+
+		ellipse.CompositionPath.ToString().ShouldBe(markup);
+		ellipse.CompositionPath.Version.ShouldBe(version);
+	}
+
+	[Test]
+	public void A_change_to_the_transform_reaches_the_listener_without_rebuilding_the_path()
+	{
+		var (geometry, _, listener) = Watched();
+		var version = geometry.CompositionPath.Version;
+		var move = new TranslateTransform { X = 5 };
+
+		geometry.Transform = move;
+		move.Y = 3;
+
+		listener.Changes.ShouldBe(2);
+		geometry.Bounds.ShouldBe(new Rect(5, 3, 10, 0));
+		geometry.CompositionPath.Version.ShouldBe(version);
+
+		geometry.Transform = null;
+		move.X = 9;
+		listener.Changes.ShouldBe(3);
+		move.ListenerCount.ShouldBe(0);
+		geometry.Bounds.ShouldBe(new Rect(0, 0, 10, 0));
+	}
+
+	[Test]
+	public void A_geometry_hears_its_transform_only_while_something_hears_the_geometry()
+	{
+		var shared = new TranslateTransform();
+		var used = new RectangleGeometry { Rect = new Rect(0, 0, 1, 1), Transform = shared };
+		var unused = new RectangleGeometry { Rect = new Rect(0, 0, 1, 1), Transform = shared };
+		shared.ListenerCount.ShouldBe(0);
+
+		var listener = new CountingListener();
+		used.AddListener(listener);
+		shared.ListenerCount.ShouldBe(1);
+		shared.X = 3;
+		listener.Changes.ShouldBe(1);
+
+		used.RemoveListener(listener);
+		shared.ListenerCount.ShouldBe(0);
+		unused.Bounds.ShouldBe(new Rect(3, 0, 1, 1)); // read through the transform all the same
+		used.Transform = null;
+		used.AddListener(listener);
+		shared.ListenerCount.ShouldBe(0);
+	}
+
+	[Test]
+	public void A_group_draws_each_child_through_its_transform_and_its_own_where_it_is_used()
+	{
+		var move = new TranslateTransform { X = 10 };
+		var rect = new RectangleGeometry { Rect = new Rect(0, 0, 2, 2), Transform = move };
+		var group = new GeometryGroup { Children = { rect }, Transform = new ScaleTransform { ScaleX = 2, ScaleY = 2 } };
+		var listener = new CountingListener();
+		group.AddListener(listener);
+
+		group.CompositionPath.ToString().ShouldBe("M 10,0 L 12,0 L 12,2 L 10,2 Z");
+		group.Bounds.ShouldBe(new Rect(20, 0, 4, 4));
+
+		move.X = 20;
+
+		listener.Changes.ShouldBe(1);
+		group.CompositionPath.ToString().ShouldBe("M 20,0 L 22,0 L 22,2 L 20,2 Z");
+	}
+
+	[Test]
 	public void A_figure_or_segment_belongs_to_one_collection_at_a_time()
 	{
 		var segment = new LineSegment();

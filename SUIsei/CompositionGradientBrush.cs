@@ -14,7 +14,9 @@ namespace SUIsei;
 /// the painted geometry where the stops fall and colouring the pieces' corners, with no ramp texture to clamp or quantize
 /// colours above paper white. In <see cref="CompositionColorSpace.Rgb"/> the interpolation is in the authored,
 /// sRGB-encoded values, which are not linear in the light the GPU blends, so each stop interval is cut into
-/// <see cref="SrgbSubBands"/> pieces sampled exactly at their ends.
+/// <see cref="SrgbSubBands"/> pieces sampled exactly at their ends. Between those ends the colour is the straight line in
+/// linear light wherever it is sampled, so polygons that share a point, such as the triangles of a shape, agree on its
+/// colour.
 /// </para>
 /// </summary>
 public abstract class CompositionGradientBrush : CompositionBrush
@@ -226,13 +228,26 @@ public abstract class CompositionGradientBrush : CompositionBrush
 	// at both ends.
 	private Vector4 Interpolate(in CompositionColorGradientStop a, in CompositionColorGradientStop b, float u, float opacity)
 	{
-		var s = (u - a.Offset) / (b.Offset - a.Offset);
+		var span = b.Offset - a.Offset;
+		var s = (u - a.Offset) / span;
 		if (InterpolationSpace == CompositionColorSpace.RgbLinear)
 			return a.Color.ToPremultipliedVector(opacity) * (1f - s) + b.Color.ToPremultipliedVector(opacity) * s;
-		var ca = a.Color;
-		var cb = b.Color;
-		var r = 1f - s;
-		return new HdrColor(ca.R * r + cb.R * s, ca.G * r + cb.G * s, ca.B * r + cb.B * s, ca.A * r + cb.A * s).ToPremultipliedVector(opacity);
+
+		// In sRGB the colour drawn is the chord across the piece u lies in, between exact samples at the piece's ends (the
+		// points NextBreakAfter cuts at, computed the same way). Every polygon that meets u then colours it the same, wherever
+		// its own bands start: two triangles sharing a corner inside a piece agree on it.
+		var k = Math.Clamp((int)MathF.Floor(s * SrgbSubBands), 0, SrgbSubBands - 1);
+		var p0 = k == 0 ? a.Offset : a.Offset + span * k / SrgbSubBands;
+		var p1 = k + 1 == SrgbSubBands ? b.Offset : a.Offset + span * (k + 1) / SrgbSubBands;
+		var f = Math.Clamp((u - p0) / (p1 - p0), 0f, 1f);
+		return Srgb(a.Color, b.Color, (p0 - a.Offset) / span, opacity) * (1f - f) + Srgb(a.Color, b.Color, (p1 - a.Offset) / span, opacity) * f;
+
+		// The exact sRGB interpolation at fraction t of the interval.
+		static Vector4 Srgb(HdrColor ca, HdrColor cb, float t, float opacity)
+		{
+			var r = 1f - t;
+			return new HdrColor(ca.R * r + cb.R * t, ca.G * r + cb.G * t, ca.B * r + cb.B * t, ca.A * r + cb.A * t).ToPremultipliedVector(opacity);
+		}
 	}
 
 	/// <summary>Append the modes and stops to a dump line.</summary>

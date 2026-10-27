@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
+using SUIsei.Drawing;
 using SUIsei.Extensions;
 using SUIsei.Media;
 using SUIsei.RoutedEvents;
@@ -242,7 +243,14 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		ApplyTransform();
 	}
 
-	void ISubPropertyListener.OnSubPropertyChanged(object source)
+	void ISubPropertyListener.OnSubPropertyChanged(object source) => OnSubPropertyChanged(source);
+
+	/// <summary>
+	/// Something the element listens to changed in place: a brush, its render transform, its clip geometry, or what an
+	/// override listens to itself, such as a shape's geometry. An override handles its own sources and passes the rest
+	/// to the base.
+	/// </summary>
+	private protected virtual void OnSubPropertyChanged(object source)
 	{
 		// A transform moved: recompose the visual's transform. The clip geometry moved: re-clip, with no layout. A brush
 		// changed its paint in place: the content already holds that paint, so the visual only needs recompositing.
@@ -621,7 +629,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		}
 
 		return Visual.Content is { } content && Matrix3x2.Invert(world, out var toLocal)
-			&& ContentContains(content, Vector2.Transform(surfacePoint, toLocal), LayoutRect)
+			&& ContentContains(content, Vector2.Transform(surfacePoint, toLocal), LayoutRect, world)
 			? this
 			: null;
 	}
@@ -629,13 +637,15 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	/// <summary>
 	/// Whether <paramref name="content"/>, drawn in an element's local space, covers <paramref name="local"/>: one case
 	/// per content kind, as the compositor draws one per kind. A rect covers its bounds, except that one filled only by an
-	/// image covers just the image (not the letterbox around it), and text covers its element's layout bounds. Exact shape
-	/// geometry is one more case here.
+	/// image covers just the image (not the letterbox around it), and text covers its element's layout bounds. A shape
+	/// covers what it draws (<see cref="ShapeContent.HitTest"/>), tessellated for <paramref name="world"/>'s scale as the
+	/// compositor draws it, so the test reuses the drawn tessellation.
 	/// </summary>
-	private static bool ContentContains(VisualContent content, Vector2 local, in Rect layoutRect) => content switch
+	private static bool ContentContains(VisualContent content, Vector2 local, in Rect layoutRect, in Matrix3x2 world) => content switch
 	{
 		RectContent { Fill: CompositionSurfaceBrush image, BorderBrush: null } rect => image.PaintedRect(rect.Size).Contains(local),
 		RectContent rect => new Rect(0f, 0f, rect.Size.X, rect.Size.Y).Contains(local),
+		ShapeContent shape => shape.HitTest(local, TessellationScale.For(world)),
 		_ => new Rect(0f, 0f, layoutRect.Width, layoutRect.Height).Contains(local),
 	};
 
