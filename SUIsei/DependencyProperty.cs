@@ -34,6 +34,21 @@ public abstract class DependencyProperty
 	/// <summary>What a resolved-value change invalidates.</summary>
 	public InvalidationFlags Invalidates { get; }
 
+	// Field-backed properties (PropertyMetadata.Field) each take one bit of an object's record of the local values it
+	// holds in fields, so there can be 64 of them.
+	private static int _nextField;
+
+	/// <summary>This property's bit in <see cref="DependencyObject"/>'s record of the local values it holds in fields, for a
+	/// field-backed property (<see cref="PropertyMetadata{TOwner, TValue}.Field"/>); 0 for any other.</summary>
+	internal ulong FieldBit { get; private protected init; }
+
+	private protected static ulong NextFieldBit(string name)
+	{
+		var index = Interlocked.Increment(ref _nextField) - 1;
+		return index < 64 ? 1UL << index
+			: throw new InvalidOperationException($"{name} would be field-backed property {index + 1}; DependencyObject records 64.");
+	}
+
 	/// <summary>Whether an animation can drive this property: it has a
 	/// <see cref="PropertyMetadata{TOwner, TValue}.Lerp"/>, declared or standard for its type.</summary>
 	public abstract bool IsAnimatable { get; }
@@ -73,6 +88,13 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 	{
 		Metadata = metadata;
 		Lerp = metadata.Lerp ?? Lerps.For<TValue>();
+		if (metadata.Field is not null)
+		{
+			// The field holds the resolved value as is, so nothing may change it on the way out, and it starts at one default.
+			if (metadata.Coerce is not null || metadata.DefaultValueFor is not null || kind == DependencyPropertyKind.Attached)
+				throw new ArgumentException($"{name} keeps its value in a field, so it can have no Coerce or DefaultValueFor and cannot be attached.", nameof(metadata));
+			FieldBit = NextFieldBit(name);
+		}
 	}
 
 	public PropertyMetadata<TOwner, TValue> Metadata { get; }

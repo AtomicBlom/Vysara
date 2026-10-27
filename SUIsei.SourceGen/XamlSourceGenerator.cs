@@ -412,7 +412,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (!IsMarkup(value, out var inner))
 			{
 				// Plain text, converted for the property's type.
-				if (ConvertOrReport(gen, attr, prop.Type, value, name) is { } code)
+				if (ConvertOrReport(gen, attr, prop.Type, value, name, prop) is { } code)
 					scope.Emit($"{var}.{prop.Name} = {code};");
 				continue;
 			}
@@ -421,8 +421,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (TryParseXBind(inner, out var path, out var oneWay, out var twoWay, out var fallback, out var targetNull))
 			{
 				// FallbackValue / TargetNullValue are values of the property, converted like any other.
-				var fallbackCode = fallback is null ? null : ConvertOrReport(gen, attr, prop.Type, fallback, $"{name} FallbackValue");
-				var targetNullCode = targetNull is null ? null : ConvertOrReport(gen, attr, prop.Type, targetNull, $"{name} TargetNullValue");
+				var fallbackCode = fallback is null ? null : ConvertOrReport(gen, attr, prop.Type, fallback, $"{name} FallbackValue", prop);
+				var targetNullCode = targetNull is null ? null : ConvertOrReport(gen, attr, prop.Type, targetNull, $"{name} TargetNullValue", prop);
 				if ((fallback is not null && fallbackCode is null) || (targetNull is not null && targetNullCode is null))
 					continue;
 				if (scope.IsTemplate)

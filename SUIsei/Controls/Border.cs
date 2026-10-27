@@ -39,6 +39,19 @@ public sealed class Border : FrameworkElement
 				},
 			});
 
+	/// <summary>The width of the border on each side. SUIsei strokes all four sides at the left side's width.</summary>
+	public static readonly DependencyProperty<Border, Thickness> BorderThicknessProperty =
+		DependencyProperty.Register(nameof(BorderThickness),
+			new PropertyMetadata<Border, Thickness> { Invalidates = InvalidationFlags.Measure, Field = static b => ref b._borderThickness });
+
+	/// <summary>The space between the border and the child.</summary>
+	public static readonly DependencyProperty<Border, Thickness> PaddingProperty =
+		DependencyProperty.Register(nameof(Padding),
+			new PropertyMetadata<Border, Thickness> { Invalidates = InvalidationFlags.Measure, Field = static b => ref b._padding });
+
+	// BorderThickness and Padding, kept by the property store (PropertyMetadata.Field) so layout reads fields.
+	private Thickness _borderThickness, _padding;
+
 	// VisualChildren, rebuilt only when Child changes, so layout and hit-testing read it without allocating.
 	private UIElement[] _visualChildren = [];
 	public UIElement? Child
@@ -67,17 +80,18 @@ public sealed class Border : FrameworkElement
 	/// <summary>How a change of <see cref="Background"/> animates; null shows it at once.</summary>
 	public BrushTransition? BackgroundTransition { get; set; }
 
-	public Thickness BorderThickness { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
-	public Thickness Padding { get; set { if (field != value) { field = value; InvalidateMeasure(); } } }
+	public Thickness BorderThickness { get => _borderThickness; set => SetValue(BorderThicknessProperty, value); }
+	public Thickness Padding { get => _padding; set => SetValue(PaddingProperty, value); }
 
 	/// <summary>The radius of the corners, uniform.</summary>
 	public CornerRadius CornerRadius { get => GetValue(CornerRadiusProperty); set => SetValue(CornerRadiusProperty, value); }
 
 	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
 
+	// BorderThickness plus Padding, from their fields.
 	private Thickness Inset => new(
-		BorderThickness.Left + Padding.Left, BorderThickness.Top + Padding.Top,
-		BorderThickness.Right + Padding.Right, BorderThickness.Bottom + Padding.Bottom);
+		_borderThickness.Left + _padding.Left, _borderThickness.Top + _padding.Top,
+		_borderThickness.Right + _padding.Right, _borderThickness.Bottom + _padding.Bottom);
 
 	protected override Size MeasureOverride(Size available)
 	{
@@ -107,8 +121,9 @@ public sealed class Border : FrameworkElement
 	{
 		var fill = BackgroundPaint(Background);
 		var border = BorderBrush?.CompositionBrush;
-		if (fill is null && (border is null || BorderThickness.Horizontal + BorderThickness.Vertical <= 0f))
+		var thickness = BorderThickness;
+		if (fill is null && (border is null || thickness.Horizontal + thickness.Vertical <= 0f))
 			return null;
-		return RetainedRect(fill, CornerRadius.Uniform, border, BorderThickness.Left);
+		return RetainedRect(fill, CornerRadius.Uniform, border, thickness.Left);
 	}
 }

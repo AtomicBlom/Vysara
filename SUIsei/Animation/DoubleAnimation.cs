@@ -7,7 +7,10 @@ namespace SUIsei.Animation;
 /// </summary>
 public sealed class DoubleAnimation : AnimationTimeline<double>
 {
-	/// <summary>The start value (null ⇒ the target's value when the animation begins).</summary>
+	/// <summary>
+	/// The start value (null ⇒ the target's value when the animation begins). That value must be a number: from a size
+	/// left Auto (NaN), or an infinite MaxWidth, the animation throws as it begins, so it needs a From.
+	/// </summary>
 	public double? From { get; set; }
 
 	/// <summary>The end value (null with <see cref="By"/> ⇒ <c>From + By</c>).</summary>
@@ -19,12 +22,31 @@ public sealed class DoubleAnimation : AnimationTimeline<double>
 	/// <summary>The optional easing applied to the linear progress.</summary>
 	public IEasingFunction? EasingFunction { get; set; }
 
+	/// <summary>
+	/// WinUI's opt-in for an animation of a property that relayouts, such as <c>Width</c>, which WinUI otherwise skips so
+	/// that it never slows the UI thread. SUIsei runs every animation on the UI thread with layout, so it runs them all and
+	/// reads nothing here; the property is kept so WinUI markup that sets it compiles unchanged.
+	/// </summary>
+	public bool EnableDependentAnimation { get; set; }
+
 	public override double ValueAt(double progress)
 	{
 		var from = From ?? StartValue;
 		var to = To ?? (By is { } by ? from + by : from);
 		var eased = EasingFunction?.Ease(progress) ?? progress;
 		return from + (to - from) * eased;
+	}
+
+	// With no From the run starts from the target's value, which must be a number. A size left Auto is NaN, and a
+	// MaxWidth is infinite by default; WinUI interpolates from NaN, so the size stays Auto for the whole run and after, and
+	// WPF throws. This throws, as WPF does, so the missing From is found at once.
+	internal override void CaptureStart()
+	{
+		base.CaptureStart();
+		if (From is null && !double.IsFinite(StartValue))
+			throw new InvalidOperationException(
+				$"A {nameof(DoubleAnimation)} with no From starts from its target's value, and {TargetProperty?.ToString() ?? "its target"} " +
+				$"{(Target is null ? "" : $"on a {Target.GetType().Name} ")}is {StartValue}{(double.IsNaN(StartValue) ? " (Auto, for a size)" : "")}: give it a From.");
 	}
 
 	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => DoubleBinding.TryBind(this, owner, target);
