@@ -1,7 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using RoseMcp.Tap.Endpoint;
+using RoseMcp.Tap.Protocol;
 
 namespace SUIsei;
 
@@ -86,6 +90,27 @@ public static partial class Diagnostics
 			return;
 		for (var remaining = queue.Count; remaining > 0 && queue.TryDequeue(out var action); remaining--)
 			action();
+	}
+
+	// The pipe the diagnostics endpoint listens on, as a tap's RoseMcpTap attribute names it.
+	private const string EndpointPipe = "suisei-diag-{pid}";
+
+	// The endpoint a RoseMCP host loads a tap through: started with the first host and kept for the life of the process.
+	private static TapEndpoint? _endpoint;
+	private static int _endpointStarting;
+
+	/// <summary>
+	/// Start the diagnostics endpoint on <c>suisei-diag-{pid}</c>, once per process, so a RoseMCP host can load a tap into
+	/// this game whether it launched it or attached to it later. Called as each <see cref="UIHost"/> is built; does
+	/// nothing while diagnostics are off. What the endpoint does goes to <see cref="Trace"/>.
+	/// </summary>
+	internal static void StartEndpoint()
+	{
+		if (!Enabled || Interlocked.Exchange(ref _endpointStarting, 1) != 0)
+			return;
+		var version = typeof(Diagnostics).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
+		_endpoint = TapEndpoint.Start(EndpointWire.PipeName(EndpointPipe, Environment.ProcessId), "SUIsei", version,
+			static message => Trace.WriteLine(message, "SUIsei diagnostics"));
 	}
 
 	/// <summary>The elements directly beneath <paramref name="element"/> in the tree that lays out and draws: a panel's

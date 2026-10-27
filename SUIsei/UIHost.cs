@@ -33,6 +33,10 @@ public sealed class UIHost
 		// target is its non-focusable template root), matching WinUI.
 		Input.OnPress = el => Focus.FocusFromPointer(el);
 		HotReload.TrackHost(this);
+
+		// The first host brings up the endpoint a diagnostics tool loads its tap through.
+		if (Diagnostics.Enabled)
+			Diagnostics.StartEndpoint();
 	}
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
