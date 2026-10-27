@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Documents;
+using SUIsei.Extensions;
 using SUIsei.Media;
 
 namespace SUIsei.Controls;
@@ -56,6 +57,8 @@ public sealed class TextBlock : FrameworkElement
 	private protected override void OnLiveTreeChanged(bool attached)
 	{
 		Listen(Foreground, attached);
+		Listen(TextEffects.GetOutlineBrush(this), attached);
+		Listen(TextEffects.GetShadowBrush(this), attached);
 		// A root brings its font: one moved between roots measures again with the new root's.
 		if (attached)
 			InvalidateMeasure();
@@ -70,6 +73,14 @@ public sealed class TextBlock : FrameworkElement
 		var content = _glyphRun ??= new GlyphRunContent();
 		content.Update(text, FontSize, Foreground?.CompositionBrush ?? DefaultForeground, new Vector2(LayoutRect.Width, LayoutRect.Height),
 			TextFont, Typography.FeaturesOf(this));
+		content.UpdateEffects(TextEffects.GetOutlineThickness(this), TextEffects.GetOutlineBrush(this)?.CompositionBrush,
+			TextEffects.GetShadowOffset(this).ToVector2(), TextEffects.GetShadowSoftness(this), TextEffects.GetShadowBrush(this)?.CompositionBrush);
 		return content;
 	}
+
+	/// <summary>A <see cref="TextEffects"/> size or offset changed: repaint in place, with no layout or shaping.</summary>
+	internal void OnTextEffectChanged() => InvalidateContent();
+
+	/// <summary>A <see cref="TextEffects"/> brush changed: move the listener and repaint in place.</summary>
+	internal void OnTextEffectBrushChanged(Brush? old, Brush? @new) => OnBrushChanged(old, @new);
 }

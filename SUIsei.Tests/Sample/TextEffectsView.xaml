@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	suisei:TextEffects on text: an outlined heading and a time with a soft drop shadow, both sized in EM so they scale
+	with the text. SUIsei.SourceGen turns it into a partial SUIsei.Tests.Sample.TextEffectsView at build time;
+	TextEffectsTests lays it out and checks the pixels.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:suisei="https://github.com/AtomicBlom/SUIsei/extensions"
+            x:Class="SUIsei.Tests.Sample.TextEffectsView">
+	<TextBlock x:Name="Outlined" Text="LAP 3" FontSize="40" Foreground="White"
+	           suisei:TextEffects.OutlineThickness="0.1" suisei:TextEffects.OutlineBrush="Black" />
+	<TextBlock x:Name="Shadowed" Text="1:23.456" FontSize="40" Foreground="White"
+	           suisei:TextEffects.ShadowOffset="0.05,0.08" suisei:TextEffects.ShadowSoftness="0.2"
+	           suisei:TextEffects.ShadowBrush="#80000000" />
+</StackPanel>

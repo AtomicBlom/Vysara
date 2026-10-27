@@ -104,4 +104,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 	void IAnimationTarget<TValue>.Write(DependencyObject target, TValue value) => target.SetAnimatedValue(this, value);
 
 	void IAnimationTarget<TValue>.Release(DependencyObject target) => target.ClearAnimatedValue(this);
+
+	bool IAnimationTarget<TValue>.Validates => Metadata.Validate is not null;
+
+	void IAnimationTarget<TValue>.Validate(DependencyObject target, TValue value) => Metadata.Validate?.Invoke((TOwner)target, value);
 }

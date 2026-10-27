@@ -23,6 +23,14 @@ public sealed class PropertyMetadata<TOwner, TValue> where TOwner : DependencyOb
 
 	public Action<TOwner, TValue, TValue>? PropertyChanged { get; init; }
 	public Func<TOwner, TValue, TValue>? Coerce { get; init; }
+	/// <summary>
+	/// Checks a value where it enters the property, and throws on one the property refuses: a local or style value when
+	/// it is set, and an animation's own values (its start and end, its keyframes) when it begins. What an animation
+	/// produces between them, an easing's overshoot included, is not checked, so a running animation never throws; a
+	/// property whose value must stay in range clamps where it is used. Unlike <see cref="Coerce"/>, it never changes a
+	/// value.
+	/// </summary>
+	public Action<TOwner, TValue>? Validate { get; init; }
 	public InvalidationFlags Invalidates { get; init; }
 
 	/// <summary>

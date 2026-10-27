@@ -149,6 +149,28 @@ public sealed class XamlMarkupGeneratorTests
 	}
 
 	[Test]
+	public void The_text_effects_set_on_a_text_block()
+	{
+		var code = Generates("""<TextBlock Text="Go" suisei:TextEffects.OutlineThickness="0.08" suisei:TextEffects.OutlineBrush="Black" suisei:TextEffects.ShadowOffset="0.05,0.1" suisei:TextEffects.ShadowSoftness="0.2" suisei:TextEffects.ShadowBrush="#80000000" />""");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetOutlineThickness(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetOutlineBrush(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetShadowOffset(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetShadowSoftness(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetShadowBrush(");
+	}
+
+	[Test]
+	[Arguments("<Border suisei:TextEffects.OutlineThickness=\"0.1\" />", "SUISEI004")]
+	[Arguments("<TextBox suisei:TextEffects.ShadowBrush=\"Black\" />", "SUISEI004")]
+	[Arguments("<TextBlock suisei:TextEffects.ShadowOffset=\"near\" />", "SUISEI012")]
+	public void A_text_effect_off_a_text_block_or_with_a_value_that_does_not_convert_is_reported_at_its_line(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
 	public void An_element_in_a_foreign_namespace_is_unknown_and_a_foreign_attribute_is_ignored_with_a_warning()
 	{
 		Fails("<f:Widget />").Id.ShouldBe("SUISEI003");
