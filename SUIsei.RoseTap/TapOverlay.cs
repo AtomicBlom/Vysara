@@ -8,8 +8,8 @@ namespace SUIsei.RoseTap;
 
 /// <summary>
 /// What a person sees of the tap in their game: a toolbar on each view, picking, the hover and pick outlines, rulers,
-/// the marks on what live edits changed, and the Ask button. The same modes and replies as the XAML taps' toolbar, built
-/// from SUIsei's own elements as one diagnostics overlay per view.
+/// the marks on what live edits changed, the Ask button, and the magnifier (<see cref="TapZoom"/>). The same modes and
+/// replies as the XAML taps' toolbar, built from SUIsei's own elements as one diagnostics overlay per view.
 /// <para>
 /// Everything here runs on the UI thread. While installed it refreshes once a tick, by posting itself again, so the
 /// marks follow elements the game moves, a pick whose element leaves the tree is cleared with the reason, and views the
@@ -69,6 +69,9 @@ internal sealed class TapOverlay
 		_refresh = Refresh;
 	}
 
+	/// <summary>The magnifier, whose lens Ask can send a colour from.</summary>
+	public TapZoom Zoom { get; } = new();
+
 	/// <summary>What the toolbar's buttons are called and do, in the order they are shown.</summary>
 	public IEnumerable<(string Name, Action Action)> ToolbarActions() =>
 	[
@@ -82,6 +85,7 @@ internal sealed class TapOverlay
 		}),
 		("Changes", () => ShowChanges(!_changesShown)),
 		("Ask", Ask),
+		("Zoom", () => Zoom.Toggle(this)),
 	];
 
 	// --- Installing and refreshing ---
@@ -101,6 +105,7 @@ internal sealed class TapOverlay
 	public void Remove()
 	{
 		_installed = false;
+		Zoom.Off(this);
 		SetPointing(Pointing.None);
 		foreach (var view in _views.Values)
 			Diagnostics.RemoveOverlay(view.Root);
@@ -110,8 +115,9 @@ internal sealed class TapOverlay
 		_hover = null;
 	}
 
-	/// <summary>The views covered now, for the magnifier and the tests.</summary>
-	public IReadOnlyCollection<TapOverlayView> Views => _views.Values;
+	/// <summary>The views covered now, for the magnifier and the tests. The dictionary's own collection, so walking it each
+	/// tick allocates nothing.</summary>
+	public Dictionary<UIView, TapOverlayView>.ValueCollection Views => _views.Values;
 
 	// Put an overlay on each view that has none, and drop the ones whose view is gone.
 	private void Cover()
@@ -124,7 +130,7 @@ internal sealed class TapOverlay
 				live.Add(view);
 				if (_views.ContainsKey(view))
 					continue;
-				var overlay = new TapOverlayView(view, this);
+				var overlay = new TapOverlayView(host, view, this);
 				Diagnostics.AddOverlay(view, overlay.Root);
 				_views[view] = overlay;
 			}
@@ -145,6 +151,7 @@ internal sealed class TapOverlay
 		if (_pick is not null && (Picked is not { } picked || Diagnostics.Bounds(picked) is null))
 			ClearPick(Removed);
 		Redraw();
+		Zoom.Refresh(this);
 		Diagnostics.Post(_refresh);
 	}
 
@@ -210,6 +217,7 @@ internal sealed class TapOverlay
 	public void OnHover(TapOverlayView view, Vector2 point)
 	{
 		_hover = Beneath(view, point) is { } element ? new WeakReference<UIElement>(element) : null;
+		Zoom.PointerAt(view, point);
 		Redraw();
 	}
 
@@ -406,6 +414,8 @@ internal sealed class TapOverlay
 	{
 		if (_pointing == Pointing.Rulers && _pinnedWords.Length > 0)
 			return ("measurement", _pinnedWords, _pickHandle, _pinnedHandle, "");
+		if (Zoom.Colour is { } colour)
+			return ("colour", $"the colour {colour.Hex} under the pixel lens, at {colour.X},{colour.Y} in the game's surface", 0, 0, colour.Hex);
 		if (Picked is { } picked)
 			return ("element", $"the element {Describe(picked)} picked in the game", _pickHandle, 0, "");
 		return null;
@@ -435,6 +445,7 @@ internal sealed class TapOverlay
 			view.Paint("My XAML", _justMyMarkup);
 			view.Paint("Changes", _changesShown);
 			view.Paint("Ask", TapAsk.Waiting, canAsk);
+			view.Paint("Zoom", Zoom.On);
 		}
 	}
 

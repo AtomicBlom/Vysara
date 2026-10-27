@@ -9,7 +9,12 @@ namespace SUIsei.Rasterizer;
 /// the texels are signed distances, never sRGB, so they are read raw (no gamma decode) — matching how the engine
 /// bound the atlas page.
 /// </summary>
-public sealed class Texture
+#if SUISEI_RASTERIZER_INTERNAL
+internal
+#else
+public
+#endif
+sealed class Texture
 {
 	private readonly byte[] _rgba;
 

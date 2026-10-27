@@ -782,7 +782,8 @@ public sealed class RoseTapTests
 			fake.Ask("selecthandle 11").ShouldBe("selected"); // the Go button anchors
 			fake.Ask("select rulers").ShouldStartWith("armed");
 			var first = (Border)tap.Root.Children[1];
-			Click(host, Centre(first)); // pins the measurement to what is there
+			var row = Diagnostics.Bounds(first).ShouldNotBeNull();
+			Click(host, new Vector2(row.X + row.Width - 8f, row.Y + row.Height / 2f)); // pins the measurement to what is there, clear of the toolbar
 			fake.Ask("selection").ShouldStartWith("rulers\t"); // a click in rulers does not leave it
 			Click(host, Centre(ToolbarButton(view, "Ask")));
 
@@ -821,6 +822,114 @@ public sealed class RoseTapTests
 			fake.Ask("changes on").ShouldBe("on");
 			host.Tick(0.016, 0f, Surface);
 			Marked().ShouldBeTrue();
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	// --- The magnifier ---
+
+	// A pointer move in the game's surface, ticked and rendered twice: the move lands in one tick, and the lens captures
+	// from the draw list rendered after it at the start of the next.
+	private static void PointAt(UIHost host, Vector2 at)
+	{
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, at, PointerUpdateKind.None, PointerButtons.None, 0f, Vector2.Zero, 0));
+		host.Tick(0.016, 0f, Surface);
+		host.Render();
+		host.Tick(0.016, 0f, Surface);
+		host.Render();
+	}
+
+	// The magnifier's status text on the toolbar, which follows its buttons in the row.
+	private static string ZoomRow(UIView view) =>
+		OverlayElements(view).OfType<TextBlock>().Single(t => t.Text.StartsWith("Pixels ", StringComparison.Ordinal) || t.Text.StartsWith("Scale ", StringComparison.Ordinal)).Text;
+
+	// A point inside the Go button's own background, clear of its text.
+	private static Vector2 OnGoBackground(TapView tap)
+	{
+		var chrome = Diagnostics.Bounds(Diagnostics.ChildrenOf(tap.Go)[0]).ShouldNotBeNull();
+		return new Vector2(chrome.X + 3f, chrome.Y + chrome.Height / 2f);
+	}
+
+	[Test]
+	public void The_lens_reads_the_ui_pixel_under_the_pointer_and_ask_sends_its_colour()
+	{
+		var (host, view, tap, fake) = Overlaid();
+		try
+		{
+			fake.Ask("select").ShouldStartWith("armed"); // the capture layer hears the pointer, and keeps the button out of hover
+			host.Render();
+			Click(host, Centre(ToolbarButton(view, "Zoom")));
+			PointAt(host, OnGoBackground(tap));
+
+			ZoomRow(view).ShouldBe("Pixels 4x  #3C3C46  UI only"); // the built-in Button's background, from the UI alone
+			Click(host, Centre(ToolbarButton(view, "Ask")));
+
+			var press = TapWire.Fields(fake.Ask("ask 0")!);
+			(press[2], press[6]).ShouldBe(("colour", "#3C3C46"));
+			press[3].ShouldStartWith("the colour #3C3C46 under the pixel lens, at ");
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	private sealed class SolidFrame : Diagnostics.IFrameSource
+	{
+		public bool TryReadPixels(int x, int y, int width, int height, Span<byte> rgba8)
+		{
+			for (var i = 0; i < width * height; i++)
+				(rgba8[i * 4], rgba8[i * 4 + 1], rgba8[i * 4 + 2], rgba8[i * 4 + 3]) = ((byte)0xFF, (byte)0x80, (byte)0x00, (byte)0xFF);
+			return true;
+		}
+	}
+
+	[Test]
+	public void The_lens_reads_the_presented_frame_where_engine_glue_supplies_one()
+	{
+		var (host, view, tap, fake) = Overlaid();
+		try
+		{
+			Diagnostics.SetFrameSource(new SolidFrame());
+			fake.Ask("select").ShouldStartWith("armed");
+			host.Render();
+			Click(host, Centre(ToolbarButton(view, "Zoom")));
+			PointAt(host, OnGoBackground(tap));
+
+			ZoomRow(view).ShouldBe("Pixels 4x  #FF8000  frame");
+		}
+		finally
+		{
+			Diagnostics.SetFrameSource(null);
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Scaling_transforms_the_games_content_and_turning_it_off_puts_the_transform_back()
+	{
+		var (host, view, tap, fake) = Overlaid();
+		try
+		{
+			Click(host, Centre(ToolbarButton(view, "Zoom")));
+			host.Tick(0.016, 0f, Surface);
+			Click(host, Centre(ToolbarButton(view, "Scale")));
+			host.Tick(0.016, 0f, Surface);
+
+			tap.Root.RenderTransform.M11.ShouldBe(4f);
+			ZoomRow(view).ShouldBe("Scale 4x");
+			Click(host, Centre(ToolbarButton(view, "+")));
+			host.Tick(0.016, 0f, Surface);
+			tap.Root.RenderTransform.M11.ShouldBe(8f);
+
+			Click(host, Centre(ToolbarButton(view, "Zoom")));
+			tap.Root.RenderTransform.ShouldBe(Matrix3x2.Identity);
 		}
 		finally
 		{

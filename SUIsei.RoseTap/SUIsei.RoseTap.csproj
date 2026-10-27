@@ -24,4 +24,13 @@
     <Compile Include="..\external\RoseMcp.Tap\Protocol\*.cs" Link="RoseMcp.Tap\Protocol\%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- The magnifier reads the UI's pixels with SUIsei.Rasterizer's CPU copy of the UI shader, compiled in so the tap stays
+       one file; internal, so it never clashes with a game's own reference to SUIsei.Rasterizer. -->
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);SUISEI_RASTERIZER_INTERNAL</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\SUIsei.Rasterizer\SoftwareRasterizer.cs;..\SUIsei.Rasterizer\Texture.cs" Link="Rasterizer\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

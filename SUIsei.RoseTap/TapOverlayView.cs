@@ -1,3 +1,4 @@
+using System.Numerics;
 using SUIsei.Controls;
 using SUIsei.RoutedEvents;
 
@@ -32,8 +33,9 @@ internal sealed class TapOverlayView
 	private readonly Dictionary<string, Border> _buttons = [];
 	private readonly List<(Border Box, Border Tag)> _changeMarks = [];
 
-	public TapOverlayView(UIView view, TapOverlay owner)
+	public TapOverlayView(UIHost host, UIView view, TapOverlay owner)
 	{
+		Host = host;
 		View = view;
 
 		Capture = new Border { Background = HdrColor.Transparent, Visibility = Visibility.Collapsed };
@@ -55,15 +57,27 @@ internal sealed class TapOverlayView
 			Leaders[i] = Line();
 			LeaderLabels[i] = Badge(RulerColour);
 		}
+		Lens = new Border { BorderBrush = Ink, BorderThickness = new Thickness(1f), Child = new Canvas(), Visibility = Visibility.Collapsed };
+		Marks.Children.Add(Lens);
 
 		var buttons = new StackPanel { Orientation = Orientation.Horizontal };
 		foreach (var (name, action) in owner.ToolbarActions())
 			buttons.Children.Add(_buttons[name] = Button(name, action));
 		RulersText = Label("", 11f);
 		RulersText.Visibility = Visibility.Collapsed;
+
+		ZoomRow = new StackPanel { Orientation = Orientation.Horizontal, Visibility = Visibility.Collapsed };
+		foreach (var (name, action) in owner.Zoom.Actions())
+			ZoomRow.Children.Add(_buttons[name] = Button(name, () => action(owner)));
+		Swatch = new Border { Width = 12f, Height = 12f, Margin = new Thickness(4f, 0f), BorderBrush = Ink, BorderThickness = new Thickness(1f) };
+		ZoomRow.Children.Add(Swatch);
+		ZoomText = Label("", 11f);
+		ZoomRow.Children.Add(ZoomText);
+
 		var rows = new StackPanel();
 		rows.Children.Add(buttons);
 		rows.Children.Add(RulersText);
+		rows.Children.Add(ZoomRow);
 		Toolbar = new Border
 		{
 			Background = Panel,
@@ -104,6 +118,51 @@ internal sealed class TapOverlayView
 
 	/// <summary>The toolbar's rulers row: the anchor's size, margin and padding, and a pinned measurement.</summary>
 	public TextBlock RulersText { get; }
+
+	/// <summary>The host the view belongs to, whose last draw lists the lens rasterizes.</summary>
+	public UIHost Host { get; }
+
+	/// <summary>The toolbar's magnifier row: its modes and factor, the colour under the lens, and where the pixels came
+	/// from.</summary>
+	public StackPanel ZoomRow { get; }
+
+	public TextBlock ZoomText { get; }
+
+	/// <summary>The colour under the lens, as a filled square.</summary>
+	public Border Swatch { get; }
+
+	/// <summary>The pixel lens: a block per pixel round the pointer, drawn beside it.</summary>
+	public Border Lens { get; }
+
+	/// <summary>Draw the lens at <paramref name="at"/>, in surface pixels, with <paramref name="samples"/> by
+	/// <paramref name="samples"/> blocks of <paramref name="factor"/> pixels each, coloured from <paramref name="rgba"/>; hide
+	/// it for a null position.</summary>
+	public void ShowLens(Vector2? at, int samples, int factor, ReadOnlySpan<byte> rgba)
+	{
+		if (at is not { } position)
+		{
+			Lens.Visibility = Visibility.Collapsed;
+			return;
+		}
+
+		var blocks = (Canvas)Lens.Child!;
+		while (blocks.Children.Count < samples * samples)
+			blocks.Children.Add(new Border());
+		var size = factor / Scale;
+		for (var i = 0; i < samples * samples; i++)
+		{
+			var block = (Border)blocks.Children[i];
+			block.Width = size;
+			block.Height = size;
+			Canvas.SetLeft(block, i % samples * size);
+			Canvas.SetTop(block, i / samples * size);
+			block.Background = HdrColor.FromRgb(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], rgba[i * 4 + 3]);
+		}
+		blocks.Width = blocks.Height = samples * size;
+		Canvas.SetLeft(Lens, position.X / Scale);
+		Canvas.SetTop(Lens, position.Y / Scale);
+		Lens.Visibility = Visibility.Visible;
+	}
 
 
 	/// <summary>The view's DIP-to-pixel scale.</summary>
