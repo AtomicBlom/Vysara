@@ -1,5 +1,7 @@
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
+using SUIsei.Media.Imaging;
 
 namespace SUIsei.Tests;
 
@@ -11,7 +13,7 @@ namespace SUIsei.Tests;
 public sealed class ImageTests
 {
 	private static ImageSource TestSource(int width = 4, int height = 2) =>
-		ImageSource.FromRgba8(width, height, new byte[width * height * 4]);
+		BitmapSource.FromRgba8(width, height, new byte[width * height * 4]);
 
 	[Test]
 	public void Measures_to_its_natural_size()

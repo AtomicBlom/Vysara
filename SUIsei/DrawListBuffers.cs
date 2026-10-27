@@ -1,3 +1,4 @@
+using System.Numerics;
 using SUIsei.Drawing;
 
 namespace SUIsei;
@@ -28,6 +29,10 @@ internal sealed class DrawListBuffers
 	/// <summary>A read-only view of <see cref="Slots"/>, made once so handing it out allocates nothing.</summary>
 	public IReadOnlyList<TextureSource> SlotsView { get; }
 
+	/// <summary>Per slot, whether what it shows differs from what was shown before: from the previous list's slot
+	/// (<see cref="CompareTextures"/>), or from this list's own recorded version (<see cref="RefreshVersions"/>).</summary>
+	public List<bool> ChangedSlots { get; } = [];
+
 	/// <summary>The revision of the composite that last filled this set; 0 before the first.</summary>
 	public uint Revision { get; private set; }
 
@@ -39,35 +44,69 @@ internal sealed class DrawListBuffers
 		Commands.Clear();
 		Slots.Clear();
 		SlotVersions.Clear();
+		ChangedSlots.Clear();
 		Revision = revision;
 	}
 
 	/// <summary>Whether this set's slot table names the same sources, in the same slots and at the same versions, as
-	/// <paramref name="other"/>'s.</summary>
-	public bool SameTextures(DrawListBuffers other)
+	/// <paramref name="previous"/>'s. Records in <see cref="ChangedSlots"/> each slot whose source or version differs, or
+	/// that the previous table lacks.</summary>
+	public bool CompareTextures(DrawListBuffers previous)
 	{
-		if (Slots.Count != other.Slots.Count)
-			return false;
+		var same = Slots.Count == previous.Slots.Count;
+		ChangedSlots.Clear();
 		for (var i = 0; i < Slots.Count; i++)
 		{
-			if (!ReferenceEquals(Slots[i], other.Slots[i]) || SlotVersions[i] != other.SlotVersions[i])
-				return false;
+			var changed = i >= previous.Slots.Count
+				|| !ReferenceEquals(Slots[i], previous.Slots[i]) || SlotVersions[i] != previous.SlotVersions[i];
+			ChangedSlots.Add(changed);
+			same &= !changed;
 		}
-		return true;
+		return same;
 	}
 
-	/// <summary>Re-record each slot's current version; true when any had moved since it was recorded.</summary>
+	/// <summary>Re-record each slot's current version; true when any had moved since it was recorded. Records in
+	/// <see cref="ChangedSlots"/> the slots that moved.</summary>
 	public bool RefreshVersions()
 	{
 		var moved = false;
+		ChangedSlots.Clear();
 		for (var i = 0; i < Slots.Count; i++)
 		{
 			var version = Slots[i].Version;
-			if (version == SlotVersions[i])
+			var changed = version != SlotVersions[i];
+			ChangedSlots.Add(changed);
+			if (!changed)
 				continue;
 			SlotVersions[i] = version;
 			moved = true;
 		}
 		return moved;
+	}
+
+	/// <summary>The surface pixels drawn by commands that sample a slot <see cref="ChangedSlots"/> marks, each command's
+	/// vertex bounds cut to its clip: where texels changed under unchanged geometry. Empty when none did.</summary>
+	public Rect TexelDamage()
+	{
+		var commands = Commands.Span;
+		var vertices = Vertices.Span;
+		var indices = Indices.Span;
+		var damage = Rect.Zero;
+		for (var c = 0; c < commands.Length; c++)
+		{
+			ref readonly var cmd = ref commands[c];
+			if ((uint)cmd.TextureIndex >= (uint)ChangedSlots.Count || !ChangedSlots[cmd.TextureIndex] || cmd.IndexCount == 0)
+				continue;
+			var min = new Vector2(float.MaxValue);
+			var max = new Vector2(float.MinValue);
+			for (var i = cmd.IndexOffset; i < cmd.IndexOffset + cmd.IndexCount; i++)
+			{
+				var p = vertices[cmd.VertexOffset + indices[i]].Position;
+				min = Vector2.Min(min, p);
+				max = Vector2.Max(max, p);
+			}
+			damage = damage.Union(new Rect(min.X, min.Y, max.X - min.X, max.Y - min.Y).Intersect(cmd.ClipRect));
+		}
+		return damage;
 	}
 }

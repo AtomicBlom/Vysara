@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Windows.Input;
 
 using SUIsei.Controls;
-using SUIsei.Drawing;
+using SUIsei.Media.Imaging;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Gallery;
@@ -29,7 +29,7 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 	public Action? Quit { get; set; }
 
 	/// <summary>x:Bind source for the <see cref="Image"/>: a procedurally-generated logo.</summary>
-	public ImageSource LogoSource { get; } = MakeLogo();
+	public BitmapSource LogoSource { get; } = MakeLogo();
 
 	/// <summary>x:Bind source bound to the "Greet" button's <see cref="ButtonBase.Command"/>.</summary>
 	public ICommand GreetCommand { get; }
@@ -92,7 +92,7 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 	private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
 	// A small RGBA gradient so the Image control has something to show without shipping an asset file.
-	private static ImageSource MakeLogo()
+	private static BitmapSource MakeLogo()
 	{
 		const int width = 64;
 		const int height = 40;
@@ -108,7 +108,7 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 				pixels[o + 3] = 255;
 			}
 		}
-		return ImageSource.FromRgba8(width, height, pixels);
+		return BitmapSource.FromRgba8(width, height, pixels);
 	}
 
 	/// <summary>The middle level of the nested-bind demo path <c>Render.Bloom.Intensity</c> — a plain holder of the

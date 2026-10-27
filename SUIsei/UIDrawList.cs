@@ -102,7 +102,7 @@ internal sealed class UIDrawList
 	public DrawListData End(bool hdr)
 	{
 		Flush();
-		if (Previous.Revision == 0 || !_set.SameTextures(Previous))
+		if (!_set.CompareTextures(Previous) || Previous.Revision == 0)
 			_textureRevision++;
 		var view = _views[Revision % ViewCount];
 		view.Bind(_set, _surfaceSize, hdr, _textureRevision);
@@ -112,8 +112,8 @@ internal sealed class UIDrawList
 
 	/// <summary>
 	/// For a frame that reuses the current list unchanged: move its texture revision if a source it samples has
-	/// changed its texels since the list recorded them, so the host re-uploads it although the geometry is the same.
-	/// Allocation-free; one version comparison per slot.
+	/// changed its texels since the list recorded them, so the host re-uploads it although the geometry is the same, and
+	/// make the list's damage the pixels drawn with those sources. Allocation-free; one version comparison per slot.
 	/// </summary>
 	public void RefreshTextureRevision()
 	{
@@ -121,6 +121,7 @@ internal sealed class UIDrawList
 			return;
 		_textureRevision++;
 		Last.StampTextureRevision(_textureRevision);
+		Last.Damage = _set.TexelDamage();
 	}
 
 	// The slot `source` holds in the list being built, assigning it the next one on first use, so slots are dense and
@@ -145,7 +146,7 @@ internal sealed class UIDrawList
 	/// <paramref name="uv1"/>, through the source's slot in this list's slot table.</summary>
 	public void AddImage(in Rect local, Vector2 uv0, Vector2 uv1, in Matrix3x2 matrix, PremultipliedHdrColor tint, TextureSource source, in Rect clip)
 	{
-		if (clip.IsEmpty)
+		if (clip.IsEmpty || source.IsDisposed)
 			return;
 		AddQuad(local, uv0, uv1, matrix, tint, UIPrimKind.Image, Vector4.Zero, clip, SlotFor(source));
 	}
@@ -356,7 +357,7 @@ internal sealed class UIDrawList
 	public void AddVector(TessellatedPath path, PathTrim trim, in Matrix3x2 matrix, PremultipliedHdrColor color, in Rect clip,
 		float groupOpacity = 1f, TextureSource? texture = null, Matrix3x2 localToUv = default)
 	{
-		if (clip.IsEmpty || path.TriangleCount == 0 || groupOpacity <= 0f)
+		if (clip.IsEmpty || path.TriangleCount == 0 || groupOpacity <= 0f || texture is { IsDisposed: true })
 			return;
 		var grouped = groupOpacity < 1f;
 		if (grouped)
@@ -405,7 +406,8 @@ internal sealed class UIDrawList
 	public void AddVector(TessellatedPath path, PathTrim trim, in Matrix3x2 matrix, PremultipliedHdrColor color, in Rect clip, float groupOpacity,
 		TextureSource? texture, Matrix3x2 localToUv, Vector2 keepMin, Vector2 keepMax)
 	{
-		if (clip.IsEmpty || path.TriangleCount == 0 || groupOpacity <= 0f || !(keepMax.X > keepMin.X) || !(keepMax.Y > keepMin.Y))
+		if (clip.IsEmpty || path.TriangleCount == 0 || groupOpacity <= 0f || !(keepMax.X > keepMin.X) || !(keepMax.Y > keepMin.Y)
+			|| texture is { IsDisposed: true })
 			return;
 		var grouped = groupOpacity < 1f;
 		if (grouped)

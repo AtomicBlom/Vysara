@@ -4,6 +4,7 @@ using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Media.Imaging;
 using SUIsei.Rasterizer;
 using SUIsei.Tests.Sample;
 
@@ -236,7 +237,7 @@ public sealed class BrushTests
 	[Test]
 	public void An_image_brush_paints_a_plain_rect_cut_at_its_edges()
 	{
-		var image = ImageSource.FromRgba8(4, 2, new byte[32]);
+		var image = BitmapSource.FromRgba8(4, 2, new byte[32]);
 		var brush = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
 		var border = new Border { Width = 40f, Height = 40f, Background = brush };
 		var draw = Laid(border, 40f, 40f).Render();
@@ -249,7 +250,7 @@ public sealed class BrushTests
 		corners[2].Position.ShouldBe(new Vector2(40f, 40f));
 		corners[0].Uv.ShouldBe(new Vector2(0.25f, 0f));
 		corners[2].Uv.ShouldBe(new Vector2(0.75f, 1f));
-		border.Visual.Dump().ShouldContain("fill=image(4x2 UniformToFill)");
+		border.Visual.Dump().ShouldContain("fill=image(BitmapSource 4x2 v0 straight srgb UniformToFill)");
 
 		brush.AlignmentX = AlignmentX.Left;
 		var shifted = border.AttachedRoot!.Render();
@@ -261,7 +262,7 @@ public sealed class BrushTests
 	[Test]
 	public void An_image_brush_paints_rounded_corners_and_a_border_through_the_vector_prim()
 	{
-		var image = ImageSource.FromRgba8(1, 1, [255, 0, 0, 255]);
+		var image = BitmapSource.FromRgba8(1, 1, [255, 0, 0, 255]);
 
 		var rounded = new Border { Width = 40f, Height = 40f, CornerRadius = new CornerRadius(12f), Background = new ImageBrush { ImageSource = image } };
 		var draw = Laid(rounded, 40f, 40f).Render();
@@ -311,7 +312,7 @@ public sealed class BrushTests
 	{
 		var view = new ImageCornersView();
 		view.InitializeComponent();
-		var image = ImageSource.FromRgba8(1, 1, [0, 255, 0, 255]);
+		var image = BitmapSource.FromRgba8(1, 1, [0, 255, 0, 255]);
 		view.Avatar.Background.ShouldBeOfType<ImageBrush>().ImageSource = image;
 		view.Framed.BorderBrush.ShouldBeOfType<ImageBrush>().ImageSource = image;
 
@@ -328,7 +329,7 @@ public sealed class BrushTests
 	[Test]
 	public void An_image_brush_on_text_is_not_supported_yet()
 	{
-		var image = ImageSource.FromRgba8(2, 2, new byte[16]);
+		var image = BitmapSource.FromRgba8(2, 2, new byte[16]);
 		Should.Throw<NotSupportedException>(() => Laid(new TextBlock { Text = "Hi", Foreground = new ImageBrush { ImageSource = image } }).Render())
 			.Message.ShouldContain("cannot paint text");
 	}

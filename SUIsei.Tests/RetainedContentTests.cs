@@ -3,6 +3,7 @@ using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Media.Imaging;
 
 namespace SUIsei.Tests;
 
@@ -58,7 +59,7 @@ public sealed class RetainedContentTests
 		var panel = new StackPanel { Background = new SolidColorBrush(HdrColor.FromRgb(10, 10, 10)) };
 		foreach (var child in new UIElement[] { animated, fading, blinking, tweened, canvas, framed, checkBox, sharedA, sharedB, graded, gradedText, moved, button, tracked, anchors })
 			panel.Children.Add(child);
-		panel.Children.Add(new Image { Source = ImageSource.FromRgba8(2, 2, new byte[16]), Width = 8f, Height = 8f });
+		panel.Children.Add(new Image { Source = BitmapSource.FromRgba8(2, 2, new byte[16]), Width = 8f, Height = 8f });
 
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = panel;
@@ -270,7 +271,7 @@ public sealed class RetainedContentTests
 	[Test]
 	public void Paint_shows_in_the_visual_dump()
 	{
-		var image = new Image { Source = ImageSource.FromRgba8(4, 2, new byte[32]), Width = 40f, Height = 20f, Stretch = Stretch.Fill };
+		var image = new Image { Source = BitmapSource.FromRgba8(4, 2, new byte[32]), Width = 40f, Height = 20f, Stretch = Stretch.Fill };
 		var gradient = new LinearGradientBrush
 		{
 			ColorInterpolationMode = ColorInterpolationMode.ScRgbLinearInterpolation,
@@ -283,7 +284,7 @@ public sealed class RetainedContentTests
 		var root = new UIRoot(new DrawListId(0)) { Content = panel };
 		root.LayoutPass(new Size(100f, 100f));
 
-		image.Visual.Dump().ShouldContain("rect=40x20 fill=image(4x2 Fill)");
+		image.Visual.Dump().ShouldContain("rect=40x20 fill=image(BitmapSource 4x2 v0 straight srgb Fill)");
 		graded.Visual.Dump().ShouldContain(
 			"rect=40x20 fill=linear((0,0)->(1,1) rel linear 0:(2,0,0,1) 1:(0.157,0.157,0.863,1)) border=2(0.863,0.157,0.157,1)");
 	}

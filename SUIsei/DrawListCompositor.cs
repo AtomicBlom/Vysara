@@ -49,12 +49,13 @@ public sealed class DrawListCompositor : IUICompositor
 		var built = list.End(root.IsHdrSurface);
 		built.Damage = list.Previous.Revision == 0
 			? surfaceRect // first build for this surface → repaint all
-			: ComputeDamage(list.Previous, list.Current, root.SurfaceSize);
+			: ComputeDamage(list.Previous, list.Current, root.SurfaceSize).Union(list.Current.TexelDamage());
 		CompositeCount++;
 	}
 
-	// The pixel region that differs between two consecutive draw lists of the same surface — the union of the old and
-	// new positions of every vertex whose contents changed (so colour fades, moves, and resizes are all covered). A
+	// The pixel region whose geometry differs between two consecutive draw lists of the same surface — the union of the
+	// old and new positions of every vertex whose contents changed (so colour fades, moves, and resizes are all covered;
+	// texels that changed under unchanged geometry are the buffers' TexelDamage). A
 	// structural change (commands added/removed/reordered, or a different vertex count) or any group-opacity layer
 	// expands to the whole surface, since those can affect pixels beyond the literal vertex deltas. The previous list
 	// is still intact in the other buffer set, so this compares the two in place.
@@ -302,7 +303,7 @@ public sealed class DrawListCompositor : IUICompositor
 		in Matrix3x2 matrix, float alpha, in Rect clip, bool overlaps)
 	{
 		var a = alpha * surface.Opacity;
-		if (surface.Surface is not { } source || a <= 0f)
+		if (surface.Drawn is not { } source || a <= 0f)
 			return;
 		var placed = surface.ImageRect(new Vector2(box.Width, box.Height));
 		var image = new Rect(box.X + placed.X, box.Y + placed.Y, placed.Width, placed.Height);
@@ -351,7 +352,7 @@ public sealed class DrawListCompositor : IUICompositor
 	// narrowing its uv range. White tint (image unchanged) folded by the subtree opacity — the shader does colour *= texSample.
 	private static void AddSurface(UIDrawList list, CompositionSurfaceBrush surface, Vector2 size, in Matrix3x2 matrix, float alpha, in Rect clip)
 	{
-		if (surface.Surface is not { } source)
+		if (surface.Drawn is not { } source)
 			return;
 		var image = surface.ImageRect(size);
 		var visible = image;

@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Media.Imaging;
 using SUIsei.Rasterizer;
 
 namespace SUIsei.Tests;
@@ -299,7 +300,7 @@ public sealed class ShapeContentTests
 		// A 2×2 image over the square [20,60]²: each probe sits past its texel's centre, where clamped bilinear filtering
 		// reads that texel alone.
 		byte[] texels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255];
-		var image = new CompositionSurfaceBrush { Surface = ImageSource.FromRgba8(2, 2, texels) };
+		var image = new CompositionSurfaceBrush { Surface = BitmapSource.FromRgba8(2, 2, texels) };
 		var shape = new ShapeContent { Path = PathOf("M 20,20 L 60,20 L 60,60 L 20,60 Z"), Fill = image };
 		var draw = Composite(new DrawListCompositor(), Scene(shape).Root);
 
@@ -316,7 +317,7 @@ public sealed class ShapeContentTests
 	public void A_letterboxed_image_paints_only_where_it_lies_under_any_transform(float degrees)
 	{
 		// A square image in a 40×20 box, Uniform: it fills x 30..50 and leaves the rest of the box unpainted, turned or not.
-		var image = new CompositionSurfaceBrush { Surface = ImageSource.FromRgba8(1, 1, [255, 255, 255, 255]), Stretch = Stretch.Uniform };
+		var image = new CompositionSurfaceBrush { Surface = BitmapSource.FromRgba8(1, 1, [255, 255, 255, 255]), Stretch = Stretch.Uniform };
 		var shape = new ShapeContent { Path = PathOf("M 20,40 L 60,40 L 60,60 L 20,60 Z"), Fill = image };
 		var (root, sprite) = Scene(shape);
 		var turn = Matrix3x2.CreateRotation(degrees * MathF.PI / 180f, new Vector2(40f, 50f));
@@ -336,7 +337,7 @@ public sealed class ShapeContentTests
 	{
 		// The image maps over the outline's bounds, as a gradient does, and paints nothing past them: the outer half of the
 		// square's stroke is left transparent, and a horizontal line, whose bounds have no height, draws nothing.
-		var image = new CompositionSurfaceBrush { Surface = ImageSource.FromRgba8(1, 1, [255, 255, 255, 255]) };
+		var image = new CompositionSurfaceBrush { Surface = BitmapSource.FromRgba8(1, 1, [255, 255, 255, 255]) };
 		var square = new ShapeContent { Path = PathOf("M 20,20 L 60,20 L 60,60 L 20,60 Z"), Stroke = image };
 		square.StrokeStyle.Thickness = 8f;
 		var raster = Raster(Composite(new DrawListCompositor(), Scene(square).Root));

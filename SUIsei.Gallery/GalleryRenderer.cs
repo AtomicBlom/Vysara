@@ -94,10 +94,12 @@ internal sealed class GalleryRenderer
 		var t2 = Stopwatch.GetTimestamp();
 		_tickMs = Ms(t0, t1);
 		_composeMs = Ms(t1, t2);
+		_rasterizer!.ReleaseTextures(_host.ReleasedTextures);
 
+		// A texel change (a rewritten bitmap) moves only the texture revision, so both revisions key the frame.
 		long key = (width * 73856093L) ^ (height * 19349663L);
 		foreach (var (_, data) in _host.DrawLists)
-			key = key * 31 + data.Revision;
+			key = (key * 31 + data.Revision) * 31 + data.TextureRevision;
 		return key;
 	}
 
