@@ -12,6 +12,10 @@ public static partial class Diagnostics
 		/// <summary>Inherited from an ancestor.</summary>
 		Inherited,
 
+		/// <summary>Given by the control itself, as WinUI's default style gives it: a control's built-in template, and
+		/// that a control is a tab stop.</summary>
+		BuiltInStyle,
+
 		/// <summary>Set by a setter of the element's style.</summary>
 		Style,
 
@@ -130,6 +134,7 @@ public static partial class Diagnostics
 			DependencyObject.ValueRung.Local => ValueLevel.Local,
 			DependencyObject.ValueRung.Template => ValueLevel.Template,
 			DependencyObject.ValueRung.Style => ValueLevel.Style,
+			DependencyObject.ValueRung.BuiltInStyle => ValueLevel.BuiltInStyle,
 			DependencyObject.ValueRung.Inherited => ValueLevel.Inherited,
 			_ => ValueLevel.Default,
 		};

@@ -14,7 +14,7 @@ public sealed class Button : ButtonBase
 	private static readonly HdrColor OverBackground = HdrColor.FromRgb(80, 80, 95);
 	private static readonly HdrColor PressedBackground = HdrColor.FromRgb(40, 40, 55);
 
-	public Button() => Template = DefaultTemplate;
+	public Button() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
 
 	// The built-in look, shared (stateless) across default buttons: a rounded Border hosting a ContentPresenter,
 	// with a CommonStates group animating the border background. The storyboards target the border created here, so

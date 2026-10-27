@@ -17,7 +17,7 @@ public class ToggleButton : ButtonBase
 	private static readonly HdrColor PressedBackground = HdrColor.FromRgb(40, 40, 55);
 	private static readonly HdrColor AccentBackground = HdrColor.FromRgb(70, 120, 200);
 
-	public ToggleButton() => Template = DefaultTemplate;
+	public ToggleButton() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
 
 	public static readonly RoutedEvent CheckedEvent = RoutedEvent.Register(nameof(Checked), RoutingStrategy.Bubble);
 	public static readonly RoutedEvent UncheckedEvent = RoutedEvent.Register(nameof(Unchecked), RoutingStrategy.Bubble);

@@ -127,8 +127,9 @@ public abstract class Control : FrameworkElement
 
 	protected Control()
 	{
-		// Controls are tab-focusable by default; UIElement's registered default is false (non-interactive elements).
-		IsTabStop = true;
+		// Controls are tab-focusable by default; UIElement's registered default is false (non-interactive elements). Set
+		// on the BuiltInStyle rung, so a style or the app's own value overrides it and it never reads as the app's.
+		SetBuiltInValue(IsTabStopProperty, true);
 	}
 
 	/// <summary>The host's animation clock (via the attached root), used by <see cref="VisualStateManager"/> to run

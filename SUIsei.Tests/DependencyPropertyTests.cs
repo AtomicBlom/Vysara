@@ -84,6 +84,53 @@ public sealed class DependencyPropertyTests
 	}
 
 	[Test]
+	public void A_built_in_value_sits_between_style_and_inherited()
+	{
+		var p = new Probe();
+		p.SetInheritedValue(Probe.ValueProperty, 1);
+		p.SetBuiltInValue(Probe.ValueProperty, 6);
+		p.Value.ShouldBe(6); // BuiltInStyle outranks Inherited
+		p.SetStyleValue(Probe.ValueProperty, 2);
+		p.Value.ShouldBe(2); // Style outranks BuiltInStyle
+		p.ClearStyleValue(Probe.ValueProperty);
+		p.Value.ShouldBe(6);
+		p.Value = 3;
+		p.Value.ShouldBe(3);
+		p.HasLocalValue(Probe.ValueProperty).ShouldBeTrue();
+	}
+
+	[Test]
+	public void A_controls_built_in_template_and_tab_stop_are_not_local_values()
+	{
+		var button = new SUIsei.Controls.Button();
+
+		button.IsTabStop.ShouldBeTrue();
+		button.Template.ShouldNotBeNull();
+		button.HasLocalValue(UIElement.IsTabStopProperty).ShouldBeFalse();
+		button.HasLocalValue(SUIsei.Controls.Control.TemplateProperty).ShouldBeFalse();
+	}
+
+	[Test]
+	public void A_style_replaces_a_controls_built_in_template()
+	{
+		var replacement = new SUIsei.Controls.ControlTemplate { Factory = static _ => new SUIsei.Controls.Border() };
+		var button = new SUIsei.Controls.Button
+		{
+			Style = new Style
+			{
+				Setters =
+				{
+					new Setter { Property = SUIsei.Controls.Control.TemplateProperty, Value = replacement },
+					new Setter { Property = UIElement.IsTabStopProperty, Value = false },
+				},
+			},
+		};
+
+		button.Template.ShouldBe(replacement);
+		button.IsTabStop.ShouldBeFalse();
+	}
+
+	[Test]
 	public void Animation_outranks_local_and_clearing_it_reverts_to_local()
 	{
 		var p = new Probe { Value = 5 };

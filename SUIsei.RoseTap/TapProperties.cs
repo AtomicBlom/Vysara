@@ -55,6 +55,7 @@ internal static class TapProperties
 		Diagnostics.ValueLevel.Local => "Local",
 		Diagnostics.ValueLevel.Template => "ParentTemplate",
 		Diagnostics.ValueLevel.Style => "Style",
+		Diagnostics.ValueLevel.BuiltInStyle => "BuiltInStyle",
 		Diagnostics.ValueLevel.Inherited => "Inherited",
 		_ => "Default",
 	};

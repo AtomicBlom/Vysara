@@ -295,6 +295,27 @@ public sealed class RoseTapTests
 	}
 
 	[Test]
+	public void A_controls_built_in_template_and_tab_stop_read_as_built_in_style()
+	{
+		var (host, _) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+			var rows = fake.Rows("properties 11");
+
+			rows.ShouldContain(TapRows.Property("IsTabStop", "True", "System.Boolean", "SUIsei.UIElement", "BuiltInStyle", "", 0, 0, false, null));
+			rows.ShouldContain(TapRows.Property("Template", "SUIsei.Controls.ControlTemplate", "SUIsei.Controls.ControlTemplate", "SUIsei.Controls.Control",
+				"BuiltInStyle", "", 0, 0, false, null));
+			rows.ShouldNotContain(r => r.Contains("\tLocal\t", StringComparison.Ordinal) && !r.StartsWith("P\tContent", StringComparison.Ordinal));
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
 	public void Properties_of_a_handle_that_names_nothing_is_error_alone()
 	{
 		var (host, _) = Served();

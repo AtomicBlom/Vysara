@@ -50,7 +50,7 @@ public sealed class Slider : Control
 				PropertyChanged = static (s, _, _) => s.OnValueChanged(),
 			});
 
-	public Slider() => Template = DefaultTemplate;
+	public Slider() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
 
 	/// <summary>The low end of the range (default 0).</summary>
 	public double Minimum { get => GetValue(MinimumProperty); set => SetValue(MinimumProperty, value); }
