@@ -12,8 +12,11 @@ namespace SUIsei;
 /// </summary>
 public sealed class CompositionSurfaceBrush : CompositionBrush
 {
-	/// <summary>The image, sampled through the draw list's texture slots; null paints nothing.</summary>
+	/// <summary>The image, sampled through the draw list's texture slots; null, or a disposed image, paints nothing.</summary>
 	public TextureSource? Surface { get; set => Change(ref field, value); }
+
+	/// <summary>The image the brush draws: <see cref="Surface"/> unless it has been disposed.</summary>
+	internal TextureSource? Drawn => Surface is { IsDisposed: false } surface ? surface : null;
 
 	/// <summary>How the image is scaled into the box. Defaults to filling it.</summary>
 	public Stretch Stretch { get; set => Change(ref field, value); } = Stretch.Fill;
@@ -45,15 +48,19 @@ public sealed class CompositionSurfaceBrush : CompositionBrush
 	/// <summary>What the brush paints in a box of <paramref name="size"/>: the image cut to the box, empty without
 	/// one.</summary>
 	internal Rect PaintedRect(Vector2 size) =>
-		Surface is null ? Rect.Zero : ImageRect(size).Intersect(new Rect(0f, 0f, size.X, size.Y));
+		Drawn is null ? Rect.Zero : ImageRect(size).Intersect(new Rect(0f, 0f, size.X, size.Y));
 
 	internal override void Describe(StringBuilder sb)
 	{
 		var c = CultureInfo.InvariantCulture;
+		sb.Append("image(");
 		if (Surface is { } s)
-			sb.Append(c, $"image({s.Width}x{s.Height} {Stretch}");
+		{
+			s.Describe(sb);
+			sb.Append(c, $" {Stretch}");
+		}
 		else
-			sb.Append("image(none");
+			sb.Append("none");
 		if (HorizontalAlignmentRatio != 0.5f || VerticalAlignmentRatio != 0.5f)
 			sb.Append(c, $" align={HorizontalAlignmentRatio:0.###},{VerticalAlignmentRatio:0.###}");
 		if (Opacity != 1f)

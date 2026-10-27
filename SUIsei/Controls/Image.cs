@@ -1,4 +1,4 @@
-using SUIsei.Drawing;
+using SUIsei.Media;
 
 namespace SUIsei.Controls;
 

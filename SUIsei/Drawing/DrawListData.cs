@@ -79,6 +79,12 @@ public sealed class DrawListData
 	/// list first uses them. The host uploads each source and binds them by slot; slots belong to this list only. Every
 	/// command's <see cref="DrawCommand.TextureIndex"/> is below <c>TextureSlots.Count</c>, so a host can treat one
 	/// outside the table as a broken list.
+	/// <para>
+	/// How a slot is sampled is its source's: a host binds an <see cref="TextureColorSpace.Srgb"/> source through an sRGB
+	/// format (decoded per texel, before filtering) and a linear one through a plain format, and premultiplies what an
+	/// image or vector command samples from a <see cref="TextureAlphaMode.Straight"/> source after the decode and the
+	/// filtering. A command carries only its slot, so every kind that samples it reads it the same way.
+	/// </para>
 	/// </summary>
 	public IReadOnlyList<TextureSource> TextureSlots
 	{
@@ -156,9 +162,9 @@ public sealed class DrawListData
 		sb.Append(c, $"  Textures ({slots.Count}):\n");
 		for (var i = 0; i < slots.Count; i++)
 		{
-			var source = slots[i];
-			var name = ReferenceEquals(source, TextureSource.White) ? "White" : source.GetType().Name;
-			sb.Append(c, $"    [{i}] {name} {source.Width}x{source.Height} v{source.Version}\n");
+			sb.Append(c, $"    [{i}] ");
+			slots[i].Describe(sb);
+			sb.Append('\n');
 		}
 
 		sb.Append(c, $"  Vertices ({vertices.Length}):\n");

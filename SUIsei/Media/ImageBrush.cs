@@ -1,5 +1,3 @@
-using SUIsei.Drawing;
-
 namespace SUIsei.Media;
 
 /// <summary>

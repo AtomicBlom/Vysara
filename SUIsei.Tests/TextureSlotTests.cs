@@ -2,6 +2,7 @@ using System.Numerics;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Media.Imaging;
 using SUIsei.Rasterizer;
 
 namespace SUIsei.Tests;
@@ -27,7 +28,7 @@ public sealed class TextureSlotTests
 			rgba[i + 2] = b;
 			rgba[i + 3] = 255;
 		}
-		return (ImageSource.FromRgba8(4, 4, rgba), rgba);
+		return (BitmapSource.FromRgba8(4, 4, rgba), rgba);
 	}
 
 	// A surface with a text block and two images: text at x 0..40, image a at x 40..80, image b at x 80..120.
@@ -145,7 +146,7 @@ public sealed class TextureSlotTests
 		again.ShouldBeSameAs(draw);
 		again.Revision.ShouldBe(revision);
 		again.TextureRevision.ShouldBe(2u);
-		again.Dump().ShouldContain("ImageSource 4x4 v1");
+		again.Dump().ShouldContain("BitmapSource 4x4 v1 straight srgb");
 
 		scene.Frame().TextureRevision.ShouldBe(2u);   // and it doesn't move again without another change
 

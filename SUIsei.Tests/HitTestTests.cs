@@ -5,6 +5,7 @@ using SUIsei.Drawing;
 using SUIsei.Extensions;
 using SUIsei.Input;
 using SUIsei.Media;
+using SUIsei.Media.Imaging;
 using SUIsei.Rasterizer;
 using SUIsei.RoutedEvents;
 
@@ -190,7 +191,7 @@ public sealed class HitTestTests
 	public void An_image_hits_over_its_destination_rect_not_its_letterbox()
 	{
 		// A 2:1 image in a 100×100 box, stretched uniformly: drawn over y∈[25,75].
-		var image = new Image { Source = ImageSource.FromRgba8(2, 1, new byte[8]), Width = 100f, Height = 100f };
+		var image = new Image { Source = BitmapSource.FromRgba8(2, 1, new byte[8]), Width = 100f, Height = 100f };
 		var root = Laid(CanvasOf(image));
 
 		root.HitTest(new Vector2(50f, 50f)).ShouldBe(image);

@@ -71,8 +71,8 @@
 				</StackPanel>
 			</Border>
 
-			<!-- Text input (TwoWay bind) + Image -->
-			<TextBlock Text="Text input &amp; image" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
+			<!-- Text input (TwoWay bind) + Images: a decoded bitmap, and a straight-alpha WriteableBitmap rewritten every frame -->
+			<TextBlock Text="Text input &amp; images" FontSize="13" Foreground="#78AAFF" Margin="2,0,0,6" />
 			<Border Background="#22252E" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,18">
 				<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 					<StackPanel Orientation="Vertical">
@@ -80,6 +80,7 @@
 						<TextBlock Text="{x:Bind Greeting, Mode=OneWay}" FontSize="16" Foreground="#ECEFF6" />
 					</StackPanel>
 					<Image Source="{x:Bind LogoSource}" Width="120" Height="72" Stretch="Uniform" Margin="24,0,0,0" />
+					<Image Source="{x:Bind LiveBitmap}" Width="120" Height="72" Stretch="Uniform" Margin="16,0,0,0" />
 				</StackPanel>
 			</Border>
 

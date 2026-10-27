@@ -2,6 +2,7 @@ using System.Numerics;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Media.Imaging;
 using SUIsei.Rasterizer;
 
 namespace SUIsei.Tests;
@@ -247,7 +248,7 @@ public sealed class VectorPrimTests
 		// A 2×2 image mapped onto the square [20,60]²: each probe sits past its texel's centre, where clamped bilinear
 		// filtering reads that texel alone.
 		byte[] texels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 128];
-		var image = ImageSource.FromRgba8(2, 2, texels);
+		var image = BitmapSource.FromRgba8(2, 2, texels);
 		var toUv = Matrix3x2.CreateTranslation(-20, -20) * Matrix3x2.CreateScale(1 / 40f);
 		var builder = new DrawListBuilder();
 		builder.Begin(new Vector2(Size));
@@ -338,7 +339,7 @@ public sealed class VectorPrimTests
 		dump.ShouldBe("""
 			DrawListData (rev 1, texrev 1, coords 10x10, hdr=False)
 			  Textures (1):
-			    [0] White 1x1 v0
+			    [0] White 1x1 v0 premultiplied linear
 			  Vertices (18):
 			    [0] pos=(0.5,6.5) uv=(0,0) col=(1,1,1,1) custom=(-0.5,2.5,-0.5,1000000)
 			    [1] pos=(1,6.5) uv=(0,0) col=(1,1,1,1) custom=(-0.5,2.5,0,1000000)

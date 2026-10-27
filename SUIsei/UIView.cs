@@ -28,4 +28,7 @@ public sealed class UIView
 
 	/// <summary>The draw-list id this view composites into — hand to the engine painter to submit the composited frame.</summary>
 	public DrawListId Surface => Root.Surface;
+
+	/// <summary>The texture sources this view's current draw list holds on its host.</summary>
+	internal SurfaceTextures Textures { get; } = new();
 }

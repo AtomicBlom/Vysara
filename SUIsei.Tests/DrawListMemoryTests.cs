@@ -2,6 +2,7 @@ using System.Numerics;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Media.Imaging;
 
 namespace SUIsei.Tests;
 
@@ -24,7 +25,7 @@ public sealed class DrawListMemoryTests
 		var panel = new StackPanel { Background = new SolidColorBrush(HdrColor.FromRgb(20, 20, 20)) };
 		panel.Children.Add(fading);
 		panel.Children.Add(new TextBlock { Text = "Allocation-free", FontSize = 16f });
-		panel.Children.Add(new Image { Source = ImageSource.FromRgba8(2, 2, new byte[16]), Width = 8f, Height = 8f, Stretch = Stretch.Fill });
+		panel.Children.Add(new Image { Source = BitmapSource.FromRgba8(2, 2, new byte[16]), Width = 8f, Height = 8f, Stretch = Stretch.Fill });
 		panel.Children.Add(group);
 
 		var host = new UIHost();
