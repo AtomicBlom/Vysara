@@ -6,8 +6,8 @@ namespace SUIsei;
 
 /// <summary>
 /// A rectangle, optionally rounded, with a fill and an optional border: the Border, Panel and Image primitive. Each
-/// is painted by a <see cref="CompositionBrush"/>: a colour, a gradient, or (on a rectangle with square corners and no
-/// border) an image.
+/// is painted by a <see cref="CompositionBrush"/>: a colour, a gradient, or an image (on rounded corners, or as the
+/// border, drawn through the vector prim).
 /// </summary>
 public sealed class RectContent(Vector2 size, CompositionBrush? fill, float cornerRadius = 0f, CompositionBrush? borderBrush = null, float borderThickness = 0f)
 	: VisualContent

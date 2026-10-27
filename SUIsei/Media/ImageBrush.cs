@@ -5,9 +5,8 @@ namespace SUIsei.Media;
 /// <summary>
 /// Paints an image, as WinUI's <c>ImageBrush</c>: <see cref="ImageSource"/> scaled into the area painted by
 /// <see cref="TileBrush.Stretch"/> and placed by <see cref="TileBrush.AlignmentX"/> and <see cref="TileBrush.AlignmentY"/>,
-/// cut at the area's edges. It paints a rectangle with square corners and no border, such as a <c>Panel</c>'s or
-/// <c>Border</c>'s background; a rounded or bordered rectangle, a border and text are not supported yet, and throw
-/// <see cref="NotSupportedException"/> when drawn.
+/// cut at the area's edges. It paints a <c>Panel</c>'s or <c>Border</c>'s background, rounded or not, and a
+/// <c>Border</c>'s border; text is not supported yet, and throws <see cref="NotSupportedException"/> when drawn.
 /// </summary>
 public sealed class ImageBrush : TileBrush
 {

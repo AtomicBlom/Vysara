@@ -4,6 +4,7 @@ using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Rasterizer;
 using SUIsei.Tests.Sample;
 
 namespace SUIsei.Tests;
@@ -258,25 +259,78 @@ public sealed class BrushTests
 	}
 
 	[Test]
-	public void An_image_brush_on_a_rounded_or_bordered_rect_or_on_text_is_not_supported_yet()
+	public void An_image_brush_paints_rounded_corners_and_a_border_through_the_vector_prim()
+	{
+		var image = ImageSource.FromRgba8(1, 1, [255, 0, 0, 255]);
+
+		var rounded = new Border { Width = 40f, Height = 40f, CornerRadius = new CornerRadius(12f), Background = new ImageBrush { ImageSource = image } };
+		var draw = Laid(rounded, 40f, 40f).Render();
+		var command = draw.Commands.Span.ToArray().ShouldHaveSingleItem();
+		((UIPrimKind)command.Tag, command.TextureIndex).ShouldBe((UIPrimKind.Vector, 1));
+		var raster = Raster(draw, 40);
+		raster.ReadLinear(20, 20).ShouldBe(new Vector4(1f, 0f, 0f, 1f));
+		raster.ReadLinear(20, 0).W.ShouldBe(1f);
+		raster.ReadLinear(0, 0).W.ShouldBe(0f); // the rounded corner is cut away
+
+		// As a border, the image paints the ring and nothing inside it.
+		var framed = new Border
+		{
+			Width = 40f,
+			Height = 40f,
+			CornerRadius = new CornerRadius(6f),
+			BorderBrush = new ImageBrush { ImageSource = image },
+			BorderThickness = new Thickness(4f),
+		};
+		raster = Raster(Laid(framed, 40f, 40f).Render(), 40);
+		raster.ReadLinear(20, 3).W.ShouldBe(1f);
+		raster.ReadLinear(20, 4).W.ShouldBe(0f);
+		raster.ReadLinear(20, 20).W.ShouldBe(0f);
+
+		// With square corners the image is still a plain quad, under a border of any paint.
+		var squared = new Border
+		{
+			Width = 40f,
+			Height = 40f,
+			Background = new ImageBrush { ImageSource = image },
+			BorderBrush = new SolidColorBrush(Blue),
+			BorderThickness = new Thickness(2f),
+		};
+		Laid(squared, 40f, 40f).Render().Commands.Span.ToArray().Select(static c => (UIPrimKind)c.Tag).ShouldBe([UIPrimKind.Image, UIPrimKind.Border]);
+
+		static SoftwareRasterizer Raster(DrawListData draw, int size)
+		{
+			var raster = new SoftwareRasterizer(size, size);
+			raster.Clear(Vector4.Zero);
+			raster.Render(draw);
+			return raster;
+		}
+	}
+
+	[Test]
+	public void Image_brushes_on_a_round_avatar_and_a_border_from_markup_draw_as_vectors()
+	{
+		var view = new ImageCornersView();
+		view.InitializeComponent();
+		var image = ImageSource.FromRgba8(1, 1, [0, 255, 0, 255]);
+		view.Avatar.Background.ShouldBeOfType<ImageBrush>().ImageSource = image;
+		view.Framed.BorderBrush.ShouldBeOfType<ImageBrush>().ImageSource = image;
+
+		var draw = Laid(view.Root).Render();
+
+		// One run of the Vector prim sampling the image, with the avatar above (y 0..32) and the frame below it.
+		var command = draw.Commands.Span.ToArray().ShouldHaveSingleItem();
+		((UIPrimKind)command.Tag, command.TextureIndex).ShouldBe((UIPrimKind.Vector, 1));
+		var ys = draw.Vertices.Span.ToArray().Select(static v => v.Position.Y).ToArray();
+		ys.Min().ShouldBe(0f, 0.6f); // the fringe reaches half a pixel past the edge
+		ys.Max().ShouldBe(56f, 0.6f);
+	}
+
+	[Test]
+	public void An_image_brush_on_text_is_not_supported_yet()
 	{
 		var image = ImageSource.FromRgba8(2, 2, new byte[16]);
-
-		ShouldFail(new Border { Width = 10f, Height = 10f, CornerRadius = new CornerRadius(3f), Background = new ImageBrush { ImageSource = image } })
-			.ShouldContain("rounded corners or a border");
-		ShouldFail(new Border
-		{
-			Width = 10f,
-			Height = 10f,
-			Background = new ImageBrush { ImageSource = image },
-			BorderBrush = new SolidColorBrush(Red),
-			BorderThickness = new Thickness(1f),
-		}).ShouldContain("rounded corners or a border");
-		ShouldFail(new Border { Width = 10f, Height = 10f, BorderBrush = new ImageBrush { ImageSource = image }, BorderThickness = new Thickness(1f) })
-			.ShouldContain("nor a border itself");
-		ShouldFail(new TextBlock { Text = "Hi", Foreground = new ImageBrush { ImageSource = image } }).ShouldContain("cannot paint text");
-
-		static string ShouldFail(UIElement element) => Should.Throw<NotSupportedException>(() => Laid(element).Render()).Message;
+		Should.Throw<NotSupportedException>(() => Laid(new TextBlock { Text = "Hi", Foreground = new ImageBrush { ImageSource = image } }).Render())
+			.Message.ShouldContain("cannot paint text");
 	}
 
 	[Test]

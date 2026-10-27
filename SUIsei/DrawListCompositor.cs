@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Drawing;
+using SUIsei.Media;
 
 namespace SUIsei;
 
@@ -168,21 +169,20 @@ public sealed class DrawListCompositor : IUICompositor
 						// params = (cornerRadius, borderThickness, sizeX, sizeY) — the layout ui.slang's analytic rounded-box
 						// SDF reads (uv is 0..1 across the rect; the shader scales by params.zw to local pixels). Fill ignores it.
 						var prm = new Vector4(rc.CornerRadius, 0f, rc.Size.X, rc.Size.Y);
-						if (fill is CompositionSurfaceBrush surface)
-						{
-							if (kind != UIPrimKind.Fill || hasBorder)
-								throw ImageOnShapedRect();
-							AddSurface(list, surface, rc.Size, matrix, alpha, localClip);
-						}
-						else
+						if (fill is not CompositionSurfaceBrush surface)
 							AddPaintedRect(list, fill, rect, matrix, alpha, kind, prm, localClip);
+						else if (kind == UIPrimKind.Fill)
+							AddSurface(list, surface, rc.Size, matrix, alpha, localClip);
+						else
+							AddImageShape(list, RectShapes.Of(rc).Fill, surface, rect, matrix, alpha, localClip);
 					}
 					if (hasBorder)
 					{
-						if (rc.BorderBrush is CompositionSurfaceBrush)
-							throw ImageOnShapedRect();
-						AddPaintedRect(list, rc.BorderBrush!, rect, matrix, alpha, UIPrimKind.Border,
-							new Vector4(rc.CornerRadius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
+						if (rc.BorderBrush is CompositionSurfaceBrush surface)
+							AddImageShape(list, RectShapes.Of(rc).Border, surface, rect, matrix, alpha, localClip);
+						else
+							AddPaintedRect(list, rc.BorderBrush!, rect, matrix, alpha, UIPrimKind.Border,
+								new Vector4(rc.CornerRadius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
 					}
 					break;
 				}
@@ -356,7 +356,75 @@ public sealed class DrawListCompositor : IUICompositor
 		list.AddImage(visible, uv0, uv1, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, alpha * surface.Opacity), source, clip);
 	}
 
-	private static NotSupportedException ImageOnShapedRect() => new(
-		"An image brush cannot paint a rectangle with rounded corners or a border yet, nor a border itself: that needs the " +
-		"vector primitive, which SUIsei does not have yet. Use square corners and no border, or draw the image in a separate element.");
+	// An image painting a rect's rounded fill or its border, which the rect prims cannot texture (their uv and params
+	// carry the rounded box): the outline is filled through the Vector prim, the image placed in the rect as on a plain one.
+	private static void AddImageShape(UIDrawList list, ShapeContent outline, CompositionSurfaceBrush surface, in Rect rect, in Matrix3x2 matrix,
+		float alpha, in Rect clip)
+	{
+		if (outline.TessellateFill(TessellationScale.For(matrix)) is { TriangleCount: > 0 } path)
+			AddVectorImage(list, path, PathTrim.None, surface, rect, matrix, alpha, clip, overlaps: false);
+	}
+
+	/// <summary>
+	/// The outlines of a rect's rounded fill and of its border ring (the rect less its inner rounded rect, whose radius is
+	/// the corner radius less the thickness, as the rect prims draw it), for the rects an image paints. Kept on the content
+	/// as its derived work, with their tessellations, and rebuilt only when the size, radius or thickness change.
+	/// </summary>
+	private sealed class RectShapes
+	{
+		public readonly ShapeContent Fill = new() { Path = new CompositionPath() };
+		public readonly ShapeContent Border = new() { Path = new CompositionPath() };
+		private (Vector2 Size, float Radius, float Thickness) _built = (new Vector2(float.NaN), float.NaN, float.NaN);
+
+		public static RectShapes Of(RectContent rect)
+		{
+			if (rect.Derived is not RectShapes shapes)
+			{
+				shapes = new RectShapes();
+				rect.SetDerived(shapes);
+			}
+			shapes.Update(rect.Size, rect.CornerRadius, rect.BorderThickness);
+			return shapes;
+		}
+
+		private void Update(Vector2 size, float radius, float thickness)
+		{
+			if (_built == (size, radius, thickness))
+				return;
+			_built = (size, radius, thickness);
+			var fill = Fill.Path!;
+			fill.Clear();
+			AddRoundedRect(fill, 0f, 0f, size.X, size.Y, radius);
+			var ring = Border.Path!;
+			ring.Clear();
+			ring.FillRule = FillRule.EvenOdd;
+			AddRoundedRect(ring, 0f, 0f, size.X, size.Y, radius);
+			AddRoundedRect(ring, thickness, thickness, size.X - 2f * thickness, size.Y - 2f * thickness, radius - thickness);
+		}
+
+		// A rect with corners rounded by quarter ellipse arcs of `radius`, at most half its shorter side; nothing when empty.
+		private static void AddRoundedRect(CompositionPath path, float x, float y, float w, float h, float radius)
+		{
+			if (!(w > 0f) || !(h > 0f))
+				return;
+			var r = Math.Clamp(radius, 0f, MathF.Min(w, h) / 2f);
+			var radii = new Vector2(r);
+			path.MoveTo(new Vector2(x + r, y));
+			path.LineTo(new Vector2(x + w - r, y));
+			Corner(new Vector2(x + w, y + r));
+			path.LineTo(new Vector2(x + w, y + h - r));
+			Corner(new Vector2(x + w - r, y + h));
+			path.LineTo(new Vector2(x + r, y + h));
+			Corner(new Vector2(x, y + h - r));
+			path.LineTo(new Vector2(x, y + r));
+			Corner(new Vector2(x + r, y));
+			path.Close();
+
+			void Corner(Vector2 to)
+			{
+				if (r > 0f)
+					path.ArcTo(radii, 0f, false, SweepDirection.Clockwise, to);
+			}
+		}
+	}
 }
