@@ -15,6 +15,8 @@ public sealed class UIView
 		Root = root;
 		Layer = layer;
 		Interactive = interactive;
+
+		root.View = this;
 	}
 
 	/// <summary>The element <c>Content</c> tree + composition <c>RootVisual</c> this view renders.</summary>

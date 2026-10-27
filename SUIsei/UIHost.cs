@@ -33,6 +33,7 @@ public sealed class UIHost
 		// target is its non-focusable template root), matching WinUI.
 		Input.OnPress = el => Focus.FocusFromPointer(el);
 		HotReload.TrackHost(this);
+		Diagnostics.ViewsChanged();
 
 		// The first host brings up the endpoint a diagnostics tool loads its tap through.
 		if (Diagnostics.Enabled)
@@ -89,10 +90,15 @@ public sealed class UIHost
 		};
 		var view = new UIView(root, layer, interactive);
 		_views.Add(view);
+		Diagnostics.ViewsChanged();
 		return view;
 	}
 
-	public void RemoveRoot(UIView view) => _views.Remove(view);
+	public void RemoveRoot(UIView view)
+	{
+		if (_views.Remove(view))
+			Diagnostics.ViewsChanged();
+	}
 
 	/// <summary>Queue a neutral pointer event for the next <see cref="Tick"/>.</summary>
 	public void QueuePointer(in PointerInput e) => _pointerQueue.Enqueue(e);

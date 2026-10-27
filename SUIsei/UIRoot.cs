@@ -30,6 +30,10 @@ public sealed class UIRoot
 	/// <summary>The surface this root composites into.</summary>
 	public DrawListId Surface { get; }
 
+	/// <summary>The view this root belongs to, or null for a root built on its own rather than by
+	/// <see cref="UIHost.CreateRoot"/>.</summary>
+	internal UIView? View { get; set; }
+
 	/// <summary>The authoring (element) tree. Propagates this root reference down through the element tree so
 	/// children can reach <see cref="InputManager"/> for pointer capture.</summary>
 	public UIElement? Content

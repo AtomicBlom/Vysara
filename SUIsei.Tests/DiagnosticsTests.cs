@@ -2,6 +2,7 @@ using System.Numerics;
 
 using SUIsei.Animation;
 using SUIsei.Controls;
+using SUIsei.Drawing;
 
 namespace SUIsei.Tests;
 
@@ -149,6 +150,52 @@ public sealed class DiagnosticsTests
 		view.Root.AddOverlay(popup, Vector2.Zero); // as a Popup opens
 
 		Diagnostics.ChildrenOf(view).ShouldBe([content, popup]);
+	}
+
+	[Test]
+	public void ViewOf_names_the_view_an_element_is_in_overlays_and_popups_included()
+	{
+		var inner = Box();
+		var panel = new StackPanel();
+		panel.Children.Add(inner);
+		var (host, view) = Hosted(panel);
+		var second = host.CreateRoot(UILayer.Default);
+		var elsewhere = Box();
+		second.Root.Content = elsewhere;
+		var popup = Box(10f, 10f);
+		view.Root.AddOverlay(popup, Vector2.Zero);
+		var overlay = new Border();
+		Diagnostics.AddOverlay(second, overlay);
+
+		Diagnostics.ViewOf(inner).ShouldBe(view);
+		Diagnostics.ViewOf(popup).ShouldBe(view);
+		Diagnostics.ViewOf(elsewhere).ShouldBe(second);
+		Diagnostics.ViewOf(overlay).ShouldBe(second);
+		Diagnostics.ViewOf(Box()).ShouldBeNull(); // in no tree
+		Diagnostics.ViewOf(new UIRoot(new DrawListId(99)) { Content = Box() }.Content!).ShouldBeNull(); // a root no host made
+	}
+
+	[Test]
+	public void ViewsVersion_moves_with_each_host_built_and_each_view_added_or_removed()
+	{
+		var start = Diagnostics.ViewsVersion;
+		var host = new UIHost();
+		var afterHost = Diagnostics.ViewsVersion;
+		afterHost.ShouldNotBe(start);
+
+		var view = host.CreateRoot(UILayer.Default);
+		var afterAdd = Diagnostics.ViewsVersion;
+		afterAdd.ShouldNotBe(afterHost);
+
+		view.Root.Content = Box();
+		host.Tick(0.016, 0f, Surface);
+		Diagnostics.ViewsVersion.ShouldBe(afterAdd); // content and ticks are not views
+
+		host.RemoveRoot(view);
+		var afterRemove = Diagnostics.ViewsVersion;
+		afterRemove.ShouldNotBe(afterAdd);
+		host.RemoveRoot(view);
+		Diagnostics.ViewsVersion.ShouldBe(afterRemove); // removing a view the host does not have changes nothing
 	}
 
 	// --- Properties ---

@@ -32,10 +32,11 @@ internal sealed class TapOverlayView
 
 	private readonly Dictionary<string, Border> _buttons = [];
 	private readonly List<(Border Box, Border Tag)> _changeMarks = [];
+	private readonly WeakReference<UIHost> _host;
 
 	public TapOverlayView(UIHost host, UIView view, TapOverlay owner)
 	{
-		Host = host;
+		_host = new WeakReference<UIHost>(host);
 		View = view;
 
 		Capture = new Border { Background = HdrColor.Transparent, Visibility = Visibility.Collapsed };
@@ -115,12 +116,15 @@ internal sealed class TapOverlayView
 	/// <summary>The rulers' dimension lines and their numbers: up to two per axis.</summary>
 	public Border[] Leaders { get; } = new Border[4];
 	public Border[] LeaderLabels { get; } = new Border[4];
+	/// <summary>The length each leader's label shows, so its text is rebuilt only when the length moves.</summary>
+	public float[] LeaderLengths { get; } = [float.NaN, float.NaN, float.NaN, float.NaN];
 
 	/// <summary>The toolbar's rulers row: the anchor's size, margin and padding, and a pinned measurement.</summary>
 	public TextBlock RulersText { get; }
 
-	/// <summary>The host the view belongs to, whose last draw lists the lens rasterizes.</summary>
-	public UIHost Host { get; }
+	/// <summary>The host the view belongs to, whose last draw lists the lens rasterizes; null once the game has let it go,
+	/// which the overlay takes as the view being gone. Held weakly, so a tap never keeps a host alive.</summary>
+	public UIHost? Host => _host.TryGetTarget(out var host) ? host : null;
 
 	/// <summary>The toolbar's magnifier row: its modes and factor, the colour under the lens, and where the pixels came
 	/// from.</summary>

@@ -1,8 +1,11 @@
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 using RoseMcp.Tap.Protocol;
+
+using SUIsei.Controls;
 
 namespace SUIsei.RoseTap;
 
@@ -61,6 +64,18 @@ internal sealed class TapOverlay
 	private ulong _pinnedHandle;
 	private ulong _pinnedAnchor;
 	private string _pinnedWords = "";
+	// What the last tick drew from, so a tick that changes nothing reads no host list and builds no text. The views are
+	// covered again when SUIsei's views version moves or a covered host is collected. Captions are kept per element. The
+	// rulers row is rebuilt when the stamp moves, which every change to the mode, the pick, the pin or the hover does, or
+	// when a measured element's bounds move.
+	private int _coveredVersion = -1;
+	private readonly HashSet<UIView> _liveViews = [];
+	private readonly List<UIView> _goneViews = [];
+	private readonly List<(Rect Box, string Tag)> _drawnChanges = [];
+	private readonly ConditionalWeakTable<UIElement, string> _captions = new();
+	private int _stamp;
+	private (int Stamp, Rect? Anchor, Rect? To) _rulersKey = (-1, null, null);
+	private string _rulersText = "";
 
 	public TapOverlay(TapHandles handles, TapLog log)
 	{
@@ -110,6 +125,7 @@ internal sealed class TapOverlay
 		foreach (var view in _views.Values)
 			Diagnostics.RemoveOverlay(view.Root);
 		_views.Clear();
+		_coveredVersion = -1;
 		_marked.Clear();
 		ClearPick(null);
 		_hover = null;
@@ -119,15 +135,20 @@ internal sealed class TapOverlay
 	/// tick allocates nothing.</summary>
 	public Dictionary<UIView, TapOverlayView>.ValueCollection Views => _views.Values;
 
-	// Put an overlay on each view that has none, and drop the ones whose view is gone.
+	// Put an overlay on each view that has none, and drop the ones whose view is gone. The hosts are read only when the
+	// views have changed or a covered host has been collected, so a tick that changes neither allocates nothing.
 	private void Cover()
 	{
-		var live = new HashSet<UIView>();
+		var version = Diagnostics.ViewsVersion;
+		if (version == _coveredVersion && !AnyHostCollected())
+			return;
+		_coveredVersion = version;
+
 		foreach (var host in Diagnostics.Hosts)
 		{
 			foreach (var view in host.Views)
 			{
-				live.Add(view);
+				_liveViews.Add(view);
 				if (_views.ContainsKey(view))
 					continue;
 				var overlay = new TapOverlayView(host, view, this);
@@ -135,12 +156,29 @@ internal sealed class TapOverlay
 				_views[view] = overlay;
 			}
 		}
-		foreach (var gone in _views.Keys.Where(v => !live.Contains(v)).ToList())
+		foreach (var (view, overlay) in _views)
 		{
-			Diagnostics.RemoveOverlay(_views[gone].Root);
-			_views.Remove(gone);
+			if (!_liveViews.Contains(view) || overlay.Host is null)
+				_goneViews.Add(view);
 		}
+		foreach (var view in _goneViews)
+		{
+			Diagnostics.RemoveOverlay(_views[view].Root);
+			_views.Remove(view);
+		}
+		_liveViews.Clear();
+		_goneViews.Clear();
 		Chrome();
+	}
+
+	private bool AnyHostCollected()
+	{
+		foreach (var view in _views.Values)
+		{
+			if (view.Host is null)
+				return true;
+		}
+		return false;
 	}
 
 	private void Refresh()
@@ -191,6 +229,7 @@ internal sealed class TapOverlay
 	{
 		_pointing = mode;
 		_hover = null;
+		_stamp++;
 		if (mode != Pointing.Rulers || _pickHandle != _pinnedAnchor)
 			Unpin();
 		var armed = mode != Pointing.None;
@@ -216,7 +255,13 @@ internal sealed class TapOverlay
 	/// <summary>A pointer move over the capture layer: what is under it, measured against the anchor in rulers mode.</summary>
 	public void OnHover(TapOverlayView view, Vector2 point)
 	{
-		_hover = Beneath(view, point) is { } element ? new WeakReference<UIElement>(element) : null;
+		var element = Beneath(view, point);
+		var hovered = _hover is not null && _hover.TryGetTarget(out var current) ? current : null;
+		if (!ReferenceEquals(element, hovered))
+		{
+			_hover = element is not null ? new WeakReference<UIElement>(element) : null;
+			_stamp++;
+		}
 		Zoom.PointerAt(view, point);
 		Redraw();
 	}
@@ -298,6 +343,8 @@ internal sealed class TapOverlay
 
 	private void TakePick(UIElement element, string rows)
 	{
+		_stamp++;
+
 		_pick = new WeakReference<UIElement>(element);
 		_pickHandle = _handles.HandleOf(element);
 		_rows = rows;
@@ -310,6 +357,8 @@ internal sealed class TapOverlay
 
 	private void ClearPick(string? gone)
 	{
+		_stamp++;
+
 		var had = _pick is not null;
 		_pick = null;
 		_pickHandle = 0;
@@ -352,6 +401,8 @@ internal sealed class TapOverlay
 
 	private void Pin(UIElement element)
 	{
+		_stamp++;
+
 		if (Picked is not { } anchor || Diagnostics.Bounds(anchor) is not { } from || Diagnostics.Bounds(element) is not { } to)
 			return;
 		_pinned = new WeakReference<UIElement>(element);
@@ -364,6 +415,8 @@ internal sealed class TapOverlay
 
 	private void Unpin()
 	{
+		_stamp++;
+
 		_pinned = null;
 		_pinnedHandle = 0;
 		_pinnedAnchor = 0;
@@ -381,12 +434,17 @@ internal sealed class TapOverlay
 			if (!_marked.TryGetValue(change.Handle, out var marked))
 				_marked[change.Handle] = marked = new Marked();
 			marked.Since = DateTime.UtcNow;
+			marked.Tag = null;
 			marked.Changes.Add(change);
 			if (marked.Changes.Count > MaxChangesPerElement)
 				marked.Changes.RemoveAt(0);
 		}
 		while (_marked.Count > MaxMarkedElements)
 			_marked.Remove(_marked.MinBy(m => m.Value.Since).Key);
+
+		// An edit can rename an element or change the margin and padding the rulers row reads.
+		_captions.Clear();
+		_stamp++;
 		Redraw();
 	}
 
@@ -449,30 +507,76 @@ internal sealed class TapOverlay
 		}
 	}
 
-	// Place every mark from where its element is now.
+	// Place every mark from where its element is now. Text is built only where what it says has changed, so a tick on
+	// which nothing moved allocates nothing.
 	private void Redraw()
 	{
 		var hover = _hover is not null && _hover.TryGetTarget(out var hovered) ? hovered : null;
 		var picked = Picked;
 		var pinned = _pinned is not null && _pinned.TryGetTarget(out var pin) ? pin : null;
 		var measuredTo = _pointing == Pointing.Rulers ? pinned ?? hover : null;
-		var rulers = Rulers(picked, measuredTo);
+
+		var rulersKey = (_stamp, picked is null ? null : Diagnostics.Bounds(picked), measuredTo is null ? null : Diagnostics.Bounds(measuredTo));
+		if (rulersKey != _rulersKey)
+		{
+			_rulersKey = rulersKey;
+			_rulersText = Rulers(picked, measuredTo);
+		}
+		TagChanges();
 
 		foreach (var view in _views.Values)
 		{
 			var hoverRect = hover is not null && _pointing != Pointing.None ? BoundsIn(view, hover) : null;
 			view.Place(view.HoverBox, hoverRect);
-			view.Label(view.HoverBadge, hoverRect, hover is null ? "" : Describe(hover));
+			view.Label(view.HoverBadge, hoverRect, hover is null ? "" : Caption(hover));
 
 			var pickRect = picked is not null ? BoundsIn(view, picked) : null;
 			view.Place(view.PickBox, pickRect);
-			view.Label(view.PickBadge, pickRect, picked is null ? "" : Describe(picked));
+			view.Label(view.PickBadge, pickRect, picked is null ? "" : Caption(picked));
 
 			view.RulersText.Visibility = _pointing == Pointing.Rulers ? Visibility.Visible : Visibility.Collapsed;
-			view.RulersText.Text = rulers;
+			view.RulersText.Text = _rulersText;
 			DrawLeaders(view, pickRect, measuredTo is not null && !ReferenceEquals(measuredTo, picked) ? BoundsIn(view, measuredTo) : null);
 
 			DrawChanges(view);
+		}
+	}
+
+	// An element's caption, built once and kept until an edit could have renamed it.
+	private string Caption(UIElement element)
+	{
+		if (!_captions.TryGetValue(element, out var caption))
+		{
+			caption = Describe(element);
+			_captions.AddOrUpdate(element, caption);
+		}
+		return caption;
+	}
+
+	// Each marked element's tag, rebuilt where it has none or the age it shows has moved on; a mark whose ten minutes are
+	// up has none, and is not drawn.
+	private void TagChanges()
+	{
+		if (!_changesShown)
+			return;
+		var now = DateTime.UtcNow;
+		foreach (var marked in _marked.Values)
+		{
+			if (now - marked.Since > MarkLifetime)
+			{
+				marked.Tag = null;
+				continue;
+			}
+			var newest = marked.Changes[^1];
+			var age = now - newest.At;
+			var shown = age.TotalMinutes >= 1 ? -(int)age.TotalMinutes : (int)age.TotalSeconds;
+			if (marked.Tag is not null && marked.TagAge == shown)
+				continue;
+			var tag = $"{newest.Property}: {Cut(newest.Old)} → {Cut(newest.New)} ({Ago(age)})";
+			if (marked.Changes.Count > 1)
+				tag += $" +{marked.Changes.Count - 1} more";
+			marked.Tag = tag;
+			marked.TagAge = shown;
 		}
 	}
 
@@ -541,44 +645,39 @@ internal sealed class TapOverlay
 	{
 		var line = horizontal ? new Rect(x, y, length, 1f) : new Rect(x, y, 1f, length);
 		view.Place(view.Leaders[index], line);
-		view.LabelAt(view.LeaderLabels[index], horizontal ? x + length / 2f : x + 3f, horizontal ? y + 3f : y + length / 2f,
-			TapMeasure.Number(length));
+		var label = view.LeaderLabels[index];
+		if (view.LeaderLengths[index] != length)
+		{
+			view.LeaderLengths[index] = length;
+			((TextBlock)label.Child!).Text = TapMeasure.Number(length);
+		}
+		view.LabelAt(label, horizontal ? x + length / 2f : x + 3f, horizontal ? y + 3f : y + length / 2f, ((TextBlock)label.Child!).Text);
 	}
 
 	private void DrawChanges(TapOverlayView view)
 	{
-		var now = DateTime.UtcNow;
-		var drawn = new List<(Rect Box, string Tag)>();
+		_drawnChanges.Clear();
 		if (_changesShown)
 		{
 			foreach (var (handle, marked) in _marked)
 			{
-				if (now - marked.Since > MarkLifetime || _handles.Resolve(handle) is not { } element || BoundsIn(view, element) is not { } rect)
+				if (marked.Tag is not { } tag || _handles.Resolve(handle) is not { } element || BoundsIn(view, element) is not { } rect)
 					continue;
-				var newest = marked.Changes[^1];
-				var tag = $"{newest.Property}: {Cut(newest.Old)} → {Cut(newest.New)} ({Ago(now - newest.At)})";
-				if (marked.Changes.Count > 1)
-					tag += $" +{marked.Changes.Count - 1} more";
-				drawn.Add((rect, tag));
+				_drawnChanges.Add((rect, tag));
 			}
 		}
 
-		var marks = view.ChangeMarks(drawn.Count);
-		for (var i = 0; i < drawn.Count; i++)
+		var marks = view.ChangeMarks(_drawnChanges.Count);
+		for (var i = 0; i < _drawnChanges.Count; i++)
 		{
-			view.Place(marks[i].Box, drawn[i].Box);
-			view.LabelAt(marks[i].Tag, drawn[i].Box.X, drawn[i].Box.Bottom + 2f, drawn[i].Tag);
+			view.Place(marks[i].Box, _drawnChanges[i].Box);
+			view.LabelAt(marks[i].Tag, _drawnChanges[i].Box.X, _drawnChanges[i].Box.Bottom + 2f, _drawnChanges[i].Tag);
 		}
 	}
 
 	// An element's bounds where it is in this view, or null where it is in another or in none.
-	private Rect? BoundsIn(TapOverlayView view, UIElement element)
-	{
-		var top = element;
-		while (Diagnostics.ParentOf(top) is { } parent)
-			top = parent;
-		return Diagnostics.ChildrenOf(view.View).Contains(top) ? Diagnostics.Bounds(element) : null;
-	}
+	private static Rect? BoundsIn(TapOverlayView view, UIElement element) =>
+		ReferenceEquals(Diagnostics.ViewOf(element), view.View) ? Diagnostics.Bounds(element) : null;
 
 	private static Thickness? Thickness(UIElement element, string name) =>
 		element.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)?.GetValue(element) is Thickness thickness ? thickness : null;
@@ -590,10 +689,13 @@ internal sealed class TapOverlay
 
 	private static string Ago(TimeSpan age) => age.TotalMinutes >= 1 ? $"{(int)age.TotalMinutes}m ago" : $"{(int)age.TotalSeconds}s ago";
 
-	// One element's marked changes, and when its ten minutes started.
+	// One element's marked changes, and when its ten minutes started. Its tag is kept with the age it shows, so the text is
+	// rebuilt when that age moves on, at most once a second, rather than every tick; null where it needs building.
 	private sealed class Marked
 	{
 		public DateTime Since;
+		public string? Tag;
+		public int TagAge;
 		public List<TapChange> Changes { get; } = [];
 	}
 }

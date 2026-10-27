@@ -62,6 +62,29 @@ public static partial class Diagnostics
 		}
 	}
 
+	// Moved by every host built and every view added or removed, whether or not diagnostics are on: one increment per
+	// change to a game's set of views, which a game makes a handful of times.
+	private static int _viewsVersion;
+
+	/// <summary>
+	/// A number that moves whenever a host is built or a view is added to or removed from one. A tool that keeps
+	/// something per view compares it each tick and reads <see cref="Hosts"/> only when it has moved, since
+	/// <see cref="Hosts"/> builds a new list on every read. A host that is collected without its views being removed does
+	/// not move it.
+	/// </summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static int ViewsVersion
+	{
+		get
+		{
+			RequireEnabled();
+			return Volatile.Read(ref _viewsVersion);
+		}
+	}
+
+	// Called by UIHost when it is built and when it adds or removes a view.
+	internal static void ViewsChanged() => Interlocked.Increment(ref _viewsVersion);
+
 	/// <summary>
 	/// Run <paramref name="action"/> at the start of the next <see cref="UIHost.Tick"/> of any host, on the thread that
 	/// ticks it, before that tick's layout: a change it makes lays out and draws that frame, and what it reads is what
@@ -131,6 +154,17 @@ public static partial class Diagnostics
 		ArgumentNullException.ThrowIfNull(view);
 		RequireEnabled();
 		return view.Root.TopLevelElements();
+	}
+
+	/// <summary>The view whose tree holds <paramref name="element"/>, its diagnostics overlays included; null for an
+	/// element in no tree, or in a root that was built on its own rather than by <see cref="UIHost.CreateRoot"/>. Allocates
+	/// nothing, so a tool can ask it of every element it marks each tick.</summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static UIView? ViewOf(UIElement element)
+	{
+		ArgumentNullException.ThrowIfNull(element);
+		RequireEnabled();
+		return element.AttachedRoot?.View;
 	}
 
 	/// <summary>The element <paramref name="element"/> sits beneath, or null for an element at the top of a view's tree

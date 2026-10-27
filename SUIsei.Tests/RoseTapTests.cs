@@ -938,6 +938,43 @@ public sealed class RoseTapTests
 		}
 	}
 
+	[Test]
+	public void A_tick_with_the_toolbar_up_and_nothing_changing_allocates_nothing()
+	{
+		var (host, view, tap, fake) = Overlaid();
+		try
+		{
+			// A pick, rulers with a pinned measurement and its leaders, and the content scaled: every mark the overlay
+			// redraws each tick.
+			fake.Ask("selecthandle 11").ShouldBe("selected");
+			fake.Ask("select rulers").ShouldStartWith("armed");
+			var row = Diagnostics.Bounds((Border)tap.Root.Children[1]).ShouldNotBeNull();
+			Click(host, new Vector2(row.X + row.Width - 8f, row.Y + row.Height / 2f));
+			Click(host, Centre(ToolbarButton(view, "Zoom")));
+			host.Tick(0.016, 0f, Surface);
+			Click(host, Centre(ToolbarButton(view, "Scale")));
+			fake.Ask("selection").ShouldStartWith("rulers\t");
+			for (var i = 0; i < 5; i++)
+			{
+				host.Tick(0.016, 0f, Surface);
+				host.Render();
+			}
+
+			var before = GC.GetAllocatedBytesForCurrentThread();
+			for (var i = 0; i < 20; i++)
+			{
+				host.Tick(0.016, 0f, Surface);
+				host.Render();
+			}
+			(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0L);
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
 	// --- selecthandle, detach and the rest ---
 
 	[Test]

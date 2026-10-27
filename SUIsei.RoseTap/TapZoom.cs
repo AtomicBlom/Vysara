@@ -217,8 +217,10 @@ internal sealed class TapZoom
 	// been rendered yet.
 	private bool RasterizeUI(TapOverlayView view, int x0, int y0)
 	{
+		if (view.Host is not { } host)
+			return false;
 		DrawListData? list = null;
-		var lists = view.Host.DrawLists;
+		var lists = host.DrawLists;
 		for (var i = 0; i < lists.Count && list is null; i++)
 		{
 			if (lists[i].Id == view.View.Surface)
@@ -306,12 +308,18 @@ internal sealed class TapZoom
 				continue;
 			if (watched.Content is not null)
 				watched.Content.RemoveHandler(UIElement.PointerMovedEvent, watched.Handler);
-			var target = view;
-			RoutedEventHandler handler = (_, e) => PointerAt(target, ((PointerRoutedEventArgs)e).Pointer.Position);
-			content.AddHandler(UIElement.PointerMovedEvent, handler, handledEventsToo: true);
-			_watching[view.View] = (content, handler);
+			_watching[view.View] = (content, Follow(view, content));
 			_stale = true;
 		}
+	}
+
+	// The handler is made here rather than in Watch's loop, whose body would otherwise allocate the closure on every pass,
+	// including the passes that find the view already followed.
+	private RoutedEventHandler Follow(TapOverlayView view, UIElement content)
+	{
+		RoutedEventHandler handler = (_, e) => PointerAt(view, ((PointerRoutedEventArgs)e).Pointer.Position);
+		content.AddHandler(UIElement.PointerMovedEvent, handler, handledEventsToo: true);
+		return handler;
 	}
 
 	private void Unwatch()
