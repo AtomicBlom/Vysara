@@ -310,6 +310,75 @@ public sealed class TessellatorTests
 		}
 	}
 
+	/// <summary>
+	/// A stroke's pieces overlap where they meet, so a GPU cannot crack them apart. A join or a round or triangle cap
+	/// holds only half of the cross-section where it meets a segment's body (its spokes start at the centreline), so the
+	/// two meet at a T-junction; abutting there, a GPU's vertex snapping can open a hairline that a pixel centre falls
+	/// through, as Loom's GPU run of a curved trail showed. So every point of every body's ends inside the stroke must lie
+	/// inside some triangle by half of <see cref="StrokePrimitives.SeamOverlap"/>, several times what snapping moves a
+	/// vertex. A polyline turning both ways and a curve (whose flattened points are joined too) cover every join and cap.
+	/// </summary>
+	[Test]
+	[Arguments(PenLineJoin.Miter, PenLineCap.Round)]
+	[Arguments(PenLineJoin.Bevel, PenLineCap.Triangle)]
+	[Arguments(PenLineJoin.Round, PenLineCap.Round)]
+	public void Pieces_overlap_where_they_meet_so_no_seam_can_open(PenLineJoin join, PenLineCap cap)
+	{
+		var path = Stroke("M 10,80 L 60,20 L 110,80 L 160,30 C 200,0 240,60 280,30",
+			s => { s.Thickness = 9; s.LineJoin = join; s.StartCap = s.EndCap = cap; });
+		var triangles = path.Vertices.ToArray();
+		var h = path.HalfThickness;
+
+		var probed = 0;
+		var shallowest = float.PositiveInfinity;
+		foreach (var segment in path.Segments.Span.ToArray())
+		{
+			var normal = new Vector2(-segment.Direction.Y, segment.Direction.X);
+			foreach (var end in new[] { segment.Start, segment.Start + segment.Length * segment.Direction })
+			{
+				// Across the end's cross-section, inside the stroke and clear of its edges' ramps.
+				for (var s = -(h - M); s <= h - M; s += 0.25f)
+				{
+					var depth = DeepestInside(triangles, end + s * normal);
+					shallowest = MathF.Min(shallowest, depth);
+					probed++;
+				}
+			}
+		}
+
+		probed.ShouldBeGreaterThan(100);
+		shallowest.ShouldBeGreaterThanOrEqualTo(StrokePrimitives.SeamOverlap / 2f,
+			$"a point where two pieces meet is only {shallowest} px inside any triangle");
+	}
+
+	// How far inside the triangle that holds `p` most deeply it is: the least distance to that triangle's edges. Negative
+	// when no triangle holds it.
+	private static float DeepestInside(VectorVertex[] triangles, Vector2 p)
+	{
+		var deepest = float.NegativeInfinity;
+		for (var i = 0; i < triangles.Length; i += 3)
+		{
+			var a = triangles[i].Position;
+			var b = triangles[i + 1].Position;
+			var c = triangles[i + 2].Position;
+			var depth = MathF.Min(MathF.Min(Inside(a, b, c, p), Inside(b, c, a, p)), Inside(c, a, b, p));
+			deepest = MathF.Max(deepest, depth);
+		}
+		return deepest;
+
+		// The distance of `p` from the line through `e0` and `e1`, positive on the side `other` is on.
+		static float Inside(Vector2 e0, Vector2 e1, Vector2 other, Vector2 p)
+		{
+			var edge = e1 - e0;
+			var length = edge.Length();
+			if (length < 1e-6f)
+				return float.NegativeInfinity;
+			var n = new Vector2(-edge.Y, edge.X) / length;
+			var side = MathF.Sign(Vector2.Dot(other - e0, n));
+			return side * Vector2.Dot(p - e0, n);
+		}
+	}
+
 	[Test]
 	[Arguments(new float[] { 2, 1 }, 0f, new float[] { 0, 4, 6, 10, 12, 16, 18, 22, 24, 28 })]
 	[Arguments(new float[] { 2, 1 }, 1f, new float[] { 0, 2, 4, 8, 10, 14, 16, 20, 22, 26, 28, 30 })]

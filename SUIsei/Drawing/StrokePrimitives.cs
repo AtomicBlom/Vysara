@@ -19,6 +19,16 @@ internal static class StrokePrimitives
 {
 	private const float Unused = VectorVertex.Unused;
 
+	/// <summary>
+	/// How far, in pixels, a body reaches under the join or cap it meets: several times what a GPU's vertex snapping moves
+	/// a vertex at the 1/256 of a pixel D3D requires (Vulkan allows as coarse as 1/16, but desktop GPUs and Adreno snap to
+	/// 1/256). Inside the stroke both pieces cover the overlap fully, so it shows nothing. Where it crosses the outer edge's
+	/// antialiasing ramp, a pixel whose centre falls in it takes both pieces' coverage, up to a quarter more than its own,
+	/// as the bodies' overlap on the inside of every turn already does; few centres fall in so thin a sliver, and an
+	/// uncovered centre where pieces only abut is far worse.
+	/// </summary>
+	internal const float SeamOverlap = 1f / 32f;
+
 	/// <summary>The left-hand normal of a unit direction.</summary>
 	public static Vector2 Normal(Vector2 t) => new(-t.Y, t.X);
 
@@ -26,14 +36,25 @@ internal static class StrokePrimitives
 	/// A segment's body from <paramref name="x0"/> to <paramref name="x1"/> along it (measured from
 	/// <paramref name="start"/>), as two triangles. The distances are its two sides, plus a start clip (a flat or square
 	/// cap's end line, at <paramref name="startClip"/> along the segment) and an end clip, or unused.
+	/// <para>
+	/// An end without a clip meets a join or a round or triangle cap along its cross-section, and those pieces hold only
+	/// half of that edge (their spokes start at the centreline), so the two would meet at a T-junction. A GPU snaps
+	/// vertices to its sub-pixel grid, which can open a T-junction into a hairline that a pixel centre falls through. So
+	/// such an end reaches <see cref="SeamOverlap"/> of a pixel past the cross-section, under the piece it meets, keeping
+	/// the arc length of the end it extends so arc lengths stay within the stroke's. An end with a clip meets its cap
+	/// extension along the very same edge, computed the same way, so it needs no overlap.
+	/// </para>
 	/// </summary>
 	public static void Body(RetainedBuffer<VectorVertex> target, Vector2 start, Vector2 t, float x0, float x1, float h, float margin,
 		float? startClip, float? endClip, float arcAtStart)
 	{
 		var n = Normal(t);
 		var w = h + margin;
-		var a0 = start + x0 * t;
-		var a1 = start + x1 * t;
+		var overlap = 2f * margin * SeamOverlap; // margin is half a pixel
+		var e0 = startClip is null ? x0 - overlap : x0;
+		var e1 = endClip is null ? x1 + overlap : x1;
+		var a0 = start + e0 * t;
+		var a1 = start + e1 * t;
 		var p00 = a0 + w * n;
 		var p01 = a0 - w * n;
 		var p10 = a1 + w * n;

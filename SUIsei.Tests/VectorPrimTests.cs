@@ -48,6 +48,15 @@ public sealed class VectorPrimTests
 	private static (byte R, byte G, byte B, byte A) Pixel(byte[] px, int x, int y) =>
 		(px[(y * Size + x) * 4], px[(y * Size + x) * 4 + 1], px[(y * Size + x) * 4 + 2], px[(y * Size + x) * 4 + 3]);
 
+	// Two pixels agree within one 8-bit step. Half alpha resolves to 127.5, so float noise of an ulp in either pixel's
+	// coverage picks which way it rounds; blending twice would differ by a quarter of the alpha, 64 steps.
+	private static void ShouldMatchWithinAStep((byte R, byte G, byte B, byte A) actual, (byte R, byte G, byte B, byte A) expected)
+	{
+		var delta = Math.Max(Math.Max(Math.Abs(actual.R - expected.R), Math.Abs(actual.G - expected.G)),
+			Math.Max(Math.Abs(actual.B - expected.B), Math.Abs(actual.A - expected.A)));
+		delta.ShouldBeLessThanOrEqualTo(1, $"{actual} should be within one step of {expected}");
+	}
+
 	// Check every pixel near the square [30,70]², away from its corners, against a one-pixel ramp centred on the edge:
 	// coverage = clamp(0.5 + d) for d the pixel centre's distance inside. `toLocal` maps surface to the square's space.
 	private static int CheckRamp(byte[] px, Matrix3x2 toLocal, float lo, float hi, bool insideOnly)
@@ -227,13 +236,13 @@ public sealed class VectorPrimTests
 		builder.Begin(new Vector2(Size));
 		builder.AddVector(crossing, PathTrim.None, Matrix3x2.Identity, red, Surface, groupOpacity: 0.5f);
 		var px = Render(builder.End());
-		Pixel(px, 50, 50).ShouldBe(Pixel(px, 20, 50)); // at the crossing and on one arm
+		ShouldMatchWithinAStep(Pixel(px, 50, 50), Pixel(px, 20, 50)); // at the crossing and on one arm
 		Alpha(px, 20, 50).ShouldBe(0.5f, 1f / 255f);
 
 		builder.Begin(new Vector2(Size));
 		builder.AddVector(joined, PathTrim.None, Matrix3x2.Identity, red, Surface, groupOpacity: 0.5f);
 		px = Render(builder.End());
-		Pixel(px, 80, 50).ShouldBe(Pixel(px, 30, 20)); // where the join's two bodies overlap, and on one arm
+		ShouldMatchWithinAStep(Pixel(px, 80, 50), Pixel(px, 30, 20)); // where the join's two bodies overlap, and on one arm
 
 		// Folded into the vertex colour instead, the crossing blends twice: why the group exists.
 		builder.Begin(new Vector2(Size));
