@@ -286,11 +286,14 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		sb.AppendLine("\t}");
 		sb.AppendLine();
 		// Re-runs construction in place for XAML Hot Reload: detach the old binding subscriptions, then rebuild the
-		// tree (a fresh Root + bindings). The host swaps in the new Root.
+		// tree (a fresh Root + bindings). A composition root's new Root takes the old one's place, and the code-behind's
+		// OnComponentRebuilt runs last, once the rebuilt tree is where the old one was.
 		sb.AppendLine("\tpublic void RebuildComponent()");
 		sb.AppendLine("\t{");
 		if (hasBindings)
 			sb.AppendLine("\t\t__bindings?.StopTracking();");
+		if (rootIsSealed)
+			sb.AppendLine($"\t\tvar __oldRoot = {rootVar};");
 		// Only a Panel root needs Children cleared before re-running InitializeComponent; other roots
 		// (ContentControl, Border, ScrollViewer, etc.) reset their content via property assignment.
 		var panelType = gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Panel");
@@ -298,7 +301,15 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		if (rootIsPanel)
 			sb.AppendLine(rootIsSealed ? $"\t\t{rootVar}.Children.Clear();" : "\t\tthis.Children.Clear();");
 		sb.AppendLine("\t\tInitializeComponent();");
+		if (rootIsSealed)
+			sb.AppendLine($"\t\tglobal::SUIsei.HotReload.ReplaceRoot(__oldRoot, {rootVar});");
+		sb.AppendLine("\t\tOnComponentRebuilt();");
 		sb.AppendLine("\t}");
+		sb.AppendLine();
+		// The code-behind's hook: it costs nothing when the code-behind leaves it unimplemented.
+		sb.AppendLine("\t/// <summary>Runs at the end of <see cref=\"RebuildComponent\"/>, once the rebuilt tree and its bindings are in");
+		sb.AppendLine("\t/// place: re-apply here what the code-behind set on the tree in code, which the rebuild discarded.</summary>");
+		sb.AppendLine("\tpartial void OnComponentRebuilt();");
 		if (gen.Methods.Length > 0)
 		{
 			sb.AppendLine();
