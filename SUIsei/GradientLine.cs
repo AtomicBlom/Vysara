@@ -46,6 +46,9 @@ internal readonly struct GradientLine
 	/// <summary>Whether the start and end coincide, so the gradient has no direction.</summary>
 	public bool IsDegenerate { get; }
 
+	/// <summary>This line moved by <paramref name="by"/>, for paint that moves with what it paints.</summary>
+	public GradientLine Offset(Vector2 by) => by == Vector2.Zero ? this : new GradientLine(_start + by, _start + by + _direction);
+
 	/// <summary>How far along the gradient <paramref name="point"/> lies: 0 at the start, 1 at the end. The division
 	/// comes last, so the end itself measures exactly 1 and a point at a stop's offset exactly that offset whenever the
 	/// numbers allow.</summary>

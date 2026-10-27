@@ -11,6 +11,14 @@ namespace SUIsei;
 /// space layout gave it. <see cref="FontSize"/> is in the visual's own units, as an element's layout is (DIPs); the
 /// transforms above it, the root's DIP→pixel scale included, take it to the surface. <see cref="Brush"/> colours the
 /// glyphs, a gradient measured over <see cref="Size"/>.
+/// <para>
+/// A run can carry two effects drawn from the atlas's true-distance channel, both sized in EM so they scale with the
+/// text: an outline (<see cref="OutlineThickness"/>, <see cref="OutlineBrush"/>), the glyphs grown by the thickness, and a
+/// shadow (<see cref="ShadowOffset"/>, <see cref="ShadowSoftness"/>, <see cref="ShadowBrush"/>), the glyphs moved and
+/// blurred. The compositor draws every glyph's shadow, then every glyph's outline, then the glyphs, so no effect lands on
+/// a neighbouring glyph. The field reaches <see cref="FontAtlas.DistanceRangeEm"/> / 2 past each edge, and an effect
+/// reaching further is drawn clamped to it; <c>suisei:TextEffects</c> validates the sizes it hands a run against the font.
+/// </para>
 /// </summary>
 public sealed class GlyphRunContent(string text, float fontSize, CompositionBrush? brush, Vector2 size = default,
 	FontAtlas? font = null, FontFeatureSet? features = null) : VisualContent
@@ -40,6 +48,38 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 	/// <summary>The OpenType features the run is shaped with; <see cref="FontFeatureSet.Empty"/> unless set. Compared by
 	/// value, so an equal set does not advance <see cref="VisualContent.Version"/>.</summary>
 	public FontFeatureSet Features { get; set => Change(ref field, value ?? throw new ArgumentNullException(nameof(value))); } = features ?? FontFeatureSet.Empty;
+
+	/// <summary>How far the outline reaches past the glyphs' edges, in EM. 0, the default, draws no outline.</summary>
+	public float OutlineThickness { get; set => Change(ref field, value); }
+
+	/// <summary>The outline's paint, a colour or a linear gradient measured over <see cref="Size"/>; null draws no
+	/// outline.</summary>
+	public CompositionBrush? OutlineBrush { get; set => Change(ref field, value); }
+
+	/// <summary>Where the shadow lies against the glyphs, in EM, y down.</summary>
+	public Vector2 ShadowOffset { get; set => Change(ref field, value); }
+
+	/// <summary>The width of the shadow's edge, in EM: it fades from full to none across a band this wide, centred on
+	/// the glyphs' outline. 0, the default, gives a hard shadow.</summary>
+	public float ShadowSoftness { get; set => Change(ref field, value); }
+
+	/// <summary>The shadow's paint, a colour or a linear gradient measured over <see cref="Size"/> and moved with the
+	/// shadow; null draws no shadow.</summary>
+	public CompositionBrush? ShadowBrush { get; set => Change(ref field, value); }
+
+	/// <summary>Whether the run draws an outline or a shadow.</summary>
+	internal bool HasEffects => (OutlineBrush is not null && OutlineThickness > 0f) || ShadowBrush is not null;
+
+	/// <summary>Set the run's effects at once, advancing <see cref="VisualContent.Version"/> only if something differs.</summary>
+	public void UpdateEffects(float outlineThickness, CompositionBrush? outlineBrush, Vector2 shadowOffset, float shadowSoftness,
+		CompositionBrush? shadowBrush)
+	{
+		OutlineThickness = outlineThickness;
+		OutlineBrush = outlineBrush;
+		ShadowOffset = shadowOffset;
+		ShadowSoftness = shadowSoftness;
+		ShadowBrush = shadowBrush;
+	}
 
 	/// <summary>Set everything this content draws at once, advancing <see cref="VisualContent.Version"/> only if something differs.</summary>
 	public void Update(string text, float fontSize, CompositionBrush? brush, Vector2 size, FontAtlas font, FontFeatureSet features)
@@ -80,6 +120,18 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 		{
 			sb.Append(" brush=");
 			b.Describe(sb);
+		}
+		if (OutlineBrush is { } outline && OutlineThickness > 0f)
+		{
+			sb.Append(CultureInfo.InvariantCulture, $" outline={OutlineThickness:0.###}");
+			outline.Describe(sb);
+		}
+		if (ShadowBrush is { } shadow)
+		{
+			sb.Append(CultureInfo.InvariantCulture, $" shadow={ShadowOffset.X:0.###},{ShadowOffset.Y:0.###}");
+			shadow.Describe(sb);
+			if (ShadowSoftness > 0f)
+				sb.Append(CultureInfo.InvariantCulture, $" softness={ShadowSoftness:0.###}");
 		}
 	}
 }

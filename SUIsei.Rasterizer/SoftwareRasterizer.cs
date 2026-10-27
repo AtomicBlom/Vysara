@@ -560,11 +560,14 @@ public sealed class SoftwareRasterizer
 				}
 			case UIPrimKind.Glyph:
 				{
-					// MTSDF text: median of the RGB distances, recentred at 0.5, then screenPxRange-scaled coverage.
-					// params.x (Custom.X) carries the per-run screenPxRange. The .a channel is a true SDF, unused here.
+					// MTSDF text. params = (screenPxRange, bias, softness, _), bias and softness in units of the distance
+					// range. A fill (both 0) reads the median of the RGB distances; an effect reads the true distance in A,
+					// its edge moved out by the bias, ramped over the softness but never under one pixel.
 					var s = tex!.Sample(uv);
-					var sd = Median3(s.X, s.Y, s.Z) - 0.5f;
-					return col * Saturate(sd * prm.X + 0.5f);
+					var effect = prm.Y > 0f || prm.Z > 0f;
+					var sd = effect ? s.W - 0.5f + prm.Y : Median3(s.X, s.Y, s.Z) - 0.5f;
+					var scale = effect ? MathF.Min(prm.X, 1f / MathF.Max(prm.Z, 1e-6f)) : prm.X;
+					return col * Saturate(sd * scale + 0.5f);
 				}
 			case UIPrimKind.Image:
 				// Tinted blit: sample the source's colour and multiply by the (premultiplied) vertex colour.
