@@ -252,6 +252,7 @@ partial class XamlSourceGenerator
 		gen.Methods.AppendLine($"\tprivate static {returnType} {method}({paramDecl})");
 		gen.Methods.AppendLine("\t{");
 		gen.Methods.Append(body);
+		gen.Methods.Append(SourceRecordBlock(scope));
 		gen.Methods.AppendLine($"\t\treturn {rootVar};");
 		gen.Methods.AppendLine("\t}");
 		return method;
@@ -396,6 +397,7 @@ partial class XamlSourceGenerator
 				gen.Report(UnsupportedMarkup, basedOn, $"BasedOn=\"{basedOn.Value.Trim()}\" (a base style is named with {{StaticResource Key}})");
 		}
 		scope.Emit($"var {styleVar} = new global::SUIsei.Style {{{basedOnInit} }};");
+		var setterCount = 0;
 
 		foreach (var setterEl in ObjectChildren(styleEl))
 		{
@@ -429,8 +431,10 @@ partial class XamlSourceGenerator
 				gen.Report(UnsupportedMarkup, valueAttr, valueAttr.Value.Trim());
 				continue;
 			}
-			if (code is not null)
-				scope.Emit($"{styleVar}.Setters.Add(new global::SUIsei.Setter {{ Property = {Fq(dp.ContainingType!)}.{dp.Name}, Value = {code} }});");
+			if (code is null)
+				continue;
+			scope.Emit($"{styleVar}.Setters.Add(new global::SUIsei.Setter {{ Property = {Fq(dp.ContainingType!)}.{dp.Name}, Value = {code} }});");
+			RecordSetterSource(gen, scope, setterEl, $"{styleVar}.Setters[{setterCount++}]");
 		}
 		return styleVar;
 	}
