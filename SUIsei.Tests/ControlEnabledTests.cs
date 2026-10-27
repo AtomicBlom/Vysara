@@ -1,8 +1,8 @@
 using System.Numerics;
-
 using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Input;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Tests;
@@ -146,7 +146,7 @@ public sealed class ControlEnabledTests
 	[Test]
 	public void A_disabled_control_blocks_what_is_behind_it_handles_nothing_and_its_input_bubbles_on()
 	{
-		var behind = new Border { Width = 100f, Height = 50f, Background = HdrColor.FromRgb(20, 20, 20) };
+		var behind = new Border { Width = 100f, Height = 50f, Background = new SolidColorBrush(HdrColor.FromRgb(20, 20, 20)) };
 		var button = new Button { Width = 100f, Height = 50f, IsEnabled = false };
 		var canvas = new Canvas { Width = 200f, Height = 100f };
 		canvas.Children.Add(behind);

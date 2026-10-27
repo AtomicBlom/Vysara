@@ -1,7 +1,7 @@
 using System.Numerics;
-
 using SUIsei.Controls;
 using SUIsei.Input;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -48,7 +48,7 @@ public sealed class UIHostTests
 	{
 		var host = new UIHost();
 		var view = host.CreateRoot(UILayer.Default);
-		view.Root.Content = new Border { Width = 10f, Height = 10f, Background = HdrColor.FromRgb(255, 0, 0) };
+		view.Root.Content = new Border { Width = 10f, Height = 10f, Background = new SolidColorBrush(HdrColor.FromRgb(255, 0, 0)) };
 
 		host.Tick(0.016, 0f, new Vector2(100f, 100f));
 		host.Render();

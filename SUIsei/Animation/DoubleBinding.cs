@@ -13,6 +13,7 @@ internal static class DoubleBinding
 		animation.Apply = value => single.Write(owner, (float)value);
 		animation.Release = () => single.Release(owner);
 		animation.ReadCurrent = () => single.Read(owner);
+		animation.ValidateValue = single.Validates ? value => single.Validate(owner, (float)value) : null;
 		return true;
 	}
 }

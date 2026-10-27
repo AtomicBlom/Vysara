@@ -1,4 +1,5 @@
 using SUIsei.Controls;
+using SUIsei.Media;
 
 namespace SUIsei.Tests.Sample;
 
@@ -14,7 +15,7 @@ internal partial class MarkupFormsView
 internal static class SampleStrings
 {
 	public const string CardTitle = "Card";
-	public static readonly HdrColor Accent = HdrColor.FromRgb(10, 20, 30);
+	public static readonly SolidColorBrush Accent = new(HdrColor.FromRgb(10, 20, 30));
 }
 
 /// <summary>A control from a <c>using:</c> XML namespace (<c>using:SUIsei.Tests.Sample</c>).</summary>

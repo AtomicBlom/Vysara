@@ -1,19 +1,23 @@
 using SUIsei.Animation;
+using SUIsei.Media;
 
 namespace SUIsei.Controls;
 
 /// <summary>
 /// A top-level entry in a <see cref="MenuBar"/>: a <see cref="ButtonBase"/> showing a
 /// <see cref="Title"/> that, when invoked, opens its <see cref="Items"/> as a <see cref="MenuFlyout"/> anchored
-/// below it. The flat template highlights on hover/press through a <c>CommonStates</c> group; the owning
+/// below it. The flat template highlights on hover/press through a <c>CommonStates</c> group, and, as WinUI's default
+/// template, paints the item's <see cref="Control.Background"/>, <see cref="Control.BorderBrush"/> and
+/// <see cref="Control.BorderThickness"/>, and its label in <see cref="Control.Foreground"/>; the owning
 /// <see cref="MenuBar"/> keeps at most one item's menu open at a time.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
 public sealed class MenuBarItem : ButtonBase
 {
-	private static readonly HdrColor NormalBackground = HdrColor.Transparent;
-	private static readonly HdrColor OverBackground = HdrColor.FromRgb(58, 58, 72);
-	private static readonly HdrColor PressedBackground = HdrColor.FromRgb(72, 72, 92);
+	// The built-in look's brushes, shared by every bar item and never changed.
+	private static readonly SolidColorBrush NormalBackground = Brush.Sealed(HdrColor.Transparent);
+	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(58, 58, 72));
+	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(72, 72, 92));
 
 	private readonly MenuFlyout _flyout = new();
 
@@ -79,9 +83,9 @@ public sealed class MenuBarItem : ButtonBase
 			var host = (ContentControl)control;
 			var border = new Border
 			{
-				Background = NormalBackground,
-				CornerRadius = 3f,
+				CornerRadius = new CornerRadius(3f),
 				Padding = new Thickness(14f, 6f),
+				BackgroundTransition = TemplateStates.Fade(90),
 			};
 			var presenter = new ContentPresenter
 			{
@@ -89,27 +93,19 @@ public sealed class MenuBarItem : ButtonBase
 				VerticalAlignment = VerticalAlignment.Center,
 			};
 			border.Child = presenter;
+			host.RegisterTemplateBinding(BackgroundProperty, value => border.Background = value ?? NormalBackground);
+			host.RegisterTemplateBinding(BorderBrushProperty, value => border.BorderBrush = value);
+			host.RegisterTemplateBinding(BorderThicknessProperty, value => border.BorderThickness = value);
+			host.RegisterTemplateBinding(ForegroundProperty, value => presenter.Foreground = value);
 			presenter.Content = host.Content;
 			host.ContentChanged += (_, _) => presenter.Content = host.Content;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = BackgroundTo(border, OverBackground, NormalBackground) });
-			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = BackgroundTo(border, NormalBackground, OverBackground) });
-			common.States.Add(new VisualState { Name = "Pressed", Storyboard = BackgroundTo(border, OverBackground, PressedBackground) });
+			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(border) });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);
 			return border;
-		},
-	};
-
-	private static Storyboard BackgroundTo(Border target, HdrColor from, HdrColor to) => new()
-	{
-		Children =
-		{
-			new ColorAnimation
-			{
-				From = from, To = to, Duration = TimeSpan.FromMilliseconds(90), FillBehavior = FillBehavior.HoldEnd,
-				Apply = target.SetAnimatedFill, Release = target.ClearAnimatedFill,
-			},
 		},
 	};
 }

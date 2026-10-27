@@ -101,11 +101,27 @@ public sealed class XamlSubsetContractTests
 		("ColorAnimation", States("""<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="Blue" />""")),
 		("DoubleAnimationUsingKeyFrames", States("""<DoubleAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)"><LinearDoubleKeyFrame KeyTime="0:0:0" Value="1" /><DiscreteDoubleKeyFrame KeyTime="0:0:0.5" Value="0.5" /><EasingDoubleKeyFrame KeyTime="0:0:1" Value="0"><EasingDoubleKeyFrame.EasingFunction><QuadraticEase /></EasingDoubleKeyFrame.EasingFunction></EasingDoubleKeyFrame></DoubleAnimationUsingKeyFrames>""")),
 		("easing functions", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Left)" To="5"><DoubleAnimation.EasingFunction><BackEase Amplitude="0.3" /></DoubleAnimation.EasingFunction></DoubleAnimation><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Top)" To="5"><DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction></DoubleAnimation>""")),
-		("transform property paths", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.TranslateX)" To="5" /><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="RenderTransform.Translate.X" To="5" />""")),
+		("transform property paths", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.TranslateX)" To="5" /><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="5" />""")),
+		("brush property paths", States("""<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="Blue" /><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(Brush.Opacity)" To="0.5" />""")),
+		("brushes from colour strings", """<Border Background="#FF0000" BorderBrush="Gold" /><TextBlock Foreground="CornflowerBlue" /><Button Background="#202020" Foreground="White" BorderBrush="Gray" />"""),
+		("image sources bound from code", """<Image Source="{x:Bind Picture}" /><Image Source="{x:Bind Live}" /><Ellipse><Ellipse.Fill><ImageBrush ImageSource="{x:Bind Live}" /></Ellipse.Fill></Ellipse><Rectangle><Rectangle.Fill><ImageBrush ImageSource="{x:Bind Minimap}" Stretch="Uniform" /></Rectangle.Fill></Rectangle>"""),
+		("brush elements", """<Border><Border.Background><SolidColorBrush Color="Red" Opacity="0.5" /></Border.Background></Border><Border><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0" SpreadMethod="Reflect" MappingMode="Absolute" ColorInterpolationMode="ScRgbLinearInterpolation"><GradientStop Color="Red" Offset="0" /><GradientStop Color="Blue" Offset="1" /></LinearGradientBrush></Border.Background></Border><TextBlock><TextBlock.Foreground><LinearGradientBrush><LinearGradientBrush.GradientStops><GradientStop Color="Red" /><GradientStop Color="Blue" Offset="1" /></LinearGradientBrush.GradientStops></LinearGradientBrush></TextBlock.Foreground></TextBlock><Border><Border.Background><ImageBrush Stretch="UniformToFill" AlignmentX="Left" AlignmentY="Bottom" /></Border.Background></Border>"""),
+		("brush resources", """<StackPanel.Resources><Style x:Key="Tinted" TargetType="Border"><Setter Property="Background" Value="Teal" /><Setter Property="BorderBrush"><Setter.Value><SolidColorBrush Color="Gold" /></Setter.Value></Setter></Style></StackPanel.Resources><Border Style="{StaticResource Tinted}" />"""),
+		("transforms", """<Border RenderTransformOrigin="0.5,0.5"><Border.RenderTransform><TransformGroup><TranslateTransform X="1" Y="2" /><ScaleTransform ScaleX="2" CenterX="5" /><RotateTransform Angle="45" /><SkewTransform AngleX="10" /><CompositeTransform Rotation="5" TranslateX="3" /><MatrixTransform Matrix="1,0,0,1,4,5" /></TransformGroup></Border.RenderTransform></Border>"""),
+		("CornerRadius and BrushTransition", """<Border CornerRadius="4"><Border.BackgroundTransition><BrushTransition Duration="0:0:0.2" /></Border.BackgroundTransition></Border>"""),
 		("XML namespaces: suisei: and using:", """<local:Item2Host /><Border suisei:Glow.Radius="2" />"""),
 		("mc:Ignorable design-time markup", """<Border d:Width="100" Width="10"><d:Border.Padding>4</d:Border.Padding></Border>"""),
 		("suisei: property path owner", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(suisei:Glow.Radius)" To="5" />""")),
-		("the runtime's suisei: extensions", """<Border suisei:Clipping.ClipToBounds="True" /><ScrollViewer suisei:Scrolling.WheelScrollAmount="64" /><ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel suisei:Virtualization.RowHeight="32" /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>"""),
+		("UIElement.Clip", """<Border><Border.Clip><RectangleGeometry Rect="0,0,10,10" /></Border.Clip></Border>"""),
+		("Geometry.Transform", """<Border><Border.Clip><RectangleGeometry Rect="0,0,10,10"><RectangleGeometry.Transform><TranslateTransform X="2" /></RectangleGeometry.Transform></RectangleGeometry></Border.Clip></Border>"""),
+		("geometry transform property path", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Clip).(Geometry.Transform).(TranslateTransform.X)" To="5" />""")),
+		("geometry elements", """<local:Shape2><local:Shape2.Data><GeometryGroup FillRule="Nonzero"><PathGeometry><PathFigure StartPoint="0,0" IsClosed="True"><LineSegment Point="1,0" /><PolyLineSegment Points="1,1 0,1" /><BezierSegment Point1="0,0" Point2="1,1" Point3="2,0" /><PolyBezierSegment Points="0,0 1,1 2,0" /><QuadraticBezierSegment Point1="1,1" Point2="2,0" /><PolyQuadraticBezierSegment Points="1,1 2,0" /><ArcSegment Point="3,3" Size="2,2" RotationAngle="10" IsLargeArc="True" SweepDirection="Clockwise" /></PathFigure></PathGeometry><RectangleGeometry Rect="0,0,2,2" /><EllipseGeometry Center="1,1" RadiusX="1" RadiusY="2" /><LineGeometry StartPoint="0,0" EndPoint="1,1" /></GeometryGroup></local:Shape2.Data></local:Shape2>"""),
+		("path markup, point and number lists", """<local:Shape2 Data="F1 M 0,0 L 10,0 10,10 H 0 V 5 C 1,1 2,2 3,3 S 4,4 5,5 Q 1,1 2,2 T 3,3 A 2,2 0 0 1 4,4 Z m 1,1 l 1,1 z" Points="0,0 1,1" Dashes="2 1" />"""),
+		("shapes and the stroke set", """<Canvas><Rectangle Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="Red" Stroke="Blue" StrokeThickness="2" Stretch="Uniform" /><Ellipse Width="10" Height="10" Fill="Red" /><Line X1="0" Y1="0" X2="10" Y2="10" Stroke="Red" StrokeDashArray="2 1" StrokeDashOffset="1" StrokeDashCap="Round" /><Polyline Points="0,0 5,5 10,0" Stroke="Red" StrokeLineJoin="Bevel" StrokeMiterLimit="3" StrokeStartLineCap="Square" StrokeEndLineCap="Triangle" /><Polygon Points="0,0 5,5 10,0" Fill="Red" FillRule="Nonzero" /><Path Data="M 0,0 L 10,10" Stroke="Red" Stretch="UniformToFill" /><Path Stroke="Red"><Path.Data><EllipseGeometry RadiusX="2" RadiusY="2" /></Path.Data></Path></Canvas>"""),
+		("shape property paths", """<Canvas><Rectangle x:Name="Card" Width="10" Height="10" Fill="Red" /><Line x:Name="Rule" X2="10" Stroke="Red" /><Path x:Name="Arrow" Data="M 0,0 L 10,10" Stroke="Red" /></Canvas><ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup Name="G"><VisualState Name="A" /><VisualState Name="B"><Storyboard><ColorAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)" To="Blue" /><DoubleAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="(Rectangle.RadiusX)" To="4" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(Line.X2)" To="20" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(Shape.StrokeThickness)" To="3" /><DoubleAnimation Storyboard.TargetName="Arrow" Storyboard.TargetProperty="(Path.Data).(Geometry.Transform).(RotateTransform.Angle)" To="90" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(suisei:StrokeTrim.End)" To="1" /></Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>"""),
+		("the runtime's suisei: extensions","""<Border suisei:Clipping.ClipToBounds="True" /><ScrollViewer suisei:Scrolling.WheelScrollAmount="64" /><ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel suisei:Virtualization.RowHeight="32" /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl><Path Data="M 0,0 L 10,0" Stroke="Red" suisei:StrokeTrim.Start="0.1" suisei:StrokeTrim.End="0.9" suisei:StrokeTrim.Offset="0.2" suisei:StrokeBrushMapping.Mode="AlongLength" />"""),
+		("Typography.NumeralAlignment", """<TextBlock Text="12" Typography.NumeralAlignment="Tabular" />"""),
+		("suisei:TextEffects", """<TextBlock x:Name="Title" Text="Go" suisei:TextEffects.OutlineThickness="0.08" suisei:TextEffects.OutlineBrush="Black" suisei:TextEffects.ShadowOffset="0.05,0.1" suisei:TextEffects.ShadowSoftness="0.2" suisei:TextEffects.ShadowBrush="#80000000" /><ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup Name="G"><VisualState Name="A" /><VisualState Name="B"><Storyboard><DoubleAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineThickness)" To="0.12" /><ColorAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineBrush).(SolidColorBrush.Color)" To="Red" /></Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>"""),
 	];
 
 	// Planning §4 "Planned": named in the contract but not implemented yet. Each must be reported, not ignored.
@@ -146,8 +162,24 @@ public sealed class XamlSubsetContractTests
 		}
 	}
 
-	// A control in the using: namespace, for the XML-namespace form.
+	// Controls in the using: namespace: one for the XML-namespace form, and one with the geometry value types for the
+	// geometry forms, which no runtime element takes yet. The view's image sources, which markup binds and code makes.
 	private const string ExtraTypes = """
-		namespace Demo { public sealed class Item2Host : SUIsei.Controls.ContentControl { } }
+		namespace Demo
+		{
+			public partial class V
+			{
+				public SUIsei.Media.Imaging.BitmapSource Picture { get; } = SUIsei.Media.Imaging.BitmapSource.FromRgba8(1, 1, new byte[4]);
+				public SUIsei.Media.Imaging.WriteableBitmap Live { get; } = new(2, 2);
+				public SUIsei.Extensions.HostImageSource Minimap { get; } = new("minimap", 32, 16);
+			}
+			public sealed class Item2Host : SUIsei.Controls.ContentControl { }
+			public sealed class Shape2 : SUIsei.Controls.ContentControl
+			{
+				public SUIsei.Media.Geometry? Data { get; set; }
+				public SUIsei.Media.PointCollection Points { get; set; } = new();
+				public SUIsei.Media.DoubleCollection Dashes { get; set; } = new();
+			}
+		}
 		""";
 }

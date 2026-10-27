@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 
 using SUIsei.Drawing;
+using SUIsei.Media;
 using SUIsei.Rasterizer;
 using SUIsei.RoutedEvents;
 
@@ -38,7 +39,7 @@ internal sealed class TapZoom
 	private static readonly TimeSpan CaptureEvery = TimeSpan.FromMilliseconds(250);
 
 	private readonly Dictionary<UIView, (UIElement Content, RoutedEventHandler Handler)> _watching = [];
-	private readonly Dictionary<UIElement, Matrix3x2> _saved = [];
+	private readonly Dictionary<UIElement, (Transform? Saved, MatrixTransform Scale)> _saved = [];
 	private readonly byte[] _pixels = new byte[Samples * Samples * 4];
 
 	private Mode _mode;
@@ -151,29 +152,39 @@ internal sealed class TapZoom
 	// --- Scaling ---
 
 	// The game's content in each view, scaled about the pointer where it is over that view and about the centre where it
-	// is not. The transform each had before is kept and put back.
+	// is not. The transform each had before is kept, applied ahead of the scale in a group, and put back. The scale is one
+	// transform per content, made when scaling starts and moved after that, so following the pointer allocates nothing.
 	private void ApplyTransform(TapOverlay overlay)
 	{
 		foreach (var view in overlay.Views)
 		{
 			if (view.View.Root.Content is not { } content)
 				continue;
-			if (!_saved.ContainsKey(content))
-				_saved[content] = content.RenderTransform;
+			if (!_saved.TryGetValue(content, out var zoomed))
+			{
+				zoomed = (content.RenderTransform, new MatrixTransform());
+				_saved[content] = zoomed;
+				content.RenderTransform = zoomed.Saved is { } saved
+					? new TransformGroup { Children = { saved, zoomed.Scale } }
+					: zoomed.Scale;
+			}
 			var size = view.Root.LayoutRect;
 			var origin = ReferenceEquals(_pointerView, view) && _pointer.X >= 0f
 				? _pointer / view.Scale
 				: new Vector2(size.Width / 2f, size.Height / 2f);
-			content.RenderTransform = _saved[content] * Matrix3x2.CreateScale(_factor, origin);
+			zoomed.Scale.Matrix = Matrix3x2.CreateScale(_factor, origin);
 			content.InvalidateArrange();
 		}
 	}
 
 	private void RestoreTransforms()
 	{
-		foreach (var (content, transform) in _saved)
+		foreach (var (content, zoomed) in _saved)
 		{
-			content.RenderTransform = transform;
+			// The game's own transform leaves the group before it goes back, so the group holds nothing of the game's.
+			if (content.RenderTransform is TransformGroup group)
+				group.Children.Clear();
+			content.RenderTransform = zoomed.Saved;
 			content.InvalidateArrange();
 		}
 		_saved.Clear();
@@ -289,7 +300,7 @@ internal sealed class TapZoom
 			view.Paint("−", false, _factor > 2);
 			view.Paint("+", false, _factor < 32);
 			if (hasSwatch)
-				view.Swatch.Background = swatch;
+				view.SwatchBrush.Color = swatch;
 
 			var showLens = _mode == Mode.Lens && _hasPixels && ReferenceEquals(view, _pointerView);
 			view.ShowLens(showLens ? _pointer + new Vector2(LensOffset) : null, Samples, _factor, _pixels);

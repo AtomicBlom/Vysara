@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Controls;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.RoseTap;
@@ -20,15 +21,18 @@ namespace SUIsei.RoseTap;
 /// </summary>
 internal sealed class TapOverlayView
 {
-	public static readonly HdrColor Panel = HdrColor.FromRgb(24, 26, 34, 230);
-	public static readonly HdrColor Idle = HdrColor.FromRgb(52, 56, 70);
-	public static readonly HdrColor Accent = HdrColor.FromRgb(14, 124, 150);
-	public static readonly HdrColor Disabled = HdrColor.FromRgb(40, 42, 50);
-	public static readonly HdrColor Ink = HdrColor.FromRgb(235, 238, 245);
-	private static readonly HdrColor HoverColour = HdrColor.FromRgb(80, 170, 255);
-	private static readonly HdrColor PickColour = HdrColor.FromRgb(255, 170, 40);
-	private static readonly HdrColor ChangeColour = HdrColor.FromRgb(120, 220, 120);
-	private static readonly HdrColor RulerColour = HdrColor.FromRgb(255, 80, 160);
+	// The view's own brushes, made once with it: a brush notifies the elements that paint with it, so one shared across
+	// views or sessions would hold on to elements of an overlay that has gone.
+	private readonly SolidColorBrush _panel = new(HdrColor.FromRgb(24, 26, 34, 230));
+	private readonly SolidColorBrush _idle = new(HdrColor.FromRgb(52, 56, 70));
+	private readonly SolidColorBrush _accent = new(HdrColor.FromRgb(14, 124, 150));
+	private readonly SolidColorBrush _disabled = new(HdrColor.FromRgb(40, 42, 50));
+	private readonly SolidColorBrush _ink = new(HdrColor.FromRgb(235, 238, 245));
+	private readonly SolidColorBrush _badgeInk = new(HdrColor.FromRgb(10, 10, 14));
+	private readonly SolidColorBrush _hover = new(HdrColor.FromRgb(80, 170, 255));
+	private readonly SolidColorBrush _pick = new(HdrColor.FromRgb(255, 170, 40));
+	private readonly SolidColorBrush _change = new(HdrColor.FromRgb(120, 220, 120));
+	private readonly SolidColorBrush _ruler = new(HdrColor.FromRgb(255, 80, 160));
 
 	private readonly Dictionary<string, Border> _buttons = [];
 	private readonly List<(Border Box, Border Tag)> _changeMarks = [];
@@ -39,7 +43,8 @@ internal sealed class TapOverlayView
 		_host = new WeakReference<UIHost>(host);
 		View = view;
 
-		Capture = new Border { Background = HdrColor.Transparent, Visibility = Visibility.Collapsed };
+		// Transparent rather than no brush: a fill is what makes the layer hit everywhere it covers.
+		Capture = new Border { Background = new SolidColorBrush(HdrColor.Transparent), Visibility = Visibility.Collapsed };
 		Capture.AddHandler(UIElement.PointerMovedEvent, (_, e) => owner.OnHover(this, ((PointerRoutedEventArgs)e).Pointer.Position));
 		Capture.AddHandler(UIElement.PointerPressedEvent, (_, e) =>
 		{
@@ -48,17 +53,17 @@ internal sealed class TapOverlayView
 		});
 
 		Marks = new Canvas { IsHitTestVisible = false };
-		HoverBox = Outline(HoverColour, 1f);
-		HoverBadge = Badge(HoverColour);
-		PickBox = Outline(PickColour, 2f);
-		PickBadge = Badge(PickColour);
-		AnchorBox = Outline(RulerColour, 1f);
+		HoverBox = Outline(_hover, 1f);
+		HoverBadge = Badge(_hover);
+		PickBox = Outline(_pick, 2f);
+		PickBadge = Badge(_pick);
+		AnchorBox = Outline(_ruler, 1f);
 		for (var i = 0; i < Leaders.Length; i++)
 		{
 			Leaders[i] = Line();
-			LeaderLabels[i] = Badge(RulerColour);
+			LeaderLabels[i] = Badge(_ruler);
 		}
-		Lens = new Border { BorderBrush = Ink, BorderThickness = new Thickness(1f), Child = new Canvas(), Visibility = Visibility.Collapsed };
+		Lens = new Border { BorderBrush = _ink, BorderThickness = new Thickness(1f), Child = new Canvas(), Visibility = Visibility.Collapsed };
 		Marks.Children.Add(Lens);
 
 		var buttons = new StackPanel { Orientation = Orientation.Horizontal };
@@ -70,7 +75,15 @@ internal sealed class TapOverlayView
 		ZoomRow = new StackPanel { Orientation = Orientation.Horizontal, Visibility = Visibility.Collapsed };
 		foreach (var (name, action) in owner.Zoom.Actions())
 			ZoomRow.Children.Add(_buttons[name] = Button(name, () => action(owner)));
-		Swatch = new Border { Width = 12f, Height = 12f, Margin = new Thickness(4f, 0f), BorderBrush = Ink, BorderThickness = new Thickness(1f) };
+		Swatch = new Border
+		{
+			Width = 12f,
+			Height = 12f,
+			Margin = new Thickness(4f, 0f),
+			BorderBrush = _ink,
+			BorderThickness = new Thickness(1f),
+			Background = SwatchBrush,
+		};
 		ZoomRow.Children.Add(Swatch);
 		ZoomText = Label("", 11f);
 		ZoomRow.Children.Add(ZoomText);
@@ -81,7 +94,7 @@ internal sealed class TapOverlayView
 		rows.Children.Add(ZoomRow);
 		Toolbar = new Border
 		{
-			Background = Panel,
+			Background = _panel,
 			Padding = new Thickness(4f),
 			Margin = new Thickness(8f),
 			HorizontalAlignment = HorizontalAlignment.Left,
@@ -135,6 +148,9 @@ internal sealed class TapOverlayView
 	/// <summary>The colour under the lens, as a filled square.</summary>
 	public Border Swatch { get; }
 
+	/// <summary>The swatch's fill, recoloured in place as the lens moves.</summary>
+	public SolidColorBrush SwatchBrush { get; } = new(HdrColor.Transparent);
+
 	/// <summary>The pixel lens: a block per pixel round the pointer, drawn beside it.</summary>
 	public Border Lens { get; }
 
@@ -149,9 +165,10 @@ internal sealed class TapOverlayView
 			return;
 		}
 
+		// Each block keeps one brush and is recoloured through it, so a capture makes no brush per pixel.
 		var blocks = (Canvas)Lens.Child!;
 		while (blocks.Children.Count < samples * samples)
-			blocks.Children.Add(new Border());
+			blocks.Children.Add(new Border { Background = new SolidColorBrush(HdrColor.Transparent) });
 		var size = factor / Scale;
 		for (var i = 0; i < samples * samples; i++)
 		{
@@ -160,7 +177,7 @@ internal sealed class TapOverlayView
 			block.Height = size;
 			Canvas.SetLeft(block, i % samples * size);
 			Canvas.SetTop(block, i / samples * size);
-			block.Background = HdrColor.FromRgb(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], rgba[i * 4 + 3]);
+			((SolidColorBrush)block.Background!).Color = HdrColor.FromRgb(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], rgba[i * 4 + 3]);
 		}
 		blocks.Width = blocks.Height = samples * size;
 		Canvas.SetLeft(Lens, position.X / Scale);
@@ -176,7 +193,7 @@ internal sealed class TapOverlayView
 	public void Paint(string button, bool lit, bool enabled = true)
 	{
 		if (_buttons.TryGetValue(button, out var border))
-			border.Background = !enabled ? Disabled : lit ? Accent : Idle;
+			border.Background = !enabled ? _disabled : lit ? _accent : _idle;
 	}
 
 	/// <summary>Show <paramref name="box"/> over <paramref name="pixels"/>, a rectangle in surface pixels, or hide it.</summary>
@@ -223,7 +240,7 @@ internal sealed class TapOverlayView
 	public IReadOnlyList<(Border Box, Border Tag)> ChangeMarks(int count)
 	{
 		while (_changeMarks.Count < count)
-			_changeMarks.Add((Outline(ChangeColour, 1f), Badge(ChangeColour)));
+			_changeMarks.Add((Outline(_change, 1f), Badge(_change)));
 		for (var i = count; i < _changeMarks.Count; i++)
 		{
 			_changeMarks[i].Box.Visibility = Visibility.Collapsed;
@@ -232,7 +249,7 @@ internal sealed class TapOverlayView
 		return _changeMarks;
 	}
 
-	private Border Outline(HdrColor colour, float thickness)
+	private Border Outline(Brush colour, float thickness)
 	{
 		var box = new Border { BorderBrush = colour, BorderThickness = new Thickness(thickness), Visibility = Visibility.Collapsed };
 		Marks.Children.Add(box);
@@ -241,31 +258,31 @@ internal sealed class TapOverlayView
 
 	private Border Line()
 	{
-		var line = new Border { Background = RulerColour, Visibility = Visibility.Collapsed };
+		var line = new Border { Background = _ruler, Visibility = Visibility.Collapsed };
 		Marks.Children.Add(line);
 		return line;
 	}
 
-	private Border Badge(HdrColor colour)
+	private Border Badge(Brush colour)
 	{
 		var badge = new Border
 		{
 			Background = colour,
 			Padding = new Thickness(3f, 1f),
-			Child = new TextBlock { FontSize = 11f, Foreground = HdrColor.FromRgb(10, 10, 14) },
+			Child = new TextBlock { FontSize = 11f, Foreground = _badgeInk },
 			Visibility = Visibility.Collapsed,
 		};
 		Marks.Children.Add(badge);
 		return badge;
 	}
 
-	private static TextBlock Label(string text, float size) => new() { Text = text, FontSize = size, Foreground = Ink, Margin = new Thickness(4f, 2f) };
+	private TextBlock Label(string text, float size) => new() { Text = text, FontSize = size, Foreground = _ink, Margin = new Thickness(4f, 2f) };
 
-	private static Border Button(string name, Action action)
+	private Border Button(string name, Action action)
 	{
 		var button = new Border
 		{
-			Background = Idle,
+			Background = _idle,
 			Padding = new Thickness(6f, 3f),
 			Margin = new Thickness(1f),
 			Child = Label(name, 11f),

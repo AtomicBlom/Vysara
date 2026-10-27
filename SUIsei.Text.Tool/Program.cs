@@ -116,7 +116,7 @@ static int CountGlyphs(string json)
 static void PrintUsage()
 {
 	Console.WriteLine(
-		"""
+		$"""
 		loom-msdf — native MTSDF font-atlas generator (SUIsei / Loom)
 
 		Usage:
@@ -128,9 +128,9 @@ static void PrintUsage()
 		  --font <path>          Bake a single .ttf/.otf instead of a fontset
 		  --name <name>          Output base name when baking a single font
 		  --charset <tokens>     Comma-separated block names / U+ ranges (default: printable ASCII)
-		  --glyph-size <px>      Baked EM size in texels (default: 32)
-		  --px-range <px>        MTSDF distance range in texels (default: 4)
-		  --page-size <px>       Max atlas page dimension (default: 1024)
+		  --glyph-size <px>      Baked EM size in texels (default: {Fontset.DefaultGlyphSize})
+		  --px-range <px>        MTSDF distance range in texels (default: {Fontset.DefaultPxRange})
+		  --page-size <px>       Max atlas page dimension (default: {Fontset.DefaultAtlasPageSize})
 		  --preview "<text>"     Also render a preview PNG of the baked atlas
 		  --preview-size <px>    Preview font size (default: 48)
 		  --cpu                  Use the software path (the only path today; accepted for forward-compat)

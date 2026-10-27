@@ -1,4 +1,5 @@
 using SUIsei.Animation;
+using SUIsei.Media;
 
 namespace SUIsei.Controls;
 
@@ -92,6 +93,49 @@ public abstract class Control : FrameworkElement
 		var state = CommonVisualState;
 		if (!VisualStateManager.GoToState(this, state, useTransitions) && state == "Disabled")
 			VisualStateManager.GoToState(this, "Normal", useTransitions);
+	}
+
+	/// <summary>The brush behind the control's content. A built-in template paints it where WinUI's default template
+	/// does; null shows the template's own look.</summary>
+	public static readonly DependencyProperty<Control, Brush?> BackgroundProperty =
+		DependencyProperty.Register(nameof(Background),
+			new PropertyMetadata<Control, Brush?> { PropertyChanged = static (c, old, @new) => c.OnBackgroundChanged(old, @new) });
+
+	/// <summary>The brush for the control's border, where its template draws one; null shows the template's own look.</summary>
+	public static readonly DependencyProperty<Control, Brush?> BorderBrushProperty =
+		DependencyProperty.Register(nameof(BorderBrush),
+			new PropertyMetadata<Control, Brush?> { PropertyChanged = static (c, old, @new) => c.OnBrushChanged(old, @new) });
+
+	/// <summary>The brush for the control's text: a built-in template passes it to the text its presenter makes for
+	/// string content. Null shows the template's own look.</summary>
+	public static readonly DependencyProperty<Control, Brush?> ForegroundProperty =
+		DependencyProperty.Register(nameof(Foreground),
+			new PropertyMetadata<Control, Brush?> { PropertyChanged = static (c, _, value) => c.OnForegroundChanged(value) });
+
+	/// <summary>The thickness of the control's border, where its template draws one with <see cref="BorderBrush"/>.</summary>
+	public static readonly DependencyProperty<Control, Thickness> BorderThicknessProperty =
+		DependencyProperty.Register(nameof(BorderThickness),
+			new PropertyMetadata<Control, Thickness> { Invalidates = InvalidationFlags.Measure });
+
+	public Brush? Background { get => GetValue(BackgroundProperty); set => SetValue(BackgroundProperty, value); }
+
+	public Brush? BorderBrush { get => GetValue(BorderBrushProperty); set => SetValue(BorderBrushProperty, value); }
+
+	public Thickness BorderThickness { get => GetValue(BorderThicknessProperty); set => SetValue(BorderThicknessProperty, value); }
+
+	public Brush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
+
+	/// <summary>The background changed; a control that paints it itself repaints. The default repaints in place.</summary>
+	private protected virtual void OnBackgroundChanged(Brush? old, Brush? @new) => OnBrushChanged(old, @new);
+
+	/// <summary>The foreground changed; a control that colours text itself passes it on.</summary>
+	private protected virtual void OnForegroundChanged(Brush? foreground) { }
+
+	private protected override void OnLiveTreeChanged(bool attached)
+	{
+		Listen(Background, attached);
+		Listen(BorderBrush, attached);
+		base.OnLiveTreeChanged(attached);
 	}
 
 	public static readonly DependencyProperty<Control, TabFocusNavigation> TabFocusNavigationProperty =

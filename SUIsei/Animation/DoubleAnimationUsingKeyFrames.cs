@@ -43,5 +43,11 @@ public sealed class DoubleAnimationUsingKeyFrames : AnimationTimeline<double>
 		return KeyFrames[n - 1].Value;
 	}
 
+	private protected override void ValidateValues(Action<double> validate)
+	{
+		for (var i = 0; i < KeyFrames.Count; i++)
+			validate(KeyFrames[i].Value);
+	}
+
 	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => DoubleBinding.TryBind(this, owner, target);
 }

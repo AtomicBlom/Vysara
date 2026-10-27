@@ -33,6 +33,18 @@ public readonly record struct Rect(float X, float Y, float Width, float Height)
 		return right <= x || bottom <= y ? Zero : new Rect(x, y, right - x, bottom - y);
 	}
 
+	/// <summary>The smallest rect holding this one and <paramref name="other"/>, where an empty one adds nothing.</summary>
+	internal Rect Union(in Rect other)
+	{
+		if (IsEmpty)
+			return other;
+		if (other.IsEmpty)
+			return this;
+		var x = MathF.Min(X, other.X);
+		var y = MathF.Min(Y, other.Y);
+		return new Rect(x, y, MathF.Max(Right, other.Right) - x, MathF.Max(Bottom, other.Bottom) - y);
+	}
+
 	/// <summary>The axis-aligned bounds of this rect under an affine transform: exact for translate and scale, a
 	/// conservative bound under rotation or skew. The compositor clips with it, and hit-testing uses the same bound so
 	/// a point is hittable exactly where its subtree can draw.</summary>

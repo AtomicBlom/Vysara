@@ -1,6 +1,6 @@
-using SUIsei.Animation;
 using SUIsei.Extensions;
 using SUIsei.Input;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
@@ -16,20 +16,24 @@ namespace SUIsei.Controls;
 public sealed class ScrollViewer : FrameworkElement
 {
 	// The thumb brightens and widens through rest → hover → grabbed, so it visibly reacts to the pointer.
-	private static readonly HdrColor ThumbRest = HdrColor.FromRgb(86, 92, 108);
-	private static readonly HdrColor ThumbHover = HdrColor.FromRgb(124, 132, 152);
-	private static readonly HdrColor ThumbActive = HdrColor.FromRgb(160, 168, 190);
+	// Shared by every scroll viewer and never changed.
+	private static readonly SolidColorBrush ThumbRest = Brush.Sealed(HdrColor.FromRgb(86, 92, 108));
+	private static readonly SolidColorBrush ThumbHover = Brush.Sealed(HdrColor.FromRgb(124, 132, 152));
+	private static readonly SolidColorBrush ThumbActive = Brush.Sealed(HdrColor.FromRgb(160, 168, 190));
 	private const float ThumbThickness = 8f;
 	private const float ThumbThicknessActive = 11f;
 	private const float ThumbMinLength = 28f;
 	private const float ThumbMargin = 2f;
 
-	private readonly Border _vThumb = new() { Background = ThumbRest, CornerRadius = ThumbThickness / 2f };
+	// The thumb fades between its brushes through its BrushTransition when on a live host, and switches at once when not.
+	private readonly Border _vThumb = new()
+	{
+		Background = ThumbRest,
+		CornerRadius = new CornerRadius(ThumbThickness / 2f),
+		BackgroundTransition = new BrushTransition { Duration = TimeSpan.FromMilliseconds(120) },
+	};
 	// VisualChildren (the content, then the thumb), rebuilt only when Content changes, so reading it allocates nothing.
 	private UIElement[] _visualChildren;
-	private readonly ColorAnimation _thumbFade;
-	private readonly Storyboard _thumbFadeStory;
-	private HdrColor _thumbColor = ThumbRest; // the thumb's last target colour (the From of the next transition)
 	private float _thumbHeight;
 	private float _thumbTravel;
 	private bool _thumbOver;
@@ -44,15 +48,6 @@ public sealed class ScrollViewer : FrameworkElement
 		AdoptChild(_vThumb);
 		AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged);
 		AddHandler(KeyDownEvent, OnKeyDown);
-
-		_thumbFade = new ColorAnimation
-		{
-			Duration = TimeSpan.FromMilliseconds(120),
-			FillBehavior = FillBehavior.HoldEnd,
-			Apply = _vThumb.SetAnimatedFill,
-			Release = _vThumb.ClearAnimatedFill,
-		};
-		_thumbFadeStory = new Storyboard { Children = { _thumbFade } };
 
 		// The thumb is a grab handle: hovering/grabbing it lights it up, a press starts a drag (capturing the pointer
 		// so it tracks past the thumb's edges), and the drag maps pointer travel onto the scroll range.
@@ -92,7 +87,7 @@ public sealed class ScrollViewer : FrameworkElement
 	public float ScrollableWidth => MathF.Max(0f, ExtentWidth - ViewportWidth);
 
 	/// <summary>The thumb's current interaction-state target colour (test seam): rest, hover, or grabbed.</summary>
-	internal HdrColor ThumbStateColor => _thumbColor;
+	internal HdrColor ThumbStateColor => ((SolidColorBrush)_vThumb.Background!).Color;
 
 	public void ScrollToVerticalOffset(float offset) => SetVerticalOffset(offset);
 
@@ -177,22 +172,11 @@ public sealed class ScrollViewer : FrameworkElement
 		}
 	}
 
-	// Brighten/dim the thumb toward its current interaction state. Grabbed wins over hover wins over rest; animated
-	// through the host clock when attached, snapped when not (so the state is still observable headlessly).
+	// Brighten/dim the thumb toward its current interaction state. Grabbed wins over hover wins over rest; faded by the
+	// thumb's BrushTransition when on a live host, switched at once when not (so the state is observable headlessly).
 	private void UpdateThumbVisual()
 	{
-		var target = _draggingThumb ? ThumbActive : _thumbOver ? ThumbHover : ThumbRest;
-		if (AttachedRoot?.Clock is { } clock)
-		{
-			_thumbFade.From = _thumbColor;
-			_thumbFade.To = target;
-			clock.Begin(_thumbFadeStory);
-		}
-		else
-		{
-			_vThumb.SetAnimatedFill(target);
-		}
-		_thumbColor = target;
+		_vThumb.Background = _draggingThumb ? ThumbActive : _thumbOver ? ThumbHover : ThumbRest;
 		InvalidateArrange(); // the engaged thumb is wider
 	}
 

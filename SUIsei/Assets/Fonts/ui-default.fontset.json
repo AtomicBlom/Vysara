@@ -1,9 +1,17 @@
 {
   "name": "ui-default",
   "fonts": [
-    { "path": "CascadiaCode.ttf", "ranges": ["Basic Latin"] }
+    {
+      "path": "CascadiaCode.ttf",
+      "ranges": [
+        "Basic Latin", "Latin-1 Supplement",
+        "U+2013-U+2014", "U+2018-U+201E", "U+2020-U+2022", "U+2026", "U+2030", "U+2032-U+2033", "U+2039-U+203A",
+        "U+20AC", "U+2122", "U+2190-U+2195", "U+2212", "U+2248", "U+2260", "U+2264-U+2265",
+        "U+25B2", "U+25B6", "U+25BC", "U+25C0", "U+25CF", "U+2713"
+      ]
+    }
   ],
-  "pxRange": 4,
+  "pxRange": 12,
   "glyphSize": 32,
-  "atlasPageSize": 256
+  "atlasPageSize": 512
 }

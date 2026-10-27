@@ -2,6 +2,7 @@ using System.Diagnostics;
 using SUIsei;
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
 using SUIsei.Rasterizer;
 
 const int W = 480;
@@ -13,13 +14,13 @@ var label = new TextBlock
 {
 	Text = "Hello, SUIsei",
 	FontSize = 44f,
-	Foreground = HdrColor.FromRgb(235, 238, 245),
+	Foreground = new SolidColorBrush(HdrColor.FromRgb(235, 238, 245)),
 };
 var panel = new Border
 {
-	CornerRadius = 16f,
-	Background = HdrColor.FromRgb(30, 33, 40),
-	BorderBrush = HdrColor.FromRgb(90, 120, 200),
+	CornerRadius = new CornerRadius(16f),
+	Background = new SolidColorBrush(HdrColor.FromRgb(30, 33, 40)),
+	BorderBrush = new SolidColorBrush(HdrColor.FromRgb(90, 120, 200)),
 	BorderThickness = new Thickness(3f),
 	Padding = new Thickness(20f),
 	Child = label,

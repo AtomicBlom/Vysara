@@ -1,5 +1,6 @@
 using SUIsei.Animation;
 using SUIsei.Input;
+using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
@@ -17,11 +18,15 @@ public sealed class TextBox : Control
 	private static string _clipboard = string.Empty;
 	private static readonly Thickness Pad = new(4f, 2f);
 
-	// Chrome that reacts to interaction: the resting border/background are the public Background/BorderBrush; hover
-	// brightens the border and focus swaps in an accent border (thicker) over a slightly lifted background.
-	private static readonly HdrColor HoverBorder = HdrColor.FromRgb(130, 130, 150);
-	private static readonly HdrColor FocusBorder = HdrColor.FromRgb(80, 150, 240);
-	private static readonly HdrColor FocusBackground = HdrColor.FromRgb(36, 38, 48);
+	// Chrome that reacts to interaction: the resting border/background are the public Background/BorderBrush, or the
+	// built-in look's where those are unset; hover brightens the border and focus swaps in an accent border (thicker)
+	// over a slightly lifted background. Shared paint, never changed.
+	private static readonly CompositionColorBrush RestBackground = new(HdrColor.FromRgb(30, 30, 38));
+	private static readonly CompositionColorBrush RestBorder = new(HdrColor.FromRgb(90, 90, 105));
+	private static readonly CompositionColorBrush HoverBorder = new(HdrColor.FromRgb(130, 130, 150));
+	private static readonly CompositionColorBrush FocusBorder = new(HdrColor.FromRgb(80, 150, 240));
+	private static readonly CompositionColorBrush FocusBackground = new(HdrColor.FromRgb(36, 38, 48));
+	private static readonly SolidColorBrush TextForeground = Brush.Sealed(HdrColor.FromRgb(235, 235, 240));
 
 	// The Windows caret cadence: solid through a half-period, then hidden through the next, repeating. The short ramp
 	// keeps it an effectively hard on/off (a fade would read as a pulse, not a caret).
@@ -32,9 +37,12 @@ public sealed class TextBox : Control
 		DependencyProperty.Register<TextBox, string>(nameof(Text),
 			new PropertyMetadata<TextBox, string> { DefaultValue = "", Invalidates = InvalidationFlags.Measure, PropertyChanged = static (t, _, _) => t.OnTextChanged() });
 
-	private readonly TextBlock _textBlock = new();
-	private readonly Border _caretVisual = new() { Background = HdrColor.FromRgb(230, 230, 235) };
-	private readonly Border _selectionHighlight = new() { Background = HdrColor.FromRgb(60, 110, 200), Visibility = Visibility.Collapsed };
+	private static readonly SolidColorBrush CaretBrush = Brush.Sealed(HdrColor.FromRgb(230, 230, 235));
+	private static readonly SolidColorBrush SelectionBrush = Brush.Sealed(HdrColor.FromRgb(60, 110, 200));
+
+	private readonly TextBlock _textBlock = new() { Foreground = TextForeground };
+	private readonly Border _caretVisual = new() { Background = CaretBrush };
+	private readonly Border _selectionHighlight = new() { Background = SelectionBrush, Visibility = Visibility.Collapsed };
 	// VisualChildren: the three fixed parts, in draw order, made once.
 	private readonly UIElement[] _visualChildren;
 
@@ -71,12 +79,6 @@ public sealed class TextBox : Control
 
 	/// <summary>Font size in DIPs.</summary>
 	public float FontSize { get; set { if (field != value) { field = value; InvalidateMeasure(); } } } = 14f;
-
-	public HdrColor Foreground { get; set; } = HdrColor.FromRgb(235, 235, 240);
-
-	public HdrColor Background { get; set { if (field != value) { field = value; InvalidateContent(); } } } = HdrColor.FromRgb(30, 30, 38);
-
-	public HdrColor BorderBrush { get; set; } = HdrColor.FromRgb(90, 90, 105);
 
 	/// <summary>The caret position (also the moving end of a selection). Code outside places the caret with
 	/// <see cref="Select"/> or <see cref="SelectionStart"/>, as in WinUI.</summary>
@@ -127,7 +129,6 @@ public sealed class TextBox : Control
 	{
 		_textBlock.Text = Text;
 		_textBlock.FontSize = FontSize;
-		_textBlock.Foreground = Foreground;
 
 		// Measure the text unbounded in width so it reports its full single-line extent (the field scrolls to it
 		// rather than wrapping or capping at the viewport).
@@ -135,14 +136,14 @@ public sealed class TextBox : Control
 		_caretVisual.Measure(available);
 		_selectionHighlight.Measure(available);
 
-		var lineHeight = FontAtlas.Default.LineHeight * FontSize;
+		var lineHeight = TextFont.LineHeight * FontSize;
 		var width = float.IsPositiveInfinity(available.Width) ? _textBlock.DesiredSize.Width + Pad.Horizontal + 2f : available.Width;
 		return new Size(width, lineHeight + Pad.Vertical);
 	}
 
 	protected override Size ArrangeOverride(Size finalSize)
 	{
-		var lineHeight = FontAtlas.Default.LineHeight * FontSize;
+		var lineHeight = TextFont.LineHeight * FontSize;
 		var viewport = MathF.Max(0f, finalSize.Width - Pad.Horizontal);
 
 		// Keep the caret inside the viewport, then pull back so the text's end never floats past the right edge
@@ -185,12 +186,12 @@ public sealed class TextBox : Control
 	/// <summary>The caret's arranged rect within the field (test seam).</summary>
 	internal Rect CaretRect => _caretVisual.LayoutRect;
 
-	private protected override HdrColor? BaseFill => Background;
+	private protected override void OnForegroundChanged(Brush? foreground) => _textBlock.Foreground = foreground ?? TextForeground;
 
 	private protected override VisualContent? UpdateContent()
 	{
-		var brush = _focused ? FocusBorder : _pointerOver ? HoverBorder : BorderBrush;
-		var fill = _focused ? FocusBackground : Background;
+		var brush = _focused ? FocusBorder : _pointerOver ? HoverBorder : BorderBrush?.CompositionBrush ?? RestBorder;
+		var fill = _focused ? FocusBackground : Background?.CompositionBrush ?? RestBackground;
 		var thickness = _focused ? 1.5f : 1f;
 		return RetainedRect(fill, 3f, brush, thickness);
 	}
@@ -230,7 +231,7 @@ public sealed class TextBox : Control
 	private float OffsetOf(int index)
 	{
 		index = Math.Clamp(index, 0, Text.Length);
-		return index == 0 ? 0f : FontAtlas.Default.MeasureWidth(Text.AsSpan(0, index)) * FontSize;
+		return index == 0 ? 0f : TextFont.MeasureWidth(Text.AsSpan(0, index)) * FontSize;
 	}
 
 	private void OnTextChanged()

@@ -184,6 +184,12 @@ partial class XamlSourceGenerator
 	{
 		expr = "";
 		var raw = attr.Value.Trim();
+		if (raw is "RenderTransform.Translate.X" or "RenderTransform.Translate.Y")
+		{
+			gen.Report(BrushOrTransformShorthand, attr, raw, "names no property: RenderTransform holds a Transform, whose own property the animation drives",
+				$"(UIElement.RenderTransform).(TranslateTransform.{raw[raw.Length - 1]})");
+			return false;
+		}
 		var steps = ParsePropertyPath(raw);
 		if (steps is null)
 		{
@@ -211,9 +217,6 @@ partial class XamlSourceGenerator
 
 			if (FindDependencyProperty(owner, step.Property) is not { } dp)
 			{
-				// Not a dependency property: the path may name one of the element channels instead.
-				if (i == 0 && ElementChannel(raw, steps) is { } channel && FindAnyProperty(owner, step.Property) is not null)
-					return TryElementChannel(gen, attr, raw, channel, kind, animationName, out expr);
 				gen.Report(BadPropertyPath, attr, raw, $"'{owner.Name}' has no dependency property '{step.Property}'");
 				return false;
 			}
@@ -224,15 +227,33 @@ partial class XamlSourceGenerator
 				gen.Report(BadPropertyPath, attr, raw, $"'{declaring.Name}.{step.Property}' is declared without its value type");
 				return false;
 			}
-			if (current is not null && !IsAttachedProperty(declaring, step.Property) && !InheritsFrom(current, declaring))
+			// A step may name a more derived type than the object before it is declared to hold, as WinUI's
+			// (Border.Background).(SolidColorBrush.Color) does; the object found is checked when the animation begins.
+			if (current is not null && !IsAttachedProperty(declaring, step.Property) && !InheritsFrom(current, declaring) && !InheritsFrom(declaring, current))
 			{
 				gen.Report(BadPropertyPath, attr, raw, $"'{declaring.Name}.{step.Property}' does not apply to a {current.Name}");
+				return false;
+			}
+			// An attached property applies to what its setter takes, which may name a more derived type, as above.
+			if (current is not null && AttachedSetter(declaring, step.Property) is { } setter
+				&& setter.Parameters[0].Type is INamedTypeSymbol holder && !AttachesTo(setter, current) && !InheritsFrom(holder, current))
+			{
+				gen.Report(BadPropertyPath, attr, raw, $"'{declaring.Name}.{step.Property}' is set on a {holder.Name}, not a {current.Name}");
 				return false;
 			}
 			fields.Add($"{Fq(declaring)}.{dp.Name}");
 
 			if (i == steps.Count - 1)
 			{
+				// A colour animation aimed at a brush property: the colour it means is the brush's, through the WinUI path.
+				if (kind == AnimationKind.Color && IsBrush(gen, valueType))
+				{
+					var before = string.Join(".", steps.Take(i).Select(static s => s.ToString()));
+					var last = step.Owner is null ? $"({(current ?? declaring).Name}.{step.Property})" : step.ToString();
+					gen.Report(BrushOrTransformShorthand, attr, raw, $"names {declaring.Name}.{step.Property}, which holds a {valueType.Name} rather than a colour",
+						$"{(before.Length > 0 ? before + "." : "")}{last}.(SolidColorBrush.Color)");
+					return false;
+				}
 				if (!CanAnimate(kind, valueType))
 				{
 					gen.Report(BadAnimationProperty, attr, raw, valueType.Name, animationName);
@@ -322,57 +343,20 @@ partial class XamlSourceGenerator
 		return ResolveType(gen.Compilation, step.Owner!);
 	}
 
-	// The paths that name an element channel rather than a dependency property: a plain colour property (`Background`,
-	// or WinUI's `(Border.Background).(SolidColorBrush.Color)`), and the offset an animation adds to the render
-	// transform (`RenderTransform.Translate.X`, `(UIElement.RenderTransform).(CompositeTransform.TranslateX)`). Returns
-	// the PropertyPath member and whether it takes a colour, or null.
-	private static (string Member, bool IsColor)? ElementChannel(string raw, List<PathStep> steps)
-	{
-		if (raw == "RenderTransform.Translate.X")
-			return ("TranslateX", false);
-		if (raw == "RenderTransform.Translate.Y")
-			return ("TranslateY", false);
-
-		var first = steps[0].Property;
-		var isColourProperty = first is "Background" or "Foreground" or "Fill";
-		if (steps.Count == 1)
-			return isColourProperty ? ("Fill", true) : null;
-		if (steps.Count != 2)
-			return null;
-
-		var second = steps[1];
-		if (isColourProperty && second is { Owner: "SolidColorBrush", Property: "Color" })
-			return ("Fill", true);
-		if (first != "RenderTransform")
-			return null;
-		return second switch
-		{
-			{ Owner: "CompositeTransform", Property: "TranslateX" } or { Owner: "TranslateTransform", Property: "X" } => ("TranslateX", false),
-			{ Owner: "CompositeTransform", Property: "TranslateY" } or { Owner: "TranslateTransform", Property: "Y" } => ("TranslateY", false),
-			_ => null,
-		};
-	}
-
-	private static bool TryElementChannel(Gen gen, XAttribute attr, string raw, (string Member, bool IsColor) channel,
-		AnimationKind kind, string animationName, out string expr)
-	{
-		expr = "";
-		if (channel.IsColor != (kind == AnimationKind.Color))
-		{
-			gen.Report(BadAnimationProperty, attr, raw, channel.IsColor ? "HdrColor" : "Single", animationName);
-			return false;
-		}
-		expr = $"global::SUIsei.Animation.PropertyPath.{channel.Member}";
-		return true;
-	}
+	// Whether a property's value type is a brush (SUIsei.Media.Brush or a subclass).
+	private static bool IsBrush(Gen gen, ITypeSymbol valueType) =>
+		valueType is INamedTypeSymbol named && gen.Compilation.GetTypeByMetadataName("SUIsei.Media.Brush") is { } brush
+		&& InheritsFrom((INamedTypeSymbol)named.WithNullableAnnotation(NullableAnnotation.NotAnnotated), brush);
 
 	private static bool CanAnimate(AnimationKind kind, ITypeSymbol valueType) => kind == AnimationKind.Color
 		? valueType.ToDisplayString() == "SUIsei.HdrColor"
 		: valueType.SpecialType is SpecialType.System_Single or SpecialType.System_Double;
 
 	// An attached property's owner declares a static Set<Name>(target, value), as WinUI's do.
-	private static bool IsAttachedProperty(INamedTypeSymbol owner, string property) =>
-		owner.GetMembers("Set" + property).OfType<IMethodSymbol>().Any(m => m is { IsStatic: true, Parameters.Length: 2 });
+	private static bool IsAttachedProperty(INamedTypeSymbol owner, string property) => AttachedSetter(owner, property) is not null;
+
+	private static IMethodSymbol? AttachedSetter(INamedTypeSymbol owner, string property) =>
+		owner.GetMembers("Set" + property).OfType<IMethodSymbol>().FirstOrDefault(m => m is { IsStatic: true, Parameters.Length: 2 });
 
 	private static bool InheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
 	{

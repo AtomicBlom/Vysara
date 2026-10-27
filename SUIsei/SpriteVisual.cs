@@ -2,7 +2,7 @@ using System.Text;
 
 namespace SUIsei;
 
-/// <summary>A leaf node that draws <see cref="Content"/>: a rect with its border, a glyph run, or an image.</summary>
+/// <summary>A leaf node that draws <see cref="Content"/>: a rect with its border, an image, a glyph run, or a vector shape.</summary>
 public sealed class SpriteVisual : Visual
 {
 	/// <summary>

@@ -24,4 +24,10 @@ internal interface IAnimationTarget<T> : IAnimationTarget
 
 	/// <summary>Drop the animated value, so the object shows its own value again.</summary>
 	void Release(DependencyObject target);
+
+	/// <summary>Whether the target checks the values an animation names (<see cref="Validate"/>).</summary>
+	bool Validates { get; }
+
+	/// <summary>Check a value an animation names, as it begins, throwing on one the target refuses.</summary>
+	void Validate(DependencyObject target, T value);
 }

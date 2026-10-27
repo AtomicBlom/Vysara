@@ -3,6 +3,7 @@ using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -32,14 +33,14 @@ public sealed class DiagnosticsTests
 		Height = h,
 		HorizontalAlignment = HorizontalAlignment.Left,
 		VerticalAlignment = VerticalAlignment.Top,
-		Background = HdrColor.FromRgb(255, 0, 0),
+		Background = new SolidColorBrush(HdrColor.FromRgb(255, 0, 0)),
 	};
 
 	private static ControlTemplate OpacityTemplate() => new()
 	{
 		Factory = control =>
 		{
-			var part = new Border { Background = HdrColor.FromRgb(0, 0, 255) };
+			var part = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(0, 0, 255)) };
 			control.RegisterTemplateBinding(UIElement.OpacityProperty, part, UIElement.OpacityProperty);
 			return part;
 		},
@@ -370,7 +371,7 @@ public sealed class DiagnosticsTests
 	{
 		var box = Box();
 		var (host, view) = Hosted(box);
-		var overlay = new Border { Background = HdrColor.FromRgb(0, 255, 0) };
+		var overlay = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(0, 255, 0)) };
 		Diagnostics.AddOverlay(view, overlay);
 		host.Tick(0.016, 0f, Surface);
 
@@ -383,7 +384,7 @@ public sealed class DiagnosticsTests
 	{
 		var box = Box(30f, 20f);
 		box.Margin = new Thickness(10f, 5f, 0f, 0f);
-		box.RenderTransform = Matrix3x2.CreateTranslation(4f, 0f);
+		box.RenderTransform = new MatrixTransform { Matrix = Matrix3x2.CreateTranslation(4f, 0f) };
 		Hosted(box, layoutScale: 2f);
 
 		// Layout puts it at (10, 5) DIPs, the render transform adds 4, and the view's scale doubles it all.
@@ -402,7 +403,7 @@ public sealed class DiagnosticsTests
 	public void An_overlay_stays_above_popups_that_open_after_it()
 	{
 		var (host, view) = Hosted(Box());
-		var overlay = new Border { Background = HdrColor.FromRgb(0, 255, 0) };
+		var overlay = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(0, 255, 0)) };
 		Diagnostics.AddOverlay(view, overlay);
 		var popup = Box(20f, 20f);
 		view.Root.AddOverlay(popup, Vector2.Zero);

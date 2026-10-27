@@ -22,7 +22,7 @@ public sealed class GroupOpacityTests
 	private static SpriteVisual Fill(float x, float y, float w, float h, HdrColor color) => new()
 	{
 		Transform = Matrix3x2.CreateTranslation(x, y),
-		Content = new RectContent(new Vector2(w, h), color),
+		Content = new RectContent(new Vector2(w, h), new CompositionColorBrush(color)),
 	};
 
 	private static RootVisual SurfaceWith(Visual child, float w = 100f, float h = 100f)
@@ -53,9 +53,10 @@ public sealed class GroupOpacityTests
 		dump.ShouldContain("col=(0,0,1,1)");  // blue, opaque
 		dump.ShouldNotContain("col=(0.5,0,0,0.5)"); // the pre-fix folded red would look like this
 
-		// BeginLayer carries the group's fade tint (a,a,a,a) and bounds (the full surface, no clip).
+		// BeginLayer carries the group's fade tint (a,a,a,a) and its bounds: what the group draws, 0..90 square, not the
+		// surface-wide clip it inherits.
 		dump.ShouldContain("col=(0.5,0.5,0.5,0.5)");
-		dump.ShouldContain("BeginLayer) tex=0 clip=(0,0 100x100)");
+		dump.ShouldContain("BeginLayer) tex=0 clip=(0,0 90x90)");
 	}
 
 	[Test]
@@ -65,7 +66,7 @@ public sealed class GroupOpacityTests
 		var draw = Composite(SurfaceWith(new SpriteVisual
 		{
 			Opacity = 0.5f,
-			Content = new RectContent(new Vector2(60, 60), HdrColor.FromRgb(255, 0, 0)),
+			Content = new RectContent(new Vector2(60, 60), new CompositionColorBrush(HdrColor.FromRgb(255, 0, 0))),
 		}));
 		var dump = draw.Dump();
 

@@ -84,6 +84,8 @@ internal static class TapProperties
 				string text => text,
 				bool flag => flag ? "True" : "False",
 				HdrColor color => Color(color),
+				// A solid brush as the colour it paints, which is how markup writes one and what parses back to it.
+				SUIsei.Media.SolidColorBrush brush => Color(brush.Color),
 				Thickness t => Numbers(t.Left, t.Top, t.Right, t.Bottom),
 				Point p => Numbers(p.X, p.Y),
 				Vector2 v => Numbers(v.X, v.Y),

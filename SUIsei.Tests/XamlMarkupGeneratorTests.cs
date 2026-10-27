@@ -39,7 +39,8 @@ public sealed class XamlMarkupGeneratorTests
 			public static class Palette
 			{
 				public const string Title = "Title";
-				public static readonly SUIsei.HdrColor Accent = SUIsei.HdrColor.FromRgb(1, 2, 3);
+				public static readonly SUIsei.Media.Brush Accent = new SUIsei.Media.SolidColorBrush(SUIsei.HdrColor.FromRgb(1, 2, 3));
+				public static readonly SUIsei.HdrColor Ink = SUIsei.HdrColor.FromRgb(1, 2, 3);
 				public static float Gap => 6f;
 			}
 		}
@@ -109,6 +110,67 @@ public sealed class XamlMarkupGeneratorTests
 	}
 
 	[Test]
+	public void The_stroke_extensions_set_on_a_shape()
+	{
+		var code = Generates("""<Path Data="M 0,0 L 10,0" Stroke="Red" suisei:StrokeTrim.End="0.5" suisei:StrokeBrushMapping.Mode="AlongLength" />""");
+		code.ShouldContain("global::SUIsei.Extensions.StrokeTrim.SetEnd(");
+		code.ShouldContain("global::SUIsei.Extensions.StrokeBrushMappingMode.AlongLength");
+	}
+
+	[Test]
+	public void Typography_NumeralAlignment_is_WinUI_s_attached_property_on_a_text_block()
+	{
+		var code = Generates("""<TextBlock Text="12" Typography.NumeralAlignment="Tabular" />""");
+		code.ShouldContain("global::SUIsei.Documents.Typography.SetNumeralAlignment(");
+		code.ShouldContain("global::SUIsei.FontNumeralAlignment.Tabular");
+		Generates("""<TextBlock Text="12"><Typography.NumeralAlignment>Proportional</Typography.NumeralAlignment></TextBlock>""")
+			.ShouldContain("global::SUIsei.FontNumeralAlignment.Proportional");
+	}
+
+	[Test]
+	[Arguments("<Border Typography.NumeralAlignment=\"Tabular\" />", "SUISEI004")]
+	[Arguments("<TextBlock Typography.NumeralAlignment=\"Wide\" />", "SUISEI012")]
+	public void Typography_NumeralAlignment_off_a_text_block_or_with_an_unknown_value_is_reported_at_its_line(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
+	[Arguments("<Border suisei:StrokeTrim.End=\"0.5\" />")]
+	[Arguments("<Border><suisei:StrokeTrim.End>0.5</suisei:StrokeTrim.End></Border>")]
+	public void An_attached_property_on_an_element_its_setter_does_not_take_is_SUISEI004_at_its_line(string body)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI004");
+		diagnostic.GetMessage().ShouldContain("'StrokeTrim.End'");
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
+	public void The_text_effects_set_on_a_text_block()
+	{
+		var code = Generates("""<TextBlock Text="Go" suisei:TextEffects.OutlineThickness="0.08" suisei:TextEffects.OutlineBrush="Black" suisei:TextEffects.ShadowOffset="0.05,0.1" suisei:TextEffects.ShadowSoftness="0.2" suisei:TextEffects.ShadowBrush="#80000000" />""");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetOutlineThickness(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetOutlineBrush(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetShadowOffset(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetShadowSoftness(");
+		code.ShouldContain("global::SUIsei.Extensions.TextEffects.SetShadowBrush(");
+	}
+
+	[Test]
+	[Arguments("<Border suisei:TextEffects.OutlineThickness=\"0.1\" />", "SUISEI004")]
+	[Arguments("<TextBox suisei:TextEffects.ShadowBrush=\"Black\" />", "SUISEI004")]
+	[Arguments("<TextBlock suisei:TextEffects.ShadowOffset=\"near\" />", "SUISEI012")]
+	public void A_text_effect_off_a_text_block_or_with_a_value_that_does_not_convert_is_reported_at_its_line(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
 	public void An_element_in_a_foreign_namespace_is_unknown_and_a_foreign_attribute_is_ignored_with_a_warning()
 	{
 		Fails("<f:Widget />").Id.ShouldBe("SUISEI003");
@@ -143,7 +205,7 @@ public sealed class XamlMarkupGeneratorTests
 	[Test]
 	[Arguments("<Border><Border.Padding>1,2</Border.Padding></Border>", ".Padding = new global::SUIsei.Thickness(1f, 2f);")]
 	[Arguments("<Border><FrameworkElement.Margin>3</FrameworkElement.Margin></Border>", ".Margin = new global::SUIsei.Thickness(3f);")]
-	[Arguments("<Border><Border.Background>Gold</Border.Background></Border>", ".Background = global::SUIsei.HdrColor.FromRgb(255, 215, 0);")]
+	[Arguments("<Border><Border.Background>Gold</Border.Background></Border>", ".Background = new global::SUIsei.Media.SolidColorBrush(global::SUIsei.HdrColor.FromRgb(255, 215, 0));")]
 	[Arguments("<Border><Border.Child><TextBlock x:Name=\"Inner\" /></Border.Child></Border>", ".Child = Inner;")]
 	[Arguments("<StackPanel x:Name=\"P\"><StackPanel.Children><TextBlock x:Name=\"A\" /><TextBlock x:Name=\"B\" /></StackPanel.Children></StackPanel>", "P.Children.Add(B);")]
 	[Arguments("<suisei:Badge><suisei:Badge.Content><TextBlock x:Name=\"C\" /></suisei:Badge.Content></suisei:Badge>", ".Content = C;")]
@@ -174,10 +236,16 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<suisei:Badge Anchor=\" 1.5  -2 \" />", ".Anchor = new global::SUIsei.Point(1.5f, -2f);")]
 	[Arguments("<suisei:Badge Scale=\"2 3\" />", ".Scale = new global::System.Numerics.Vector2(2f, 3f);")]
 	[Arguments("<suisei:Badge Offset=\"1,2,3\" />", ".Offset = new global::System.Numerics.Vector3(1f, 2f, 3f);")]
-	[Arguments("<Border Background=\"cornflowerblue\" />", ".Background = global::SUIsei.HdrColor.FromRgb(100, 149, 237);")]
-	[Arguments("<Border Background=\"Transparent\" />", ".Background = global::SUIsei.HdrColor.FromRgb(255, 255, 255, 0);")]
-	[Arguments("<Border Background=\"#80FF0000\" />", ".Background = global::SUIsei.HdrColor.FromRgb(255, 0, 0, 128);")]
+	[Arguments("<Border Background=\"cornflowerblue\" />", ".Background = new global::SUIsei.Media.SolidColorBrush(global::SUIsei.HdrColor.FromRgb(100, 149, 237));")]
+	[Arguments("<Border Background=\"Transparent\" />", ".Background = new global::SUIsei.Media.SolidColorBrush(global::SUIsei.HdrColor.FromRgb(255, 255, 255, 0));")]
+	[Arguments("<Border Background=\"#80FF0000\" />", ".Background = new global::SUIsei.Media.SolidColorBrush(global::SUIsei.HdrColor.FromRgb(255, 0, 0, 128));")]
 	[Arguments("<Border Padding=\"1,2,3,4\" />", ".Padding = new global::SUIsei.Thickness(1f, 2f, 3f, 4f);")]
+	[Arguments("<Border CornerRadius=\"4\" />", ".CornerRadius = new global::SUIsei.CornerRadius(4f);")]
+	[Arguments("<Border CornerRadius=\"1,2,3,4\" />", ".CornerRadius = new global::SUIsei.CornerRadius(1f, 2f, 3f, 4f);")]
+	[Arguments("<Border RenderTransformOrigin=\"0.5,0.5\" />", ".RenderTransformOrigin = new global::SUIsei.Point(0.5f, 0.5f);")]
+	[Arguments("<Border><Border.RenderTransform><MatrixTransform Matrix=\"1,0,0,1,10,20\" /></Border.RenderTransform></Border>", ".Matrix = new global::System.Numerics.Matrix3x2(1f, 0f, 0f, 1f, 10f, 20f);")]
+	[Arguments("<TextBlock Foreground=\"Gold\" />", ".Foreground = new global::SUIsei.Media.SolidColorBrush(global::SUIsei.HdrColor.FromRgb(255, 215, 0));")]
+	[Arguments("<Border><Border.Background><SolidColorBrush Color=\"Gold\" Opacity=\"0.5\" /></Border.Background></Border>", ".Color = global::SUIsei.HdrColor.FromRgb(255, 215, 0);")]
 	[Arguments("<Border Width=\"5.\" />", ".Width = 5f;")]
 	[Arguments("<Border HorizontalAlignment=\"Left\" />", ".HorizontalAlignment = global::SUIsei.HorizontalAlignment.Left;")]
 	public void Values_convert_for_their_type(string body, string expected) =>
@@ -191,6 +259,9 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<suisei:Badge Anchor=\"1e40,1\" />", "two numbers")]
 	[Arguments("<Border Background=\"Reddish\" />", "named colour")]
 	[Arguments("<Border Padding=\"1,2,3\" />", "one, two or four numbers")]
+	[Arguments("<Border CornerRadius=\"1,2\" />", "one or four numbers")]
+	[Arguments("<Border><Border.RenderTransform><MatrixTransform Matrix=\"1,0,0,1\" /></Border.RenderTransform></Border>", "six numbers")]
+	[Arguments("<Border Background=\"Brushy\" />", "for a SolidColorBrush")]
 	[Arguments("<Border Width=\"NaN\" />", "a number")]
 	[Arguments("<Border Width=\"1e40\" />", "a number")]
 	[Arguments("<Border HorizontalAlignment=\"Leftish\" />", "a member of HorizontalAlignment")]
@@ -221,6 +292,7 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<Border Width=\"{x:Static local:Palette.Nope}\" />", "SUISEI017")]
 	[Arguments("<Border Width=\"{x:Static Nope.Member}\" />", "SUISEI017")]
 	[Arguments("<Border Width=\"{x:Static local:Palette.Title}\" />", "SUISEI012")]
+	[Arguments("<Border Background=\"{x:Static local:Palette.Ink}\" />", "SUISEI012")] // a colour is not a brush
 	public void Bad_value_markup_is_an_error_at_its_line(string body, string id)
 	{
 		var diagnostic = Fails(body);

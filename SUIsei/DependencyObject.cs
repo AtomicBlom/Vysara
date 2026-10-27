@@ -135,6 +135,12 @@ public abstract class DependencyObject
 	internal void SetRung<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueRung rung, TValue value, bool hasValue)
 		where TOwner : DependencyObject
 	{
+		if (IsSealed)
+			throw new InvalidOperationException(
+				$"This {GetType().Name} is part of SUIsei's built-in look, shared by every control that shows it, and cannot change; " +
+				$"give the element one of its own to change its {dp.Name}.");
+		if (hasValue && rung != ValueRung.Animation && dp.Metadata.Validate is { } validate)
+			validate((TOwner)this, value); // an animation's values are checked as it begins, never frame by frame
 		var slot = Slot(dp);
 		if (slot is null)
 		{
@@ -202,15 +208,27 @@ public abstract class DependencyObject
 	private ValueSlot<TValue>? Slot<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
 		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) ? (ValueSlot<TValue>)s : null;
 
-	// The coerced effective value: resolve the precedence ladder (else the typed default), then coerce. Coercion
-	// applies to the resolved value, not per rung at write time — so a coercion that depends on another property
-	// reflects that property's current value on every read.
+	// The coerced effective value: resolve the precedence ladder (else the default, this object's own where its type
+	// sets one), then coerce. Coercion applies to the resolved value, not per rung at write time — so a coercion that
+	// depends on another property reflects that property's current value on every read.
 	private TValue Effective<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueSlot<TValue>? slot)
 		where TOwner : DependencyObject
 	{
-		var baseValue = slot is not null && slot.TryResolve(out var v) ? v : dp.Metadata.DefaultValue;
-		return dp.Metadata.Coerce is { } coerce ? coerce((TOwner)this, baseValue) : baseValue;
+		var metadata = dp.Metadata;
+		var baseValue = slot is not null && slot.TryResolve(out var v) ? v
+			: metadata.DefaultValueFor is { } defaultFor ? defaultFor((TOwner)this) : metadata.DefaultValue;
+		return metadata.Coerce is { } coerce ? coerce((TOwner)this, baseValue) : baseValue;
 	}
+
+	/// <summary>
+	/// Whether this object can no longer change: every write to it throws. SUIsei seals the brushes of its built-in look,
+	/// which every control showing that look shares (across UI threads, too), so they need no change listeners and nothing
+	/// can recolour them for every control at once by accident.
+	/// </summary>
+	internal bool IsSealed { get; private set; }
+
+	/// <summary>Make this object unchangeable from now on (<see cref="IsSealed"/>).</summary>
+	internal void Seal() => IsSealed = true;
 
 	/// <summary>Hook for a resolved-value change that carries <see cref="InvalidationFlags"/> — <see cref="UIElement"/>
 	/// overrides it to schedule measure/arrange/render. Default no-op (non-visual dependency objects).</summary>

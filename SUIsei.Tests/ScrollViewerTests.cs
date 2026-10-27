@@ -1,7 +1,7 @@
 using System.Numerics;
-
 using SUIsei.Controls;
 using SUIsei.Input;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -13,7 +13,7 @@ public sealed class ScrollViewerTests
 {
 	private static (ScrollViewer Viewer, UIRoot Root) Build(float viewport = 100f, float content = 500f)
 	{
-		var child = new Border { Width = 80f, Height = content, Background = HdrColor.FromRgb(50, 50, 50) };
+		var child = new Border { Width = 80f, Height = content, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
 		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = viewport };
 		var root = new UIRoot(UISurface.Hud) { Content = viewer };
 		root.LayoutPass(new Size(80f, viewport));
@@ -63,7 +63,7 @@ public sealed class ScrollViewerTests
 	[Test]
 	public void Wheel_scrolls_the_viewer()
 	{
-		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
+		var child = new Border { Width = 80f, Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
 		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = viewer;
@@ -80,7 +80,7 @@ public sealed class ScrollViewerTests
 	[Test]
 	public void Dragging_the_thumb_scrolls_the_viewer()
 	{
-		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
+		var child = new Border { Width = 80f, Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
 		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = viewer;
@@ -107,7 +107,7 @@ public sealed class ScrollViewerTests
 	[Test]
 	public void Thumb_brightens_on_hover_and_while_grabbed()
 	{
-		var child = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
+		var child = new Border { Width = 80f, Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
 		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = viewer;

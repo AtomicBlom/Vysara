@@ -24,13 +24,18 @@ internal abstract class EdgeSegment
 	/// <summary>Split into three equal-parameter sub-segments (used by the single-corner "teardrop" colouring case).</summary>
 	public abstract void SplitInThirds(out EdgeSegment a, out EdgeSegment b, out EdgeSegment c);
 
+	/// <summary>This edge traversed the other way, its colour kept.</summary>
+	public abstract EdgeSegment Reversed();
+
 	/// <summary>Expand the axis-aligned ink box to include this segment (endpoints + interior extrema).</summary>
 	public abstract void ExtendBounds(ref double left, ref double bottom, ref double right, ref double top);
 
 	/// <summary>
 	/// Add this segment's contribution to the nonzero winding number of a point: count crossings of the rightward
 	/// horizontal ray at <paramref name="y"/> that lie strictly right of <paramref name="xOrigin"/>, signed by
-	/// whether the contour is moving up (+1) or down (−1) through the ray. Used only for the polarity safety net.
+	/// whether the contour is moving up (+1) or down (−1) through the ray. A crossing at a vertex is counted on one side of
+	/// it only (see <see cref="AddMonotoneCrossings"/>), so the count is exact for any ray. It is the exact fill the
+	/// generator's polarity vote and error correction check the field against.
 	/// </summary>
 	public abstract void AddRayCrossings(double y, double xOrigin, ref int winding);
 
@@ -66,21 +71,46 @@ internal abstract class EdgeSegment
 
 	protected static int Sign(double n) => n > 0 ? 1 : n < 0 ? -1 : 0;
 
-	/// <summary>Net signed crossings of the simple quadratic/linear roots for a horizontal ray, shared by the segments.</summary>
-	protected void CountRoots(ReadOnlySpan<double> roots, int count, double y, double xOrigin, ref int winding)
+	/// <summary>
+	/// Add the crossings of a curve whose y turns at <paramref name="turns"/> (its y-extrema strictly inside (0,1), in
+	/// increasing order), from <paramref name="start"/> to <paramref name="end"/>. Each piece between turns is monotone in
+	/// y and counts the ray once when <paramref name="y"/> lies in the half-open span from its lower end to its upper
+	/// end, the rule <see cref="LinearSegment"/> uses. So a ray through a vertex two segments share, or through a turning
+	/// point, counts once where the outline crosses it and not at all where it only touches it. TrueType coordinates are
+	/// whole font units and texel centres often land on them, so counting a shared vertex at both its segments would
+	/// mark whole texel rows inside a counter as filled.
+	/// </summary>
+	protected void AddMonotoneCrossings(ReadOnlySpan<double> turns, Vector2D start, Vector2D end, double y, double xOrigin, ref int winding)
 	{
-		for (var i = 0; i < count; i++)
+		var ta = 0.0;
+		var ya = start.Y;
+		for (var i = 0; i <= turns.Length; i++)
 		{
-			var t = roots[i];
-			if (t < 0 || t > 1)
-				continue;
-			if (Point(t).X <= xOrigin)
-				continue;
-			var dyAtT = Direction(t).Y;
-			if (dyAtT > 0)
-				winding++;
-			else if (dyAtT < 0)
-				winding--;
+			var last = i == turns.Length;
+			var tb = last ? 1.0 : turns[i];
+			var yb = last ? end.Y : Point(tb).Y;
+			if (((y >= ya && y < yb) || (y >= yb && y < ya)) && Point(CrossingParameter(ta, tb, yb > ya, y)).X > xOrigin)
+				winding += Sign(yb - ya);
+
+			ta = tb;
+			ya = yb;
 		}
+	}
+
+	// The parameter in [ta, tb] where a y-monotone piece meets y, by bisection: exact enough for an inside test, and free of
+	// the root-selection ambiguity a closed-form solve has near the piece's ends.
+	private double CrossingParameter(double ta, double tb, bool rising, double y)
+	{
+		for (var i = 0; i < 48; i++)
+		{
+			var mid = 0.5 * (ta + tb);
+			var my = Point(mid).Y;
+			if (rising ? my < y : my > y)
+				ta = mid;
+			else
+				tb = mid;
+		}
+
+		return 0.5 * (ta + tb);
 	}
 }

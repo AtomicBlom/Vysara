@@ -77,6 +77,7 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 		Apply = value => typed.Write(owner, value);
 		Release = () => typed.Release(owner);
 		ReadCurrent = () => typed.Read(owner);
+		ValidateValue = typed.Validates ? value => typed.Validate(owner, value) : null;
 		return true;
 	}
 
@@ -89,7 +90,28 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 			throw new InvalidOperationException($"A {GetType().Name} cannot animate {target.Name}, which holds a {target.ValueTypeName}.");
 	}
 
-	internal override void CaptureStart() => StartValue = ReadCurrent is { } read ? read() : default!;
+	internal override void CaptureStart()
+	{
+		StartValue = ReadCurrent is { } read ? read() : default!;
+		if (ValidateValue is { } validate)
+			ValidateValues(validate);
+	}
+
+	/// <summary>
+	/// Checks a value against the target property's own rules (its <see cref="PropertyMetadata{TOwner, TValue}.Validate"/>),
+	/// bound with <see cref="Apply"/> from <see cref="TargetProperty"/>; null for a property with none, and for an
+	/// animation whose delegates were set in code.
+	/// </summary>
+	internal Action<T>? ValidateValue { get; set; }
+
+	/// <summary>Check the values this animation names as it begins, through <paramref name="validate"/>: its start and its
+	/// end, and an animation with keyframes each of them. What it produces between them is not checked, so an easing's
+	/// overshoot never throws mid-animation.</summary>
+	private protected virtual void ValidateValues(Action<T> validate)
+	{
+		validate(ValueAt(0d));
+		validate(ValueAt(1d));
+	}
 
 	internal override void ApplyAt(double progress)
 	{

@@ -44,6 +44,17 @@
     <!-- The RoseMCP tap, which RoseTapTests drive as RoseMCP's host would. Its copy of the contract's protocol is internal
          to it, so the tests see only SUIsei's copy, through SUIsei's InternalsVisibleTo. -->
     <ProjectReference Include="..\SUIsei.RoseTap\SUIsei.RoseTap.csproj" />
+    <!-- The MTSDF generator, tested against the font program it bakes: the exact fill its field must reconstruct, and
+         the committed default atlas, which must be what baking its fontset produces. -->
+    <ProjectReference Include="..\SUIsei.Text\SUIsei.Text.csproj" />
+    <!-- The HarfBuzz shaper, to check OpenType features reach HarfBuzz. Its native library ships for Windows only, so
+         those tests skip elsewhere. -->
+    <ProjectReference Include="..\SUIsei.HarfBuzz\SUIsei.HarfBuzz.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\SUIsei\Assets\Fonts\CascadiaCode.ttf" LogicalName="CascadiaCode.ttf" />
+    <EmbeddedResource Include="..\SUIsei\Assets\Fonts\ui-default.fontset.json" LogicalName="ui-default.fontset.json" />
   </ItemGroup>
 
   <Import Project="..\build\SUIsei.targets" />

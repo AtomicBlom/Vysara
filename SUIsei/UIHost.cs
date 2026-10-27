@@ -24,11 +24,13 @@ public sealed class UIHost
 	private readonly KeyRoutedEventArgs _keyArgs = new();
 	private readonly CharacterReceivedRoutedEventArgs _charArgs = new();
 	private readonly List<(DrawListId Id, DrawListData Data)> _drawLists = [];
+	private readonly TextureResidency _textures;
 	private int _nextSurface;
 	private Size _framebufferSize = new(1f, 1f);
 
 	public UIHost()
 	{
+		_textures = new TextureResidency(_views);
 		// A press focuses the nearest focusable element at or above the hit (e.g. a templated control whose hit
 		// target is its non-focusable template root), matching WinUI.
 		Input.OnPress = el => Focus.FocusFromPointer(el);
@@ -77,9 +79,26 @@ public sealed class UIHost
 	/// <summary>The last <see cref="Render"/> output — the draw lists handed to the Loom backend.</summary>
 	public IReadOnlyList<(DrawListId Id, DrawListData Data)> DrawLists => _drawLists;
 
+	/// <summary>
+	/// The texture sources the last <see cref="Render"/> let go of, for the host to release its textures for: each source
+	/// no list in <see cref="DrawLists"/> names any more (an element removed, an image replaced, a view removed, a tree a
+	/// hot-reload rebuild replaced, an image disposed since the render before, whose surfaces this render redrew without
+	/// it). No list in <see cref="DrawLists"/> samples any of them, so a host can release them before drawing those
+	/// lists, deferring destruction past the frames still in flight. Read it after each <see cref="Render"/>: the next one
+	/// replaces it. A source drawn again later is new to the host and uploaded again. A host image's
+	/// (<see cref="Extensions.HostImageSource"/>) texture is the host's own: it stops binding it rather than destroying it.
+	/// A source whose texels changed is not released but replaced, which the host does itself on seeing its
+	/// <see cref="TextureSource.Version"/> move. <see cref="TextureSource.White"/> is never released.
+	/// <para>
+	/// It covers the lists this host hands out. A view composited by a foreign <see cref="IUICompositor"/> hands out
+	/// none, so that compositor tracks what it draws itself, and reads <see cref="TextureSource.IsDisposed"/>.
+	/// </para>
+	/// </summary>
+	public IReadOnlyList<TextureSource> ReleasedTextures => _textures.Released;
+
 	/// <summary>Add a root at <paramref name="layer"/>; returns the handle to keep. The first overlay gets
 	/// <see cref="UISurface.Hud"/> (list 0); subsequent views take higher ids. Pass <paramref name="compositor"/> to
-	/// use a non-default compositor — e.g. one bound to a specific (glyph-id / shaped) <see cref="FontAtlas"/>.</summary>
+	/// use a non-default compositor, such as a foreign engine's. The root's text font is <see cref="UIRoot.Font"/>.</summary>
 	public UIView CreateRoot(in UILayer layer, bool interactive = true, IUICompositor? compositor = null)
 	{
 		var root = new UIRoot(new DrawListId(_nextSurface++), compositor)
@@ -94,10 +113,15 @@ public sealed class UIHost
 		return view;
 	}
 
+	/// <summary>Remove a root. The texture sources it drew are let go of at the next <see cref="Render"/>
+	/// (<see cref="ReleasedTextures"/>).</summary>
 	public void RemoveRoot(UIView view)
 	{
-		if (_views.Remove(view))
-			Diagnostics.ViewsChanged();
+		if (!_views.Remove(view))
+			return;
+
+		view.Textures.Clear(_textures);
+		Diagnostics.ViewsChanged();
 	}
 
 	/// <summary>Queue a neutral pointer event for the next <see cref="Tick"/>.</summary>
@@ -143,12 +167,19 @@ public sealed class UIHost
 		WantsKeyboard = Focus.WantsKeyboard;
 	}
 
-	/// <summary>Composite each view's visual tree → <see cref="DrawLists"/>.</summary>
+	/// <summary>Composite each view's visual tree → <see cref="DrawLists"/>, and report the texture sources no list
+	/// samples any more → <see cref="ReleasedTextures"/>.</summary>
 	public void Render()
 	{
+		_textures.BeginRender();
 		_drawLists.Clear();
 		foreach (var view in _views)
-			_drawLists.Add((view.Surface, view.Root.Render()));
+		{
+			var list = view.Root.Render();
+			_drawLists.Add((view.Surface, list));
+			view.Textures.Track(list, _textures);
+		}
+		_textures.EndRender();
 	}
 
 	/// <summary>Focus / capture / over-chains for input + focus tests.</summary>
@@ -157,6 +188,15 @@ public sealed class UIHost
 		var sb = new StringBuilder();
 		Focus.DumpState(sb);
 		Input.DumpState(sb);
+		return sb.ToString();
+	}
+
+	/// <summary>The texture sources this host's surfaces hold, each with how many surfaces draw it, and those the last
+	/// <see cref="Render"/> released.</summary>
+	public string DumpTextures()
+	{
+		var sb = new StringBuilder();
+		_textures.Dump(sb);
 		return sb.ToString();
 	}
 

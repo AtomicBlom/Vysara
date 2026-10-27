@@ -2,21 +2,28 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using SUIsei.Drawing;
+using SUIsei.Extensions;
 
 namespace SUIsei.Rasterizer;
 
 /// <summary>
 /// A CPU reference rasterizer for the neutral <see cref="DrawListData"/> — the software twin of the engine's
 /// <c>ui.slang</c> fragment shader (Loom.Shaders/Shaders/ui.slang). It walks the draw commands, rasterizes each
-/// triangle of every quad, and shades per pixel with the same analytic math the GPU ran: rounded-box SDFs for
-/// rect/border, and (later) MTSDF coverage for glyphs. Compositing is premultiplied alpha-over in <b>linear</b>
-/// space (the GPU rendered to a linear target and re-encoded sRGB on store), so <see cref="ResolveToRgba8"/> does
-/// that sRGB encode itself.
+/// triangle, and shades per pixel with the same analytic math the GPU ran: rounded-box SDFs for rect/border, MTSDF
+/// coverage for glyphs, and signed edge distances for vector geometry, each antialiased as its distance over its
+/// screen-space gradient's length. Compositing is premultiplied alpha-over in <b>linear</b> space (the GPU rendered to a
+/// linear target and re-encoded sRGB on store), so <see cref="ResolveToRgba8"/> does that sRGB encode itself. Pixels are
+/// sampled at their centres with the GPU's top-left fill rule, so a centre on an edge two triangles share (a quad's
+/// diagonal, the cut between a gradient's bands) is drawn once, never twice or not at all.
 ///
-/// Covers all five drawable kinds: <see cref="UIPrimKind.Fill"/>/<see cref="UIPrimKind.RoundedRect"/>/<see cref="UIPrimKind.Border"/>
-/// (analytic) plus <see cref="UIPrimKind.Glyph"/> (MTSDF) and <see cref="UIPrimKind.Image"/> (tinted blit), which
-/// sample the texture in their <c>TextureIndex</c> slot of the list's <see cref="DrawListData.TextureSlots"/>. A glyph/image
-/// command whose slot the list lacks is skipped (counted in <see cref="SkippedCommands"/>). It also honours the
+/// Covers all six drawable kinds: <see cref="UIPrimKind.Fill"/>/<see cref="UIPrimKind.RoundedRect"/>/<see cref="UIPrimKind.Border"/>
+/// (analytic), <see cref="UIPrimKind.Glyph"/> (MTSDF), <see cref="UIPrimKind.Image"/> (tinted blit) and
+/// <see cref="UIPrimKind.Vector"/> (edge distances times a texel), the last three sampling the texture in their
+/// <c>TextureIndex</c> slot of the list's <see cref="DrawListData.TextureSlots"/>, read as the slot's source declares: an
+/// sRGB source decoded per texel before filtering, a straight-alpha one's image and vector samples premultiplied after it.
+/// Such a command whose slot the list lacks, or whose slot holds a host image (its texels are the host's), is skipped
+/// (counted in <see cref="SkippedCommands"/>). A disposed source a list still names is drawn, as a host draws it from
+/// the texture it keeps until its next render releases it. It also honours the
 /// <see cref="UIPrimKind.BeginLayer"/>/<see cref="UIPrimKind.EndLayer"/> group-opacity markers by rendering the
 /// bracketed subtree into an offscreen framebuffer and compositing it back at the group's fade alpha — the CPU twin
 /// of the backend RT stack, so it gives true (non-double-blended) group opacity headlessly. A command whose tag is
@@ -40,11 +47,19 @@ sealed class SoftwareRasterizer
 	// Framebuffer in LINEAR, PREMULTIPLIED RGBA — the space the GPU blended in. Resolved to sRGB bytes on demand.
 	private readonly Vector4[] _fb;
 
-	// Open render-to-texture group layers (BeginLayer/EndLayer). Draws target the top layer's framebuffer; on
-	// EndLayer the layer is composited back into its parent at the group's fade alpha — the CPU mirror of the
-	// backend RT stack. The layer framebuffer is full surface size (children render at their natural surface
-	// positions), so the composite is a straight per-pixel premultiplied alpha-over of the whole buffer.
-	private readonly Stack<(Vector4[] Fb, float Alpha)> _layers = new();
+	// Open render-to-texture group layers (BeginLayer/EndLayer). Draws target the top layer's framebuffer, clipped to
+	// the layer's rect (its BeginLayer marker's ClipRect, as a backend's render area is); on EndLayer the rect is
+	// composited back into its parent at the group's fade alpha — the CPU mirror of the backend RT stack. A layer's
+	// framebuffer is surface-sized (children render at their natural surface positions) but only its rect is cleared and
+	// composited. Framebuffers are pooled by nesting depth, so rendering layers allocates nothing once warm.
+	private readonly Stack<(Vector4[] Fb, float Alpha, PixelRect Rect)> _layers = new();
+	private readonly List<Vector4[]> _layerPool = [];
+
+	/// <summary>An inclusive pixel rectangle.</summary>
+	private readonly record struct PixelRect(int X0, int Y0, int X1, int Y1)
+	{
+		public bool IsEmpty => X0 > X1 || Y0 > Y1;
+	}
 
 	// The textures of the list being drawn, by slot: its TextureSlots resolved through _textureCache. Rebound at the
 	// start of each Render, so a command's TextureIndex always means a slot of the list it came from.
@@ -64,10 +79,16 @@ sealed class SoftwareRasterizer
 	public int Width => _width;
 	public int Height => _height;
 
+	/// <summary>The framebuffer's value at pixel (<paramref name="x"/>, <paramref name="y"/>): linear light, premultiplied,
+	/// before any clamp, so colours above paper white read as drawn.</summary>
+	public Vector4 ReadLinear(int x, int y) => _fb[y * _width + x];
+
 	/// <summary>Triangles rasterized by the last <see cref="Render"/> call (perf-shape instrumentation).</summary>
 	public int TrianglesDrawn { get; private set; }
 
-	/// <summary>Glyph/Image commands skipped in the last <see cref="Render"/> call because their slot was missing.</summary>
+	/// <summary>Glyph, image and vector commands skipped in the last <see cref="Render"/> or <see cref="RenderParallel(DrawListData, Vector4?, float)"/>
+	/// call because their slot was missing or held a host image (<see cref="HostImageSource"/>), whose texels are the
+	/// host's.</summary>
 	public int SkippedCommands { get; private set; }
 
 	/// <summary>Group-opacity layers composited back in the last <see cref="Render"/> call (EndLayer markers).</summary>
@@ -77,7 +98,9 @@ sealed class SoftwareRasterizer
 	private Vector4[] ActiveTarget => _layers.Count > 0 ? _layers.Peek().Fb : _fb;
 
 	// Bind a list's slot table: slot i samples the texels of slots[i], copied once per source and version, as a host
-	// uploads each source once and replaces it when its version moves.
+	// uploads each source once and replaces it when its version moves (here by copying the new texels over the old ones,
+	// so a source rewritten every frame allocates nothing). A host image has no texels to copy, so its slot stays unbound
+	// and what samples it is skipped.
 	private void BindSlots(IReadOnlyList<TextureSource> slots)
 	{
 		if (_slots.Length < slots.Count)
@@ -86,13 +109,63 @@ sealed class SoftwareRasterizer
 		for (var i = 0; i < slots.Count; i++)
 		{
 			var source = slots[i];
+			if (source is HostImageSource)
+			{
+				_slots[i] = null;
+				continue;
+			}
 			if (!_textureCache.TryGetValue(source, out var cached) || cached.Version != source.Version)
 			{
-				cached = (source.Version, Texture.FromSource(source));
+				cached = (source.Version, cached.Texture is { } texture && texture.TryUpdate(source) ? texture : Texture.FromSource(source));
 				_textureCache[source] = cached;
 			}
 			_slots[i] = cached.Texture;
 		}
+	}
+
+	/// <summary>Drop the texels kept for each of <paramref name="sources"/>: what a host does with
+	/// <see cref="UIHost.ReleasedTextures"/> after each render, so a source no list draws is not kept alive here.</summary>
+	public void ReleaseTextures(IReadOnlyList<TextureSource> sources)
+	{
+		for (var i = 0; i < sources.Count; i++)
+			_textureCache.Remove(sources[i]);
+	}
+
+	/// <summary>How many sources' texels the rasterizer keeps.</summary>
+	public int CachedTextureCount => _textureCache.Count;
+
+	private PixelRect FullSurface => new(0, 0, _width - 1, _height - 1);
+
+	// Every pixel a rect touches: inclusive integer bounds, rounded out and clamped to the framebuffer. A layer's area,
+	// which must hold all of whatever is drawn into it.
+	private PixelRect PixelBounds(in Rect r) => new(
+		Math.Max(0, (int)MathF.Floor(r.X)),
+		Math.Max(0, (int)MathF.Floor(r.Y)),
+		Math.Min(_width - 1, (int)MathF.Ceiling(r.Right) - 1),
+		Math.Min(_height - 1, (int)MathF.Ceiling(r.Bottom) - 1));
+
+	// The pixels a command's clip keeps: those whose centres it covers, from the first whose centre lies on or past its
+	// near edge to the last whose centre lies before its far edge, as a GPU's scissor of the same rect does (the host
+	// rounds the rect to its scissor by this rule). Inclusive integer bounds, clamped to the framebuffer; empty when the
+	// clip holds no pixel centre.
+	private PixelRect ScissorBounds(in Rect r) => new(
+		Math.Max(0, FirstCentreAtOrPast(r.X)),
+		Math.Max(0, FirstCentreAtOrPast(r.Y)),
+		Math.Min(_width - 1, FirstCentreAtOrPast(r.Right) - 1),
+		Math.Min(_height - 1, FirstCentreAtOrPast(r.Bottom) - 1));
+
+	// The first pixel whose centre (its index + 0.5) lies on or past `edge`.
+	private static int FirstCentreAtOrPast(float edge) => (int)MathF.Ceiling(edge - 0.5f);
+
+	private static PixelRect Intersect(PixelRect a, PixelRect b) =>
+		new(Math.Max(a.X0, b.X0), Math.Max(a.Y0, b.Y0), Math.Min(a.X1, b.X1), Math.Min(a.Y1, b.Y1));
+
+	// The pooled framebuffer for a layer opened at nesting `depth`.
+	private Vector4[] RentLayer(int depth)
+	{
+		while (_layerPool.Count <= depth)
+			_layerPool.Add(new Vector4[_width * _height]);
+		return _layerPool[depth];
 	}
 
 	private bool TryGetSlot(int index, out Texture? texture)
@@ -155,19 +228,26 @@ sealed class SoftwareRasterizer
 			if (kind == UIPrimKind.BeginLayer)
 			{
 				var alpha = (float)verts[cmd.VertexOffset].Color.A;
-				_layers.Push((new Vector4[_width * _height], alpha));
+				var rect = Intersect(PixelBounds(cmd.ClipRect), _layers.Count > 0 ? _layers.Peek().Rect : FullSurface);
+				var fb = RentLayer(_layers.Count);
+				for (var y = rect.Y0; y <= rect.Y1; y++)
+					Array.Clear(fb, y * _width + rect.X0, rect.X1 - rect.X0 + 1);
+				_layers.Push((fb, alpha, rect));
 				continue;
 			}
 			if (kind == UIPrimKind.EndLayer)
 			{
 				if (_layers.Count == 0)
 					continue;
-				var (layerFb, layerAlpha) = _layers.Pop();
+				var (layerFb, layerAlpha, rect) = _layers.Pop();
 				var dst = ActiveTarget;
-				for (var i = 0; i < dst.Length; i++)
+				for (var y = rect.Y0; y <= rect.Y1; y++)
 				{
-					var src = layerFb[i] * layerAlpha; // fade the premultiplied layer by the group alpha
-					dst[i] = src + dst[i] * (1f - src.W);
+					for (var i = y * _width + rect.X0; i <= y * _width + rect.X1; i++)
+					{
+						var src = layerFb[i] * layerAlpha; // fade the premultiplied layer by the group alpha
+						dst[i] = src + dst[i] * (1f - src.W);
+					}
 				}
 				LayersComposited++;
 				continue;
@@ -175,7 +255,7 @@ sealed class SoftwareRasterizer
 
 			// Texture-sampling kinds need their slot; skip (and count) a command whose slot the list doesn't have.
 			Texture? tex = null;
-			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !TryGetSlot(cmd.TextureIndex, out tex))
+			if (kind is UIPrimKind.Glyph or UIPrimKind.Image or UIPrimKind.Vector && !TryGetSlot(cmd.TextureIndex, out tex))
 			{
 				SkippedCommands++;
 				continue;
@@ -183,13 +263,10 @@ sealed class SoftwareRasterizer
 
 			var target = ActiveTarget;
 
-			// Scissor → inclusive integer pixel bounds, clamped to the framebuffer.
-			var clip = cmd.ClipRect;
-			var sx0 = Math.Max(0, (int)MathF.Floor(clip.X));
-			var sy0 = Math.Max(0, (int)MathF.Floor(clip.Y));
-			var sx1 = Math.Min(_width - 1, (int)MathF.Ceiling(clip.Right) - 1);
-			var sy1 = Math.Min(_height - 1, (int)MathF.Ceiling(clip.Bottom) - 1);
-			if (sx0 > sx1 || sy0 > sy1)
+			// Scissor → inclusive integer pixel bounds, clamped to the framebuffer and to the open layer's rect.
+			var scissor = Intersect(ScissorBounds(cmd.ClipRect), _layers.Count > 0 ? _layers.Peek().Rect : FullSurface);
+			var (sx0, sy0, sx1, sy1) = (scissor.X0, scissor.Y0, scissor.X1, scissor.Y1);
+			if (scissor.IsEmpty)
 				continue;
 
 			// Indices are 16-bit and relative to the command's VertexOffset, the base vertex every backend draws with.
@@ -254,6 +331,7 @@ sealed class SoftwareRasterizer
 		var verts = draw.Vertices;
 		var indices = draw.Indices;
 		var commands = draw.Commands;
+		SkippedCommands = CountUnbound(commands.Span); // counted once here: every band replays every command
 		var fb = _fb;
 		var width = _width;
 		var fullWidth = rx0 == 0 && rx1 == width - 1;
@@ -291,14 +369,14 @@ sealed class SoftwareRasterizer
 			var kind = (UIPrimKind)cmd.Tag;
 
 			Texture? tex = null;
-			if (kind is UIPrimKind.Glyph or UIPrimKind.Image && !TryGetSlot(cmd.TextureIndex, out tex))
+			if (kind is UIPrimKind.Glyph or UIPrimKind.Image or UIPrimKind.Vector && !TryGetSlot(cmd.TextureIndex, out tex))
 				continue;
 
-			var clip = cmd.ClipRect;
-			var sx0 = Math.Max(bandX0, (int)MathF.Floor(clip.X));
-			var sy0 = Math.Max(bandY0, (int)MathF.Floor(clip.Y));
-			var sx1 = Math.Min(bandX1, (int)MathF.Ceiling(clip.Right) - 1);
-			var sy1 = Math.Min(bandY1, (int)MathF.Ceiling(clip.Bottom) - 1);
+			var clip = ScissorBounds(cmd.ClipRect);
+			var sx0 = Math.Max(bandX0, clip.X0);
+			var sy0 = Math.Max(bandY0, clip.Y0);
+			var sx1 = Math.Min(bandX1, clip.X1);
+			var sy1 = Math.Min(bandY1, clip.Y1);
 			if (sx0 > sx1 || sy0 > sy1)
 				continue;
 
@@ -315,6 +393,18 @@ sealed class SoftwareRasterizer
 		return triangles;
 	}
 
+	// The texture-sampling commands whose slot is unbound, which every band skips.
+	private int CountUnbound(ReadOnlySpan<DrawCommand> commands)
+	{
+		var unbound = 0;
+		foreach (ref readonly var cmd in commands)
+		{
+			if ((UIPrimKind)cmd.Tag is UIPrimKind.Glyph or UIPrimKind.Image or UIPrimKind.Vector && !TryGetSlot(cmd.TextureIndex, out _))
+				unbound++;
+		}
+		return unbound;
+	}
+
 	// Check every command's tag before anything is drawn, and report whether the list opens group-opacity layers. A tag
 	// that names no kind this rasterizer draws throws: shading it as some other kind would hide a mismatch between the
 	// producer and the oracle. The tag is matched as the whole uint, because casting it to the byte-sized UIPrimKind first
@@ -327,7 +417,7 @@ sealed class SoftwareRasterizer
 			switch (commands[i].Tag)
 			{
 				case (uint)UIPrimKind.Fill or (uint)UIPrimKind.RoundedRect or (uint)UIPrimKind.Border
-					or (uint)UIPrimKind.Glyph or (uint)UIPrimKind.Image:
+					or (uint)UIPrimKind.Glyph or (uint)UIPrimKind.Image or (uint)UIPrimKind.Vector:
 					break;
 				case (uint)UIPrimKind.BeginLayer or (uint)UIPrimKind.EndLayer:
 					layers = true;
@@ -435,6 +525,12 @@ sealed class SoftwareRasterizer
 		var duvdx = dw0dx * va.Uv + dw1dx * vb.Uv + dw2dx * vc.Uv;
 		var duvdy = dw0dy * va.Uv + dw1dy * vb.Uv + dw2dy * vc.Uv;
 
+		// The Vector prim's distances are linear across the triangle, so their screen-space gradients are constant: the
+		// exact values the GPU's ddx/ddy give. Each distance over its gradient's length is its edge's pixel distance.
+		var dpdx = dw0dx * va.Custom + dw1dx * vb.Custom + dw2dx * vc.Custom;
+		var dpdy = dw0dy * va.Custom + dw1dy * vb.Custom + dw2dy * vc.Custom;
+		var gradient = Vector4.SquareRoot(dpdx * dpdx + dpdy * dpdy);
+
 		Vector4 c0 = va.Color.ToVector4(), c1 = vb.Color.ToVector4(), c2 = vc.Color.ToVector4();
 
 		for (var y = minY; y <= maxY; y++)
@@ -445,14 +541,18 @@ sealed class SoftwareRasterizer
 				var w0 = Edge(p1, p2, pt) * inv;
 				var w1 = Edge(p2, p0, pt) * inv;
 				var w2 = Edge(p0, p1, pt) * inv;
-				if (w0 < 0f || w1 < 0f || w2 < 0f)
+				if (w0 < -NearEdge || w1 < -NearEdge || w2 < -NearEdge)
 					continue; // outside (winding handled by the sign of inv)
+							  // A centre on or within rounding of an edge: decide it as a GPU does, so a pixel on an edge two triangles
+							  // share (a quad's diagonal, the cut between two gradient bands) is drawn by exactly one of them.
+				if ((w0 <= NearEdge || w1 <= NearEdge || w2 <= NearEdge) && !Owns(p0, p1, p2, pt, area > 0f))
+					continue;
 
 				var uv = w0 * va.Uv + w1 * vb.Uv + w2 * vc.Uv;
 				var col = w0 * c0 + w1 * c1 + w2 * c2;     // premultiplied, linear
 				var prm = w0 * va.Custom + w1 * vb.Custom + w2 * vc.Custom;
 
-				var src = Shade(kind, uv, col, prm, duvdx, duvdy, tex);
+				var src = Shade(kind, uv, col, prm, duvdx, duvdy, gradient, tex);
 				if (hdr)
 				{
 					src.X *= paperWhite;
@@ -470,21 +570,32 @@ sealed class SoftwareRasterizer
 	// ── ui.slang fragmentMain, per kind ───────────────────────────────────────────────────────────────────────
 	// colour arrives premultiplied; each kind multiplies it by a coverage in [0,1] (which keeps it premultiplied).
 
-	private static Vector4 Shade(UIPrimKind kind, Vector2 uv, Vector4 col, Vector4 prm, Vector2 duvdx, Vector2 duvdy, Texture? tex)
+	private static Vector4 Shade(UIPrimKind kind, Vector2 uv, Vector4 col, Vector4 prm, Vector2 duvdx, Vector2 duvdy, Vector4 gradient, Texture? tex)
 	{
 		switch (kind)
 		{
+			case UIPrimKind.Vector:
+				{
+					// Four half-plane distances (params), each turned into a one-pixel coverage ramp centred on its edge;
+					// an unused slot is a constant, whose zero gradient makes its factor 1. Then the slot's colour.
+					var coverage = EdgeCoverage(prm.X, gradient.X) * EdgeCoverage(prm.Y, gradient.Y)
+						* EdgeCoverage(prm.Z, gradient.Z) * EdgeCoverage(prm.W, gradient.W);
+					return col * coverage * SampleColour(tex!, uv);
+				}
 			case UIPrimKind.Glyph:
 				{
-					// MTSDF text: median of the RGB distances, recentred at 0.5, then screenPxRange-scaled coverage.
-					// params.x (Custom.X) carries the per-run screenPxRange. The .a channel is a true SDF, unused here.
+					// MTSDF text. params = (screenPxRange, bias, softness, _), bias and softness in units of the distance
+					// range. A fill (both 0) reads the median of the RGB distances; an effect reads the true distance in A,
+					// its edge moved out by the bias, ramped over the softness but never under one pixel.
 					var s = tex!.Sample(uv);
-					var sd = Median3(s.X, s.Y, s.Z) - 0.5f;
-					return col * Saturate(sd * prm.X + 0.5f);
+					var effect = prm.Y > 0f || prm.Z > 0f;
+					var sd = effect ? s.W - 0.5f + prm.Y : Median3(s.X, s.Y, s.Z) - 0.5f;
+					var scale = effect ? MathF.Min(prm.X, 1f / MathF.Max(prm.Z, 1e-6f)) : prm.X;
+					return col * Saturate(sd * scale + 0.5f);
 				}
 			case UIPrimKind.Image:
-				// Tinted blit: sample the source and multiply by the (premultiplied) vertex colour.
-				return col * tex!.Sample(uv);
+				// Tinted blit: sample the source's colour and multiply by the (premultiplied) vertex colour.
+				return col * SampleColour(tex!, uv);
 			case UIPrimKind.RoundedRect:
 				{
 					// params = (cornerRadius, _, sizeX, sizeY); uv is 0..1 across the rect, scaled to local pixels.
@@ -516,16 +627,28 @@ sealed class SoftwareRasterizer
 		}
 	}
 
-	// Coverage of a rounded box at p with ~1px analytic AA. Evaluates the SDF at p and one screen pixel over in x/y
-	// to form fwidth() = |ddx d| + |ddy d| (the GPU's screen-space derivative), then smoothsteps across it.
+	// The premultiplied colour a slot gives the kinds that paint with it (image, vector): the filtered, decoded sample,
+	// multiplied by its alpha when its source is straight — after the decode and the filtering, as the shader does.
+	private static Vector4 SampleColour(Texture tex, Vector2 uv)
+	{
+		var s = tex.Sample(uv);
+		return tex.AlphaMode == TextureAlphaMode.Straight ? new Vector4(s.X * s.W, s.Y * s.W, s.Z * s.W, s.W) : s;
+	}
+
+	// Coverage of a rounded box at p with one-pixel analytic AA. Evaluates the SDF at p and one screen pixel over in x and
+	// y for its screen-space derivatives (the GPU's ddx/ddy), and divides the distance by the gradient's length: the
+	// pixel distance to the edge, the same at any angle, which fwidth's |ddx| + |ddy| over-blurs by up to √2 at 45°.
 	private static float Coverage(Vector2 p, Vector2 dpdx, Vector2 dpdy, Vector2 half, float radius)
 	{
 		var d = SdRoundedBox(p, half, radius);
 		var ddx = SdRoundedBox(p + dpdx, half, radius) - d;
 		var ddy = SdRoundedBox(p + dpdy, half, radius) - d;
-		var w = MathF.Max(MathF.Abs(ddx) + MathF.Abs(ddy), 1e-4f);
-		return 1f - Smoothstep(-w, w, d);
+		return EdgeCoverage(-d, MathF.Sqrt(ddx * ddx + ddy * ddy));
 	}
+
+	// The coverage of a pixel whose centre is `distance` inside an edge (negative outside), the distance in units whose
+	// screen-space gradient has length `gradient`: a one-pixel linear ramp centred on the edge.
+	private static float EdgeCoverage(float distance, float gradient) => Saturate(0.5f + distance / MathF.Max(gradient, 1e-6f));
 
 	// Signed distance to a rounded box (iquilezles.org/articles/distfunctions2d). Negative inside.
 	private static float SdRoundedBox(Vector2 p, Vector2 b, float r)
@@ -538,14 +661,33 @@ sealed class SoftwareRasterizer
 	private static float Edge(Vector2 a, Vector2 b, Vector2 p) =>
 		(b.X - a.X) * (p.Y - a.Y) - (b.Y - a.Y) * (p.X - a.X);
 
+	// How close (as a barycentric weight) a pixel centre must be to an edge before the fill rule decides it rather than
+	// the plain inside test: wide enough to cover the rounding between two triangles' views of a shared edge.
+	private const float NearEdge = 1e-5f;
+
+	// The GPU fill rule for a pixel centre at or near an edge: inside each edge, decided from that edge's own canonical
+	// orientation so two triangles sharing it see exactly opposite values, and a centre exactly on an edge belongs to the
+	// triangle for which that edge is a top or left one (Direct3D's and Vulkan's top-left rule).
+	private static bool Owns(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 pt, bool positive) =>
+		InsideEdge(p1, p2, pt, positive) && InsideEdge(p2, p0, pt, positive) && InsideEdge(p0, p1, pt, positive);
+
+	private static bool InsideEdge(Vector2 a, Vector2 b, Vector2 p, bool positive)
+	{
+		if (!positive)
+			(a, b) = (b, a); // orient the edge so the triangle lies on its positive side
+		var e = Precedes(a, b) ? Edge(a, b, p) : -Edge(b, a, p);
+		if (e != 0f)
+			return e > 0f;
+		// On the edge. In y-down pixels, with the triangle on the positive side, a top edge runs horizontally rightwards
+		// (the triangle below it) and a left edge runs upwards (the triangle to its right).
+		var d = b - a;
+		return d.Y < 0f || (d.Y == 0f && d.X > 0f);
+	}
+
+	private static bool Precedes(Vector2 a, Vector2 b) => a.X < b.X || (a.X == b.X && a.Y < b.Y);
+
 	private static float Median3(float a, float b, float c) =>
 		MathF.Max(MathF.Min(a, b), MathF.Min(MathF.Max(a, b), c));
-
-	private static float Smoothstep(float edge0, float edge1, float x)
-	{
-		var t = Saturate((x - edge0) / (edge1 - edge0));
-		return t * t * (3f - 2f * t);
-	}
 
 	private static float Saturate(float x) => x < 0f ? 0f : x > 1f ? 1f : x;
 

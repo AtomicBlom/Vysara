@@ -52,6 +52,16 @@ public sealed class FontAtlasTests
 	}
 
 	[Test]
+	public void The_default_field_reaches_far_enough_past_the_ink_for_an_outline_or_shadow_at_14px()
+	{
+		var font = FontAtlas.LoadEmbeddedDefault();
+		font.DistanceRangeEm.ShouldBe(font.DistanceRange / font.BakeSize, 1e-6f);
+		// Half the range either side of the edge: at the default 14 px text size, room for a 2 px outline and its half-pixel
+		// ramp, or a 1 px outline under a 1.5 px soft shadow.
+		(font.DistanceRangeEm / 2 * 14f).ShouldBeGreaterThanOrEqualTo(2.5f);
+	}
+
+	[Test]
 	public void MeasureWidth_sums_glyph_advances()
 	{
 		var font = FontAtlas.LoadEmbeddedDefault();

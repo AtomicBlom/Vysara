@@ -86,6 +86,8 @@ internal sealed class QuadraticSegment : EdgeSegment
 		c = new QuadraticSegment(Point(2.0 / 3.0), Vector2D.Mix(_p1, _p2, 2.0 / 3.0), _p2) { Color = Color };
 	}
 
+	public override EdgeSegment Reversed() => new QuadraticSegment(_p2, _p1, _p0) { Color = Color };
+
 	public override void ExtendBounds(ref double left, ref double bottom, ref double right, ref double top)
 	{
 		LinearSegment.Include(_p0, ref left, ref bottom, ref right, ref top);
@@ -108,12 +110,18 @@ internal sealed class QuadraticSegment : EdgeSegment
 
 	public override void AddRayCrossings(double y, double xOrigin, ref int winding)
 	{
+		// y(t) turns where its derivative 2·(ab.y + t·br.y) is zero: at most once.
 		var ab = _p1 - _p0;
 		var br = _p2 - _p1 - ab;
-		Span<double> t = stackalloc double[2];
-		var n = EquationSolver.SolveQuadratic(t, br.Y, 2 * ab.Y, _p0.Y - y);
-		if (n < 0)
-			n = 0;
-		CountRoots(t, n, y, xOrigin, ref winding);
+		Span<double> turns = stackalloc double[1];
+		var n = 0;
+		if (br.Y != 0)
+		{
+			var t = -ab.Y / br.Y;
+			if (t > 0 && t < 1)
+				turns[n++] = t;
+		}
+
+		AddMonotoneCrossings(turns[..n], _p0, _p2, y, xOrigin, ref winding);
 	}
 }

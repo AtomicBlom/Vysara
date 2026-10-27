@@ -32,8 +32,10 @@ internal sealed class GalleryRenderer
 	public GalleryRenderer(Action onQuit)
 	{
 		_gallery.Quit = onQuit;
-		// Composite against the glyph-id atlas so its HarfBuzz shaper drives every glyph run (ligatures included).
-		_view = _host.CreateRoot(UILayer.Default, interactive: true, compositor: new DrawListCompositor(_font));
+		// Lay text out and draw it with the glyph-id atlas, so its HarfBuzz shaper drives every glyph run (ligatures
+		// included) and measuring and drawing agree.
+		_view = _host.CreateRoot(UILayer.Default, interactive: true);
+		_view.Root.Font = _font;
 		_view.Root.Content = _gallery.Root;
 	}
 
@@ -88,16 +90,19 @@ internal sealed class GalleryRenderer
 		_lastSeconds = seconds;
 
 		var t0 = Stopwatch.GetTimestamp();
+		_gallery.Animate(seconds);
 		_host.Tick(dt, (float)seconds, new Vector2(width, height));
 		var t1 = Stopwatch.GetTimestamp();
 		_host.Render();
 		var t2 = Stopwatch.GetTimestamp();
 		_tickMs = Ms(t0, t1);
 		_composeMs = Ms(t1, t2);
+		_rasterizer!.ReleaseTextures(_host.ReleasedTextures);
 
+		// A texel change (a rewritten bitmap) moves only the texture revision, so both revisions key the frame.
 		long key = (width * 73856093L) ^ (height * 19349663L);
 		foreach (var (_, data) in _host.DrawLists)
-			key = key * 31 + data.Revision;
+			key = (key * 31 + data.Revision) * 31 + data.TextureRevision;
 		return key;
 	}
 

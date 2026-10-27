@@ -1,8 +1,8 @@
 using System.Numerics;
-
 using SUIsei.Controls;
 using SUIsei.Extensions;
 using SUIsei.Input;
+using SUIsei.Media;
 
 namespace SUIsei.Tests;
 
@@ -56,7 +56,7 @@ public sealed class ExtensionsTests
 	[Arguments(10f, 10f)]
 	public void One_wheel_notch_scrolls_by_the_wheel_scroll_amount(float? amount, float expected)
 	{
-		var content = new Border { Width = 80f, Height = 500f, Background = HdrColor.FromRgb(50, 50, 50) };
+		var content = new Border { Width = 80f, Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
 		var viewer = new ScrollViewer { Content = content, Width = 80f, Height = 100f };
 		if (amount is { } value)
 			Scrolling.SetWheelScrollAmount(viewer, value);

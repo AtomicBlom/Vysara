@@ -110,6 +110,10 @@ public abstract class DependencyProperty
 	/// where the value type admits null.</summary>
 	internal abstract bool Accepts(object? value);
 
+	/// <summary>Whether <paramref name="target"/> can hold this property: any object for an attached property, else an
+	/// instance of its owner type.</summary>
+	internal abstract bool AppliesTo(DependencyObject target);
+
 	public override string ToString() => $"{Name}#{GlobalIndex}";
 }
 
@@ -147,6 +151,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 
 	internal override bool Accepts(object? value) => value is TValue || (value is null && default(TValue) is null);
 
+	internal override bool AppliesTo(DependencyObject target) => Kind == DependencyPropertyKind.Attached || target is TOwner;
+
 	string IAnimationTarget.ValueTypeName => typeof(TValue).Name;
 
 	TValue IAnimationTarget<TValue>.Read(DependencyObject target) => target.GetValue(this);
@@ -154,4 +160,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 	void IAnimationTarget<TValue>.Write(DependencyObject target, TValue value) => target.SetAnimatedValue(this, value);
 
 	void IAnimationTarget<TValue>.Release(DependencyObject target) => target.ClearAnimatedValue(this);
+
+	bool IAnimationTarget<TValue>.Validates => Metadata.Validate is not null;
+
+	void IAnimationTarget<TValue>.Validate(DependencyObject target, TValue value) => Metadata.Validate?.Invoke((TOwner)target, value);
 }

@@ -116,6 +116,8 @@ internal sealed class CubicSegment(Vector2D p0, Vector2D p1, Vector2D p2, Vector
 		c.Color = Color;
 	}
 
+	public override EdgeSegment Reversed() => new CubicSegment(_p3, _p2, _p1, _p0) { Color = Color };
+
 	public override void ExtendBounds(ref double left, ref double bottom, ref double right, ref double top)
 	{
 		LinearSegment.Include(_p0, ref left, ref bottom, ref right, ref top);
@@ -136,13 +138,22 @@ internal sealed class CubicSegment(Vector2D p0, Vector2D p1, Vector2D p2, Vector
 
 	public override void AddRayCrossings(double y, double xOrigin, ref int winding)
 	{
+		// y(t) turns where its derivative 3·c3.y·t² + 2·c2.y·t + c1.y is zero: at most twice.
 		var c3 = _p3 - 3 * _p2 + 3 * _p1 - _p0;
 		var c2 = 3 * (_p2 - 2 * _p1 + _p0);
 		var c1 = 3 * (_p1 - _p0);
-		Span<double> t = stackalloc double[3];
-		var n = EquationSolver.SolveCubic(t, c3.Y, c2.Y, c1.Y, _p0.Y - y);
-		if (n < 0)
-			n = 0;
-		CountRoots(t, n, y, xOrigin, ref winding);
+		Span<double> roots = stackalloc double[2];
+		var count = EquationSolver.SolveQuadratic(roots, 3 * c3.Y, 2 * c2.Y, c1.Y);
+		Span<double> turns = stackalloc double[2];
+		var n = 0;
+		for (var i = 0; i < count; i++)
+		{
+			if (roots[i] > 0 && roots[i] < 1)
+				turns[n++] = roots[i];
+		}
+
+		if (n == 2 && turns[0] > turns[1])
+			(turns[0], turns[1]) = (turns[1], turns[0]);
+		AddMonotoneCrossings(turns[..n], _p0, _p3, y, xOrigin, ref winding);
 	}
 }

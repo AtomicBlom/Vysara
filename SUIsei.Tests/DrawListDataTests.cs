@@ -35,8 +35,8 @@ public sealed class DrawListDataTests
 		var dump = draw.Dump().ReplaceLineEndings("\n");
 
 		dump.ShouldContain("DrawListData (rev 7, texrev 2, coords 1920x1080, hdr=False)");
-		// The slot table: each slot's source, its size and its version.
-		dump.ShouldContain("Textures (1):\n    [0] White 1x1 v0\n");
+		// The slot table: each slot's source, its size, its version and how its texels read.
+		dump.ShouldContain("Textures (1):\n    [0] White 1x1 v0 premultiplied linear\n");
 		dump.ShouldContain("Vertices (4):");
 		// State-run batching collapses the quad to one index run; the index stream dumps in submission order.
 		dump.ShouldContain("Indices (6): 0 1 2 0 2 3");

@@ -1,18 +1,21 @@
-using System.Numerics;
+using SUIsei.Media;
 
 namespace SUIsei.Controls;
 
 /// <summary>
 /// Hosts a single <see cref="Content"/>. Without a <see cref="Control.Template"/> it hosts the
-/// content directly (a <see cref="UIElement"/> as-is; a string wrapped in a <see cref="TextBlock"/>) and draws an
-/// optional solid <see cref="Background"/>. With a template, the control's visual tree comes from the template and a
-/// <c>{TemplateBinding Content}</c> routes <see cref="Content"/> into the template's <see cref="ContentPresenter"/>;
-/// <see cref="ContentChanged"/> lets that binding stay live.
+/// content directly (a <see cref="UIElement"/> as-is; a string wrapped in a <see cref="TextBlock"/>, which
+/// <see cref="Control.Foreground"/> colours) and paints <see cref="Control.Background"/> behind it. With a template, the
+/// control's visual tree comes from the template and a <c>{TemplateBinding Content}</c> routes <see cref="Content"/> into
+/// the template's <see cref="ContentPresenter"/>; <see cref="ContentChanged"/> lets that binding stay live.
 /// </summary>
 [ContentProperty(Name = nameof(Content))]
 public class ContentControl : Control
 {
 	private UIElement? _hosted;
+
+	// The text block made for content that is not an element, which Foreground colours; null otherwise.
+	private TextBlock? _wrapped;
 
 	// VisualChildren without a template, rebuilt only when _hosted changes, so reading it allocates nothing.
 	private UIElement[] _hostedList = [];
@@ -35,6 +38,9 @@ public class ContentControl : Control
 				if (_hosted is not null)
 					DropChild(_hosted);
 				_hosted = ContentHelper.Wrap(value);
+				_wrapped = value is UIElement ? null : _hosted as TextBlock;
+				if (_wrapped is not null && Foreground is { } foreground)
+					_wrapped.Foreground = foreground;
 				_hostedList = _hosted is null ? [] : [_hosted];
 				if (_hosted is not null)
 					AdoptChild(_hosted);
@@ -49,7 +55,9 @@ public class ContentControl : Control
 	/// template's <see cref="ContentPresenter"/> in sync.</summary>
 	public event EventHandler? ContentChanged;
 
-	public HdrColor? Background { get; set { if (field != value) { field = value; InvalidateContent(); } } }
+	/// <summary>How a change of the background this control paints itself (with no template) animates; null shows it at
+	/// once. A control's own look sets it, as <see cref="ListViewItem"/> does for its selection.</summary>
+	internal BrushTransition? BackgroundTransition { get; set; }
 
 	internal override IReadOnlyList<UIElement> VisualChildren => Template is not null ? base.VisualChildren : _hostedList;
 
@@ -73,7 +81,18 @@ public class ContentControl : Control
 		return finalSize;
 	}
 
-	private protected override HdrColor? BaseFill => Background;
+	private protected override void OnBackgroundChanged(Brush? old, Brush? @new)
+	{
+		TransitionBackground(BackgroundTransition, old, @new);
+		base.OnBackgroundChanged(old, @new);
+	}
 
-	private protected override VisualContent? UpdateContent() => Template is null && (AnimatedFill ?? Background) is { } bg ? RetainedRect(bg) : null;
+	private protected override void OnForegroundChanged(Brush? foreground)
+	{
+		if (_wrapped is { } text)
+			text.Foreground = foreground;
+	}
+
+	private protected override VisualContent? UpdateContent() =>
+		Template is null && BackgroundPaint(Background) is { } bg ? RetainedRect(bg) : null;
 }

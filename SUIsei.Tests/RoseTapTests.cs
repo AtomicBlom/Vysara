@@ -5,6 +5,7 @@ using RoseMcp.Tap.Protocol;
 
 using SUIsei.Controls;
 using SUIsei.Input;
+using SUIsei.Media;
 using SUIsei.RoseTap;
 using SUIsei.Tests.Sample;
 
@@ -922,14 +923,14 @@ public sealed class RoseTapTests
 			Click(host, Centre(ToolbarButton(view, "Scale")));
 			host.Tick(0.016, 0f, Surface);
 
-			tap.Root.RenderTransform.M11.ShouldBe(4f);
+			((MatrixTransform)tap.Root.RenderTransform!).Matrix.M11.ShouldBe(4f);
 			ZoomRow(view).ShouldBe("Scale 4x");
 			Click(host, Centre(ToolbarButton(view, "+")));
 			host.Tick(0.016, 0f, Surface);
-			tap.Root.RenderTransform.M11.ShouldBe(8f);
+			((MatrixTransform)tap.Root.RenderTransform!).Matrix.M11.ShouldBe(8f);
 
 			Click(host, Centre(ToolbarButton(view, "Zoom")));
-			tap.Root.RenderTransform.ShouldBe(Matrix3x2.Identity);
+			tap.Root.RenderTransform.ShouldBeNull("the content had no transform of its own");
 		}
 		finally
 		{

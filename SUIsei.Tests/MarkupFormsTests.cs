@@ -61,9 +61,9 @@ public sealed class MarkupFormsTests
 	{
 		var view = Build();
 
-		view.Card.Background.ShouldBe(HdrColor.FromRgb(100, 149, 237));   // CornflowerBlue
+		view.Card.Background.SolidColor().ShouldBe(HdrColor.FromRgb(100, 149, 237)); // CornflowerBlue, as a brush
 		view.CardText.Text.ShouldBe(SampleStrings.CardTitle);              // {x:Static} const
-		view.Pinned.Background.ShouldBe(SampleStrings.Accent);            // {x:Static} static readonly field
+		view.Pinned.Background.ShouldBeSameAs(SampleStrings.Accent);      // {x:Static} static readonly field
 		view.Caption.ShouldBeOfType<SampleCaption>();                     // a using: element
 		view.Badge.Anchor.ShouldBe(new Point(10f, 20f));
 		view.Badge.Scale.ShouldBe(new Vector2(2f, 3f));

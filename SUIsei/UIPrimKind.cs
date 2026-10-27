@@ -4,6 +4,12 @@ namespace SUIsei;
 /// The primitive family the UI compositor encodes into a draw command's <see cref="Drawing.DrawCommand.Tag"/>
 /// — it selects the branch the single <c>ui.slang</c> fragment switches on. A flat <see cref="byte"/> so it casts to
 /// the tag cheaply.
+/// <para>
+/// SUIsei sets only a tag's low byte: a tag it emits is exactly one of these kinds, and the bits from 0x100 up are
+/// always clear. They are reserved for a host's own per-command state, which it derives into its own copy of the
+/// commands (Loom's painter marks a command whose texture slot holds straight-alpha texels with 0x100). A host that does
+/// so reads the kind from the low byte; on a list as SUIsei hands it out, any other tag is still a broken list.
+/// </para>
 /// </summary>
 public enum UIPrimKind : byte
 {
@@ -37,4 +43,16 @@ public enum UIPrimKind : byte
 	/// the parent at the group's fade alpha (a tinted blit). A zero-geometry marker; never reaches the fragment shader.
 	/// </summary>
 	EndLayer,
+
+	/// <summary>
+	/// Tessellated vector geometry (fills and strokes), antialiased by signed distances.
+	/// <see cref="Drawing.OverlayVertex.Custom"/> holds four distances <c>d0..d3</c> to the edges the triangle antialiases,
+	/// positive inside, each linear across the triangle and in any consistent unit; an unused one holds
+	/// <see cref="Drawing.VectorVertex.Unused"/>, constant across the triangle. The fragment's coverage is
+	/// <c>Π saturate(0.5 + dᵢ / max(length(float2(ddx dᵢ, ddy dᵢ)), 1e-6))</c>: each distance over its screen-space
+	/// gradient's length is the pixel distance to its edge, and an unused slot's zero gradient makes its factor 1. The
+	/// colour is the vertex colour times that coverage times the command's texture sampled at
+	/// <see cref="Drawing.OverlayVertex.Uv"/> (slot 0, the white texel, for a solid colour).
+	/// </summary>
+	Vector,
 }

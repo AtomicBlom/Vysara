@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Windows.Input;
 
 using SUIsei.Controls;
-using SUIsei.Drawing;
+using SUIsei.Media.Imaging;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Gallery;
@@ -29,7 +29,11 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 	public Action? Quit { get; set; }
 
 	/// <summary>x:Bind source for the <see cref="Image"/>: a procedurally-generated logo.</summary>
-	public ImageSource LogoSource { get; } = MakeLogo();
+	public BitmapSource LogoSource { get; } = MakeLogo();
+
+	/// <summary>x:Bind source for the live <see cref="Image"/>: a straight-alpha bitmap <see cref="Animate"/> rewrites
+	/// every frame.</summary>
+	public WriteableBitmap LiveBitmap { get; } = new(64, 40);
 
 	/// <summary>x:Bind source bound to the "Greet" button's <see cref="ButtonBase.Command"/>.</summary>
 	public ICommand GreetCommand { get; }
@@ -91,8 +95,35 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 
 	private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
+	/// <summary>
+	/// Rewrite <see cref="LiveBitmap"/> for the time <paramref name="seconds"/>: rings rippling out of a disc whose rim
+	/// fades out and whose troughs are half transparent, so its straight alpha blends over the card. The texels change in
+	/// place and <see cref="WriteableBitmap.Invalidate"/> shows them, with no layout and no allocation.
+	/// </summary>
+	public void Animate(double seconds)
+	{
+		var bitmap = LiveBitmap;
+		var pixels = bitmap.PixelBuffer.Span;
+		var t = (float)seconds;
+		for (var y = 0; y < bitmap.PixelHeight; y++)
+		{
+			for (var x = 0; x < bitmap.PixelWidth; x++)
+			{
+				var r = MathF.Sqrt((x - 31.5f) * (x - 31.5f) + (y - 19.5f) * (y - 19.5f));
+				var ring = 0.5f + 0.5f * MathF.Cos(r * 0.6f - t * 5f);
+				var rim = Math.Clamp((19.5f - r) / 5f, 0f, 1f);
+				var o = (y * bitmap.PixelWidth + x) * 4;
+				pixels[o] = (byte)(40f + 120f * ring);
+				pixels[o + 1] = (byte)(200f - 110f * ring);
+				pixels[o + 2] = (byte)(190f + 65f * ring);
+				pixels[o + 3] = (byte)(255f * rim * (0.5f + 0.5f * ring));
+			}
+		}
+		bitmap.Invalidate();
+	}
+
 	// A small RGBA gradient so the Image control has something to show without shipping an asset file.
-	private static ImageSource MakeLogo()
+	private static BitmapSource MakeLogo()
 	{
 		const int width = 64;
 		const int height = 40;
@@ -108,7 +139,7 @@ internal sealed partial class GalleryView : INotifyPropertyChanged
 				pixels[o + 3] = 255;
 			}
 		}
-		return ImageSource.FromRgba8(width, height, pixels);
+		return BitmapSource.FromRgba8(width, height, pixels);
 	}
 
 	/// <summary>The middle level of the nested-bind demo path <c>Render.Bloom.Intensity</c> — a plain holder of the

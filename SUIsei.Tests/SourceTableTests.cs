@@ -139,10 +139,10 @@ public sealed partial class SourceTableTests
 		(chrome.Line, chrome.Column, chrome.InTemplate).ShouldBe((16, 6, true));
 
 		var item = Diagnostics.SourceOf(view.List.ItemsHost!.Children[0]).ShouldNotBeNull();
-		(item.Line, item.Column, item.InTemplate).ShouldBe((25, 6, false));
+		(item.Line, item.Column, item.InTemplate).ShouldBe((26, 6, false));
 
 		var presenter = ((Border)view.Card.GetTemplateRoot()!).Child!;
-		Diagnostics.SourceOf(presenter).ShouldNotBeNull().Line.ShouldBe(17);
+		Diagnostics.SourceOf(presenter).ShouldNotBeNull().Line.ShouldBe(18);
 	}
 
 	[Test]

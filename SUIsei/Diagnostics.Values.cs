@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Markup;
+using SUIsei.Media;
 
 namespace SUIsei;
 
@@ -10,7 +11,8 @@ public static partial class Diagnostics
 	/// <summary>
 	/// Convert attribute text to a value of <paramref name="type"/> as the XAML generator does at compile time: a number,
 	/// <c>true</c> or <c>false</c>, an enum member by name, a string, and the structured syntaxes — colours
-	/// (<c>#RRGGBB</c>, <c>#AARRGGBB</c> or a named colour), <see cref="Thickness"/> (one, two or four numbers),
+	/// (<c>#RRGGBB</c>, <c>#AARRGGBB</c> or a named colour), a <see cref="Brush"/> from a colour (a new
+	/// <see cref="SolidColorBrush"/> of it), <see cref="Thickness"/> (one, two or four numbers),
 	/// <see cref="Point"/>, <see cref="Vector2"/> and <see cref="Vector3"/>, <see cref="GridLength"/> (<c>Auto</c>,
 	/// <c>*</c>, <c>N*</c> or a number), <see cref="TimeSpan"/> (<c>[[h:]m:]s</c>) and <see cref="RepeatBehavior"/>.
 	/// A nullable type takes what its underlying type does, and <c>{x:Null}</c> where null is allowed. False, with
@@ -53,6 +55,9 @@ public static partial class Diagnostics
 			_ when target == typeof(float) => float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) && float.IsFinite(f) ? f : null,
 			_ when target == typeof(double) => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && double.IsFinite(d) ? d : null,
 			_ when target == typeof(HdrColor) => XamlValueSyntax.TryParseColor(s, out var a, out var r, out var g, out var b) ? HdrColor.FromRgb(r, g, b, a) : null,
+			// A brush from a colour, as the generator converts one: a SolidColorBrush of it, made for this use alone.
+			_ when target == typeof(Brush) || target == typeof(SolidColorBrush) =>
+				XamlValueSyntax.TryParseColor(s, out var a, out var r, out var g, out var b) ? new SolidColorBrush(HdrColor.FromRgb(r, g, b, a)) : null,
 			_ when target == typeof(Thickness) => XamlValueSyntax.ParseNumbers(s) switch
 			{
 				[var u] => new Thickness(u),
@@ -94,7 +99,8 @@ public static partial class Diagnostics
 	private static bool Parsable(Type target) =>
 		target.IsEnum
 		|| target == typeof(string) || target == typeof(object) || target == typeof(bool) || target == typeof(int)
-		|| target == typeof(float) || target == typeof(double) || target == typeof(HdrColor) || target == typeof(Thickness)
+		|| target == typeof(float) || target == typeof(double) || target == typeof(HdrColor) || target == typeof(Brush)
+		|| target == typeof(SolidColorBrush) || target == typeof(Thickness)
 		|| target == typeof(Point) || target == typeof(Vector2) || target == typeof(Vector3) || target == typeof(GridLength)
 		|| target == typeof(TimeSpan) || target == typeof(RepeatBehavior);
 }

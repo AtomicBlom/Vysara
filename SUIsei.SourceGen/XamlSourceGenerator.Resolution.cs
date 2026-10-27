@@ -394,7 +394,7 @@ partial class XamlSourceGenerator
 	// An attached property set as an attribute — `Grid.Row="0"`, or `suisei:Owner.Prop="…"` from the extension namespace:
 	// a call to the owner type's static Set<Prop>(element, value), the value converted for the setter's parameter type or
 	// produced by a value markup extension. Anything that does not resolve is reported as an error.
-	private static void EmitAttachedProperty(Gen gen, Scope scope, string targetVar, XAttribute attr)
+	private static void EmitAttachedProperty(Gen gen, Scope scope, string targetVar, INamedTypeSymbol targetType, XAttribute attr)
 	{
 		var ns = attr.Name.Namespace == XNamespace.None ? Ui : attr.Name.Namespace;
 		var local = attr.Name.LocalName;
@@ -411,6 +411,11 @@ partial class XamlSourceGenerator
 				gen.Report(UnknownProperty, attr, owner.ToDisplayString(), property);
 			return;
 		}
+		if (!AttachesTo(setter, targetType))
+		{
+			gen.Report(UnknownProperty, attr, targetType.ToDisplayString(), local);
+			return;
+		}
 
 		var valueType = setter.Parameters[1].Type;
 		string? code;
@@ -423,6 +428,22 @@ partial class XamlSourceGenerator
 		}
 		if (code is not null)
 			scope.Emit($"{Fq(owner!)}.{setter.Name}({targetVar}, {code});");
+	}
+
+	// Whether an attached property set through `setter` can be set on an object of `target`: the setter's first
+	// parameter, what it sets the property on, is that type or a base of it (Canvas.SetLeft takes any UIElement,
+	// suisei:StrokeTrim.SetEnd only a Shape).
+	private static bool AttachesTo(IMethodSymbol setter, INamedTypeSymbol target)
+	{
+		if (setter.Parameters[0].Type is not INamedTypeSymbol holder)
+			return true;
+		holder = (INamedTypeSymbol)holder.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+		for (INamedTypeSymbol? t = target; t is not null; t = t.BaseType)
+		{
+			if (SymbolEqualityComparer.Default.Equals(t, holder))
+				return true;
+		}
+		return holder.TypeKind == TypeKind.Interface && target.AllInterfaces.Contains(holder, SymbolEqualityComparer.Default);
 	}
 
 	// The static Set<Prop>(target, value) an attached property `Owner.Prop` is set through, with the owner resolved in XML
