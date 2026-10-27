@@ -154,9 +154,9 @@ public class ToggleButton : ButtonBase
 		},
 	};
 
-	// The accent overlay's opacity fades up to `to` from its resting 0; on leaving a held state the clock releases the
-	// animation rung, reverting the overlay to its local 0, so unchecking snaps the accent off cleanly (no startup or
-	// cross-fade flash) while checking fades it in.
+	// The accent overlay's opacity fades to `to` from wherever it shows, its resting local 0 at first. Every check state
+	// animates it through Target and TargetProperty, so a change of state hands the opacity from one state's animation to
+	// the next, and the accent fades rather than dropping to 0 for a frame as the old state is released.
 	private static Storyboard OpacityTo(UIElement target, float to) => new()
 	{
 		Children =
@@ -164,8 +164,7 @@ public class ToggleButton : ButtonBase
 			new DoubleAnimation
 			{
 				To = to, Duration = TimeSpan.FromMilliseconds(120), FillBehavior = FillBehavior.HoldEnd,
-				Apply = v => target.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
-				Release = () => target.ClearAnimatedValue(UIElement.OpacityProperty),
+				Target = target, TargetProperty = UIElement.OpacityProperty,
 			},
 		},
 	};

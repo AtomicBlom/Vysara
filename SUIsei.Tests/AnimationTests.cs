@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
@@ -200,6 +201,85 @@ public sealed class AnimationTests
 		clock.Advance(1.5);
 		border.Opacity.ShouldBe(0f); // HoldEnd keeps the final value
 	}
+
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void Stopping_a_storyboard_that_finished_holding_its_value_reverts_the_target(bool bound)
+	{
+		var (border, _) = LaidOutBorder();
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(OpacityTo(border, 0.25, bound));
+		clock.Begin(storyboard);
+		clock.Advance(1.5); // past the end: finished, holding its last value
+		border.Opacity.ShouldBe(0.25f);
+		clock.HasActiveClocks.ShouldBeFalse(); // nothing left to advance
+
+		clock.Stop(storyboard);
+
+		border.Opacity.ShouldBe(1f); // released, as WinUI's Storyboard.Stop releases it: back to the default
+	}
+
+	[Test]
+	public void An_animation_takes_its_property_from_one_still_running_there()
+	{
+		var (border, _) = LaidOutBorder();
+		border.Opacity = 0.6f;
+		var clock = new AnimationClock();
+		var fadeOut = StoryboardOf(OpacityTo(border, 0.0, bound: true));
+		var fadeIn = StoryboardOf(OpacityTo(border, 1.0, bound: true));
+		clock.Begin(fadeOut);
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.3f, 0.001f);
+
+		clock.Begin(fadeIn); // starts where the fade out is, and takes Opacity from it
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.65f, 0.001f); // the fade in's value, though the fade out is still running
+
+		clock.Stop(fadeOut);
+		border.Opacity.ShouldBe(0.65f, 0.001f); // Opacity is the fade in's now: stopping the other leaves it alone
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(1f, 0.001f);
+		clock.Stop(fadeIn);
+		border.Opacity.ShouldBe(0.6f); // back to its own value
+	}
+
+	[Test]
+	public void A_storyboard_holding_its_value_does_not_keep_its_target_alive()
+	{
+		var clock = new AnimationClock();
+		var target = FinishHolding(clock);
+
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		GC.Collect();
+
+		target.IsAlive.ShouldBeFalse();
+	}
+
+	// Run a storyboard on a border nothing else holds to its end, holding the value, and hand back only a weak reference.
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static WeakReference FinishHolding(AnimationClock clock)
+	{
+		var border = new Border();
+		clock.Begin(StoryboardOf(OpacityTo(border, 0.5, bound: true)));
+		clock.Advance(1.5);
+		border.Opacity.ShouldBe(0.5f);
+		return new WeakReference(border);
+	}
+
+	// A one-second fade of the border's Opacity to `to` from wherever it is, holding the end: bound through Target and
+	// TargetProperty, as generated XAML binds one, or through delegates set in code.
+	private static DoubleAnimation OpacityTo(Border border, double to, bool bound) => bound
+		? new DoubleAnimation { To = to, Duration = TimeSpan.FromSeconds(1), Target = border, TargetProperty = UIElement.OpacityProperty }
+		: new DoubleAnimation
+		{
+			To = to,
+			Duration = TimeSpan.FromSeconds(1),
+			Apply = v => border.SetAnimatedValue(UIElement.OpacityProperty, (float)v),
+			Release = () => border.ClearAnimatedValue(UIElement.OpacityProperty),
+			ReadCurrent = () => border.Opacity,
+		};
 
 	[Test]
 	public void Translate_animates_on_the_visual_path_without_relayout()

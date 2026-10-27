@@ -125,6 +125,30 @@ public sealed class ObjectAnimationTests
 	}
 
 	[Test]
+	public void A_later_animation_takes_over_a_finished_ones_property()
+	{
+		var clock = new AnimationClock();
+		var border = new Border();
+		var other = new SolidColorBrush(HdrColor.FromRgb(255, 0, 0));
+		var showMarker = StoryboardOf(Keys(border, Border.BackgroundProperty, (0.0, Marker)));
+		var showOther = StoryboardOf(Keys(border, Border.BackgroundProperty, (0.0, Marker), (0.5, other)));
+		clock.Begin(showMarker);
+		clock.Advance(0);
+		border.Background.ShouldBeSameAs(Marker); // finished, holding it
+
+		// As a visual state change does: the next begun, then the finished one stopped, which leaves the background alone
+		// now that the next holds it.
+		clock.Begin(showOther);
+		clock.Stop(showMarker);
+		border.Background.ShouldBeSameAs(Marker);
+		clock.Advance(0.5);
+		border.Background.ShouldBeSameAs(other);
+
+		clock.Stop(showOther);
+		border.Background.ShouldBeNull();
+	}
+
+	[Test]
 	public void Keys_need_not_be_in_order_and_the_last_of_equal_times_wins()
 	{
 		var clock = new AnimationClock();

@@ -39,6 +39,7 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 			return;
 		var (owner, target) = TargetProperty.Resolve(Target, interpolates: false);
 		_binding = target.BindObjects(owner);
+		(BoundOwner, BoundProperty) = (owner, target);
 	}
 
 	internal override void CaptureStart()
