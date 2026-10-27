@@ -348,7 +348,7 @@ public sealed class ShapeTests
 		};
 		var raster = Raster(Laid(CanvasOf(polyline)).Render());
 
-		raster.ReadLinear(50, 50).ShouldBe(raster.ReadLinear(30, 50));
+		ShouldBeClose(raster.ReadLinear(50, 50), raster.ReadLinear(30, 50), 1e-5f); // blending twice would differ by a quarter
 	}
 
 	[Test]
