@@ -49,10 +49,11 @@ public sealed class AnimationClock
 
 	/// <summary>Start (or restart) <paramref name="storyboard"/> from time zero. Each animation with no <c>From</c>
 	/// starts at the value its target shows now, so a storyboard that takes over a property mid-animation continues
-	/// from where the other left it. As in WinUI, an animation takes its property over from any other storyboard's that is
-	/// animating or holding it, which then leaves the property to it: it stops writing it and does not release it when
-	/// stopped. The clock compares animations bound through <c>Target</c> and <c>TargetProperty</c>; one whose delegates
-	/// were set in code takes nothing over and is never taken over.</summary>
+	/// from where the other left it. Restarting one that is still running releases its targets first; one that has
+	/// finished starts from the end values it holds. As in WinUI, an animation takes its property over from any other
+	/// storyboard's that is animating or holding it, which then leaves the property to it: it stops writing it and does
+	/// not release it when stopped. The clock compares animations bound through <c>Target</c> and <c>TargetProperty</c>;
+	/// one whose delegates were set in code takes nothing over and is never taken over.</summary>
 	public void Begin(Storyboard storyboard) => _active.Add(Start(storyboard));
 
 	/// <summary>Stop <paramref name="storyboard"/> and release every target it animates, whether it is still running or

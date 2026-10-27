@@ -9,7 +9,7 @@ namespace SUIsei.Controls;
 /// and the resting state hands the background back to what the template bound it to, usually the control's own
 /// <see cref="Control.Background"/>. The part's <see cref="BrushTransition"/> fades between them.
 /// <para>
-/// Each state's brush is bound to the property it holds, as a storyboard's <c>Target</c> and <c>TargetProperty</c> bind
+/// Each state's brush is an <see cref="ObjectAnimationUsingKeyFrames"/> on the property it holds, as WinUI's templates set
 /// one, so going from one brush to another hands the property straight over, and leaving a state releases its brush. The
 /// resting state still has a storyboard of its own rather than WinUI's empty state: it clears the background, which also
 /// hands back a brush held by a state of a template since replaced, as a control's own background outlives its template.
@@ -34,14 +34,17 @@ internal static class TemplateStates
 	/// <summary>A fade of <paramref name="milliseconds"/> between background brushes.</summary>
 	public static BrushTransition Fade(double milliseconds) => new() { Duration = TimeSpan.FromMilliseconds(milliseconds) };
 
-	// A brush is not interpolated, so a PropertyPath, which takes only animatable properties, cannot name it: the hold is
-	// bound to the property directly.
-	private static Storyboard Hold(DependencyObject target, IAnimationTarget property, Brush brush)
+	private static Storyboard Hold(DependencyObject target, DependencyProperty property, Brush brush) => new()
 	{
-		var hold = new DiscreteValueAnimation<Brush?> { Value = brush };
-		hold.BindDirect(target, property);
-		return new Storyboard { Children = { hold } };
-	}
+		Children =
+		{
+			new ObjectAnimationUsingKeyFrames
+			{
+				Target = target, TargetProperty = property, Duration = TimeSpan.Zero,
+				KeyFrames = { new DiscreteObjectKeyFrame { Value = brush } },
+			},
+		},
+	};
 
 	private static Storyboard Clear(Action<Brush?> clear) => new()
 	{

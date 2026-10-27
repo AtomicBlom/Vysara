@@ -3,11 +3,20 @@ namespace SUIsei.Animation;
 /// <summary>
 /// A <see cref="Timeline"/> that drives one target property. The <see cref="AnimationClock"/>
 /// only needs to resolve the target, record where a run starts, push the current value and release the target on
-/// stop, so the non-generic base exposes just those seams; the typed value and the apply/release/read delegates live
-/// on <see cref="AnimationTimeline{T}"/>. The delegates are resolved to typed writes — no reflection, no boxing.
+/// stop, so the non-generic base exposes just those seams and the declarative target; the typed value and the
+/// apply/release/read delegates live on <see cref="AnimationTimeline{T}"/>, and <see cref="ObjectAnimationUsingKeyFrames"/>
+/// binds a typed write of its own. Either way the target is written through typed writes — no reflection, no boxing.
 /// </summary>
 public abstract class AnimationTimeline : Timeline
 {
+	/// <summary>The object a generated storyboard animates (set from <c>Storyboard.TargetName</c>); resolved with
+	/// <see cref="TargetProperty"/> into a typed write when the animation first begins.</summary>
+	public DependencyObject? Target { get; set; }
+
+	/// <summary>The property a generated storyboard animates on <see cref="Target"/> (resolved from
+	/// <c>Storyboard.TargetProperty</c> at compile time).</summary>
+	public PropertyPath? TargetProperty { get; set; }
+
 	/// <summary>Compute the value at normalized <paramref name="progress"/> (in <c>[0,1]</c>) and push it to the target.</summary>
 	internal abstract void ApplyAt(double progress);
 
@@ -22,8 +31,8 @@ public abstract class AnimationTimeline : Timeline
 	/// animation begins, after <see cref="EnsureResolved"/>.</summary>
 	internal abstract void CaptureStart();
 
-	/// <summary>The object whose property this animation drives, once its delegates have been bound to that property, as a
-	/// storyboard's <c>Target</c> and <c>TargetProperty</c> bind them (<see cref="EnsureResolved"/>); null for one whose
+	/// <summary>The object whose property this animation drives, once it has been bound to that property, as
+	/// <see cref="Target"/> and <see cref="TargetProperty"/> bind it (<see cref="EnsureResolved"/>); null for one whose
 	/// delegates were set in code.</summary>
 	internal DependencyObject? BoundOwner { get; set; }
 
@@ -43,8 +52,8 @@ public abstract class AnimationTimeline : Timeline
 /// it through <see cref="Apply"/>. <see cref="Release"/> reverts the target. Concrete subclasses (Double/Color/Point)
 /// implement <see cref="ValueAt"/> and apply their own easing inside it.
 /// <para>
-/// The target is either <see cref="Target"/> plus <see cref="TargetProperty"/>, which bind the delegates when the
-/// animation begins, or delegates set in code. As in WinUI, a run with no <c>From</c> starts at the value the target
+/// The target is either <see cref="AnimationTimeline.Target"/> plus <see cref="AnimationTimeline.TargetProperty"/>, which
+/// bind the delegates when the animation begins, or delegates set in code. As in WinUI, a run with no <c>From</c> starts at the value the target
 /// shows when it begins — including the value of an animation it takes over from.
 /// </para>
 /// </summary>
@@ -58,19 +67,10 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 
 	/// <summary>
 	/// Reads the target's current value, where a run with no <c>From</c> starts. Bound with <see cref="Apply"/> from
-	/// <see cref="TargetProperty"/>; a code-first animation can set it beside <see cref="Apply"/>. Without one, such a
-	/// run starts at <c>default</c>.
+	/// <see cref="AnimationTimeline.TargetProperty"/>; a code-first animation can set it beside <see cref="Apply"/>.
+	/// Without one, such a run starts at <c>default</c>.
 	/// </summary>
 	public Func<T>? ReadCurrent { get; set; }
-
-	/// <summary>The object a generated storyboard animates (set from <c>Storyboard.TargetName</c>); resolved with
-	/// <see cref="TargetProperty"/> into <see cref="Apply"/>/<see cref="Release"/>/<see cref="ReadCurrent"/> when the
-	/// animation begins.</summary>
-	public DependencyObject? Target { get; set; }
-
-	/// <summary>The property a generated storyboard animates on <see cref="Target"/> (resolved from
-	/// <c>Storyboard.TargetProperty</c> at compile time).</summary>
-	public PropertyPath? TargetProperty { get; set; }
 
 	/// <summary>The target's value when the current run began (<see cref="ReadCurrent"/>): what a missing <c>From</c>
 	/// stands for.</summary>
@@ -101,7 +101,7 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 	{
 		if (Apply is not null || Target is null || TargetProperty is null)
 			return;
-		var (owner, target) = TargetProperty.Resolve(Target);
+		var (owner, target) = TargetProperty.Resolve(Target, interpolates: true);
 		if (!TryBind(owner, target))
 			throw new InvalidOperationException($"A {GetType().Name} cannot animate {target.Name}, which holds a {target.ValueTypeName}.");
 	}
@@ -115,8 +115,8 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 
 	/// <summary>
 	/// Checks a value against the target property's own rules (its <see cref="PropertyMetadata{TOwner, TValue}.Validate"/>),
-	/// bound with <see cref="Apply"/> from <see cref="TargetProperty"/>; null for a property with none, and for an
-	/// animation whose delegates were set in code.
+	/// bound with <see cref="Apply"/> from <see cref="AnimationTimeline.TargetProperty"/>; null for a property with none,
+	/// and for an animation whose delegates were set in code.
 	/// </summary>
 	internal Action<T>? ValidateValue { get; set; }
 

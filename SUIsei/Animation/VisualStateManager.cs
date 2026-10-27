@@ -37,7 +37,8 @@ public static class VisualStateManager
 	/// <summary>
 	/// Transition <paramref name="control"/> to the state named <paramref name="stateName"/>. Returns false when no
 	/// group contains that state. The groups are read from the control's template root (falling back to the control
-	/// itself when it has no template).
+	/// itself when it has no template). Leaving a state releases every property its storyboard holds, whether that is
+	/// still running or has finished and holds its end values, except one the state entered has taken over.
 	/// </summary>
 	public static bool GoToState(Control control, string stateName, bool useTransitions)
 	{
