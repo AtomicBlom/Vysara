@@ -26,7 +26,13 @@ internal sealed class TapSession
 		TapCommands.PropertiesWritable,
 		TapCommands.SelectHandle,
 		TapCommands.Detach,
-		$"{TapCommands.Apply}:{TapCommands.AddChild},{TapCommands.ClearProperty},{TapCommands.RemoveChild},{TapCommands.SetProperty}");
+		$"{TapCommands.Apply}:{TapCommands.AddChild},{TapCommands.ClearProperty},{TapCommands.RemoveChild},{TapCommands.SetProperty}",
+		$"{TapCommands.Select}:{TapCommands.SelectPick},{TapCommands.SelectRulers}",
+		TapCommands.Idle,
+		TapCommands.Deselect,
+		TapCommands.Selection,
+		TapCommands.Ask,
+		TapCommands.Changes);
 
 	private static readonly TimeSpan ConnectBound = TimeSpan.FromSeconds(10);
 	private static readonly TimeSpan UIThreadBound = TimeSpan.FromSeconds(30);
@@ -36,16 +42,11 @@ internal sealed class TapSession
 	private readonly TapLog _log;
 	private readonly TapHandles _handles = new();
 	private readonly TapEdits _edits;
-
-	/// <summary>Every property change live edits made in this session, oldest first: what the overlay's change marks
-	/// show. Touched on the UI thread only.</summary>
-	public List<TapChange> History { get; } = [];
+	private readonly TapOverlay _overlay;
 
 	private readonly CancellationTokenSource _stopping = new();
 	private readonly NamedPipeClientStream _pipe;
 	private readonly Thread _reader;
-
-	private WeakReference<UIElement>? _selected;
 	private int _released;
 
 	public TapSession(string workDir, string pipeName, string key, TapLog log)
@@ -54,13 +55,11 @@ internal sealed class TapSession
 		_key = key;
 		_log = log;
 		_edits = new TapEdits(_handles);
+		_overlay = new TapOverlay(_handles, log);
 		_pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 		_reader = new Thread(Run) { IsBackground = true, Name = "suisei-rosetap" };
 		_log.Write($"Session for pipe {pipeName}, working in {workDir}.");
 	}
-
-	/// <summary>The element <c>selecthandle</c> last picked, while it lives.</summary>
-	public UIElement? Selected => _selected is { } weak && weak.TryGetTarget(out var element) ? element : null;
 
 	/// <summary>Start the reader thread, which connects and serves.</summary>
 	public void Begin() => _reader.Start();
@@ -101,26 +100,78 @@ internal sealed class TapSession
 						onFailure: TapRows.PropertiesError), false);
 				}
 
-			case TapCommands.SelectHandle:
-				{
-					var handle = HandleIn(words);
-					return (OnUIThread(() =>
-					{
-						if (_handles.Resolve(handle) is not { } element)
-							return "none";
-						_selected = new WeakReference<UIElement>(element);
-						return "selected";
-					}, onFailure: "none"), false);
-				}
-
 			case TapCommands.Apply:
 				{
 					var commands = request.Split('\n').Skip(1).Select(TapRows.ReadCommand).OfType<TapApplyCommand>().ToList();
 					return (OnUIThread(() =>
 					{
 						var rows = _edits.Apply(commands);
-						History.AddRange(_edits.Changes);
+						_overlay.Record(_edits.Changes);
 						return rows;
+					}, onFailure: ""), false);
+				}
+
+			case TapCommands.SelectHandle:
+				{
+					var handle = HandleIn(words);
+					return (OnUIThread(() => _overlay.SelectByHandle(handle) ? "selected" : "none", onFailure: "none"), false);
+				}
+
+			case TapCommands.Select:
+				{
+					var rulers = words.Contains(TapCommands.SelectRulers);
+					var all = words.Contains("all");
+					bool? mine = words.Contains("myxaml") ? true : words.Contains("nomyxaml") ? false : null;
+					var armed = OnUIThread(() =>
+					{
+						if (mine is { } justMine)
+							_overlay.SetJustMyMarkup(justMine);
+						_overlay.Arm(rulers, all);
+						return "armed";
+					}, onFailure: "");
+					if (armed != "armed")
+						return (armed, false);
+
+					// The capture layer is laid out in the tick that armed it, so its extent is read at the next one.
+					return (OnUIThread(() =>
+					{
+						var (width, height) = _overlay.ArmedExtent();
+						return TapRows.Armed(width, height);
+					}, onFailure: TapRows.Armed(0, 0)), false);
+				}
+
+			case TapCommands.Idle:
+				return (OnUIThread(() =>
+				{
+					_overlay.GoIdle();
+					return "idle";
+				}, onFailure: ""), false);
+
+			case TapCommands.Deselect:
+				return (OnUIThread(() => _overlay.Deselect() ? "cleared" : "nothing", onFailure: ""), false);
+
+			case TapCommands.Selection:
+				return (OnUIThread(_overlay.Selection, onFailure: ""), false);
+
+			case TapCommands.Ask:
+				{
+					// Answered here on the reader thread: the latch holds no UI, so asking costs the game nothing. Only the read
+					// that tells the toolbar its press arrived touches the UI, to stop the button showing a press waiting.
+					var seen = words.Length > 1 && long.TryParse(words[1], NumberStyles.None, CultureInfo.InvariantCulture, out var held) ? held : 0;
+					var reply = TapAsk.Reply(seen, out var arrived);
+					if (arrived)
+						PostToUIThread(_overlay.Chrome);
+					return (reply, false);
+				}
+
+			case TapCommands.Changes:
+				{
+					// Anything but "on" turns them off, the direction that leaves less drawn over somebody's game.
+					var wanted = words.Length > 1 && words[1] == "on";
+					return (OnUIThread(() =>
+					{
+						_overlay.ShowChanges(wanted);
+						return _overlay.ChangesShown ? "on" : "off";
 					}, onFailure: ""), false);
 				}
 
@@ -143,6 +194,9 @@ internal sealed class TapSession
 			await _pipe.ConnectAsync(ConnectBound, stopping).ConfigureAwait(false);
 			await TapWire.WriteMessageAsync(_pipe, TapGreeting.Write(_key, Capabilities), stopping).ConfigureAwait(false);
 			_log.Write($"Connected to {_pipeName} and greeted, serving: {Capabilities}");
+
+			// The toolbar goes up as the session starts, so a person can pick without the agent asking first.
+			PostToUIThread(_overlay.Install);
 
 			while (!stopping.IsCancellationRequested)
 			{
@@ -223,15 +277,29 @@ internal sealed class TapSession
 		return null;
 	}
 
-	// Drops everything the session holds in the game, once. False when it already had.
+	// Drops everything the session holds in the game, once: the overlay and its hold on the pointer, the handles, and a
+	// press of Ask nobody collected. False when it already had.
 	private bool Release()
 	{
 		if (Interlocked.Exchange(ref _released, 1) != 0)
 			return false;
+		PostToUIThread(_overlay.Remove);
 		_handles.Clear();
-		_selected = null;
-		History.Clear();
+		TapAsk.Forget();
 		return true;
+	}
+
+	// Run work at the next tick without waiting for it.
+	private void PostToUIThread(Action work)
+	{
+		try
+		{
+			Diagnostics.Post(work);
+		}
+		catch (InvalidOperationException exception)
+		{
+			_log.Write($"Could not reach the UI thread: {exception.Message}");
+		}
 	}
 
 	private static ulong HandleIn(string[] words) =>

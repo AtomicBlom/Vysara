@@ -4,6 +4,7 @@ using System.Numerics;
 using RoseMcp.Tap.Protocol;
 
 using SUIsei.Controls;
+using SUIsei.Input;
 using SUIsei.RoseTap;
 using SUIsei.Tests.Sample;
 
@@ -23,7 +24,7 @@ namespace SUIsei.Tests;
 [NotInParallel]
 public sealed class RoseTapTests
 {
-	private static readonly Vector2 Surface = new(400f, 400f);
+	private static readonly Vector2 Surface = new(800f, 600f);
 
 	private static (UIHost Host, TapView View) Served()
 	{
@@ -145,11 +146,11 @@ public sealed class RoseTapTests
 			Tap.Start(fake.StartupData(WorkDir()));
 			var greeting = fake.Greeting();
 
-			greeting.ShouldBe($"RoseTap/{TapGreeting.ProtocolVersion}/{fake.Key}\napply:AddChild,ClearProperty,RemoveChild,SetProperty detach properties properties.writable selecthandle tree");
+			greeting.ShouldBe($"RoseTap/{TapGreeting.ProtocolVersion}/{fake.Key}\napply:AddChild,ClearProperty,RemoveChild,SetProperty ask changes deselect detach idle properties properties.writable select:pick,rulers selecthandle selection tree");
 			TapGreeting.TryRead(greeting, out var version, out var key, out var capabilities).ShouldBeTrue();
 			version.ShouldBe(5);
 			key.ShouldBe(fake.Key);
-			capabilities.Names.Order(StringComparer.Ordinal).ShouldBe(["apply", "detach", "properties", "properties.writable", "selecthandle", "tree"]);
+			capabilities.Names.Order(StringComparer.Ordinal).ShouldBe(["apply", "ask", "changes", "deselect", "detach", "idle", "properties", "properties.writable", "select", "selecthandle", "selection", "tree"]);
 		}
 		finally
 		{
@@ -572,6 +573,262 @@ public sealed class RoseTapTests
 		}
 	}
 
+	// --- The overlay ---
+
+	// A click in the game's surface, as the window would queue it: a move there, then a press and a release.
+	private static void Click(UIHost host, Vector2 at)
+	{
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, at, PointerUpdateKind.None, PointerButtons.None, 0f, Vector2.Zero, 0));
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, at, PointerUpdateKind.LeftButtonPressed, PointerButtons.Left, 0f, Vector2.Zero, 0));
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, at, PointerUpdateKind.LeftButtonReleased, PointerButtons.None, 0f, Vector2.Zero, 0));
+		host.Tick(0.016, 0f, Surface);
+	}
+
+	private static Vector2 Centre(UIElement element)
+	{
+		var bounds = Diagnostics.Bounds(element).ShouldNotBeNull();
+		return new Vector2(bounds.X + bounds.Width / 2f, bounds.Y + bounds.Height / 2f);
+	}
+
+	// Every element of the tap's overlay on a view, found from SUIsei's side of it.
+	private static List<UIElement> OverlayElements(UIView view)
+	{
+		var found = new List<UIElement>();
+		var pending = new Stack<UIElement>(view.Root.Overlays.Select(o => o.Element).Where(Diagnostics.IsOverlay));
+		while (pending.Count > 0)
+		{
+			var element = pending.Pop();
+			found.Add(element);
+			foreach (var child in Diagnostics.ChildrenOf(element))
+				pending.Push(child);
+		}
+		return found;
+	}
+
+	private static Border ToolbarButton(UIView view, string label) =>
+		OverlayElements(view).OfType<Border>().Single(b => b.Child is TextBlock { Text: var text } && text == label && b.Background is not null);
+
+	private static (UIHost Host, UIView View, TapView Tap, FakeHost Fake) Overlaid()
+	{
+		var (host, tap) = Served();
+		var view = host.Views[0];
+		var fake = Connected(host);
+		fake.Rows("tree"); // the handles the assertions name, and a tick that puts the overlay up
+		host.Tick(0.016, 0f, Surface);
+		return (host, view, tap, fake);
+	}
+
+	[Test]
+	public void The_session_puts_one_overlay_on_each_view_and_detach_takes_it_down_and_lets_the_pointer_go()
+	{
+		var (host, view, _, fake) = Overlaid();
+		try
+		{
+			view.Root.Overlays.Count(o => Diagnostics.IsOverlay(o.Element)).ShouldBe(1);
+			ToolbarButton(view, "Select").ShouldNotBeNull();
+			fake.Ask("select").ShouldStartWith("armed");
+			host.WantsPointer.ShouldBeTrue();
+
+			fake.Ask("detach").ShouldBe("released");
+			host.Tick(0.016, 0f, Surface);
+			host.Tick(0.016, 0f, Surface);
+
+			view.Root.Overlays.ShouldNotContain(o => Diagnostics.IsOverlay(o.Element));
+			host.WantsPointer.ShouldBeFalse();
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Select_arms_over_the_whole_surface_and_holds_the_pointer_until_idle()
+	{
+		var (host, _, _, fake) = Overlaid();
+		try
+		{
+			fake.Ask("select").ShouldBe(TapRows.Armed(800, 600));
+			host.WantsPointer.ShouldBeTrue();
+			fake.Ask("selection").ShouldBe(TapRows.SelectionHeader("select", true, "", true) + "\n");
+
+			fake.Ask("select rulers nomyxaml").ShouldBe(TapRows.Armed(800, 600));
+			fake.Ask("selection").ShouldBe(TapRows.SelectionHeader("rulers", false, "", true) + "\n");
+
+			fake.Ask("idle").ShouldBe("idle");
+			host.Tick(0.016, 0f, Surface);
+			host.WantsPointer.ShouldBeFalse();
+			fake.Ask("selection").ShouldStartWith("idle\t0\t");
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void A_click_picks_the_stack_under_it_topmost_first_preferring_the_apps_own_markup()
+	{
+		var (host, _, tap, fake) = Overlaid();
+		try
+		{
+			var go = (TextBlock)Diagnostics.ChildrenOf(Diagnostics.ChildrenOf(Diagnostics.ChildrenOf(tap.Go)[0])[0])[0];
+			var clicked = false;
+			tap.Go.Click += (_, _) => clicked = true;
+			fake.Ask("select").ShouldStartWith("armed");
+			Click(host, Centre(go));
+
+			fake.Rows("selection").ShouldBe(
+			[
+				TapRows.SelectionHeader("idle", true, "", true), // a pick ends picking
+				TapRows.Candidate(14, "SUIsei.Controls.TextBlock", "", true),
+				TapRows.Candidate(13, "SUIsei.Controls.ContentPresenter", "", true),
+				TapRows.Candidate(12, "SUIsei.Controls.Border", "", true),
+				TapRows.Candidate(11, "SUIsei.Controls.Button", "Go", true),
+				TapRows.Candidate(1, "SUIsei.Controls.StackPanel", "", true),
+			]);
+			clicked.ShouldBeFalse(); // the click that picked never reached the game's button
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Selecthandle_picks_the_element_and_its_ancestors_and_deselect_clears_it()
+	{
+		var (_, _, _, fake) = Overlaid();
+		try
+		{
+			fake.Ask("selecthandle 2").ShouldBe("selected");
+			fake.Rows("selection").ShouldBe(
+			[
+				TapRows.SelectionHeader("idle", true, "", true),
+				TapRows.Candidate(2, "SUIsei.Controls.TextBlock", "Title", true),
+				TapRows.Candidate(1, "SUIsei.Controls.StackPanel", "", true),
+			]);
+
+			fake.Ask("deselect").ShouldBe("cleared");
+			fake.Ask("deselect").ShouldBe("nothing");
+			fake.Ask("selection").ShouldBe(TapRows.SelectionHeader("idle", true, "", true) + "\n");
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void A_pick_whose_element_leaves_the_tree_is_cleared_with_the_reason()
+	{
+		var (host, _, _, fake) = Overlaid();
+		try
+		{
+			fake.Ask("selecthandle 4").ShouldBe("selected");
+			fake.Rows(Apply(Command(TapCommands.RemoveChild, "StackPanel[0]/Border[0]/TextBlock[0]")));
+			host.Tick(0.016, 0f, Surface);
+
+			var header = TapWire.Fields(fake.Rows("selection").ShouldHaveSingleItem());
+			header[2].ShouldStartWith("The selected element was removed from the tree");
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void Ask_answers_none_then_the_press_with_its_sequence_and_age_without_the_ui_thread()
+	{
+		var (host, view, _, fake) = Overlaid();
+		try
+		{
+			fake.Ask("ask 0").ShouldBe("none");
+			fake.Ask("selecthandle 2").ShouldBe("selected");
+			host.Tick(0.016, 0f, Surface);
+			var askButton = ToolbarButton(view, "Ask");
+			Click(host, Centre(askButton));
+
+			var press = TapWire.Fields(fake.Ask("ask 0").ShouldNotBeNull());
+			press[0].ShouldBe("ask");
+			var sequence = long.Parse(press[1], System.Globalization.CultureInfo.InvariantCulture);
+			(press[2], press[3], press[4], press[5]).ShouldBe(("element", "the element TextBlock · Title picked in the game", "2", "0"));
+			long.Parse(press[7], System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThanOrEqualTo(0);
+
+			// Collected: the press is still reported, numbered as before, and a later press counts on from it.
+			TapWire.Fields(fake.Ask($"ask {sequence}")!)[1].ShouldBe(press[1]);
+			Click(host, Centre(ToolbarButton(view, "Ask")));
+			TapWire.Fields(fake.Ask($"ask {sequence}")!)[1].ShouldBe((sequence + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void A_pinned_ruler_measurement_is_what_ask_sends()
+	{
+		var (host, view, tap, fake) = Overlaid();
+		try
+		{
+			fake.Ask("selecthandle 11").ShouldBe("selected"); // the Go button anchors
+			fake.Ask("select rulers").ShouldStartWith("armed");
+			var first = (Border)tap.Root.Children[1];
+			Click(host, Centre(first)); // pins the measurement to what is there
+			fake.Ask("selection").ShouldStartWith("rulers\t"); // a click in rulers does not leave it
+			Click(host, Centre(ToolbarButton(view, "Ask")));
+
+			var press = TapWire.Fields(fake.Ask("ask 0")!);
+			press[2].ShouldBe("measurement");
+			press[3].ShouldStartWith("the measurement from Button · Go to ");
+			press[3].ShouldContain("px apart vertically");
+			press[4].ShouldBe("11");
+			press[5].ShouldNotBe("0");
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
+	[Test]
+	public void An_apply_marks_what_it_changed_and_changes_switches_the_marks()
+	{
+		var (host, view, _, fake) = Overlaid();
+		try
+		{
+			fake.Rows(Apply(Command(TapCommands.SetProperty, "#Title", "Text", "Changed")));
+			host.Tick(0.016, 0f, Surface);
+
+			bool Marked() => OverlayElements(view).OfType<TextBlock>()
+				.Any(t => t.Text.StartsWith("Text: Hello → Changed", StringComparison.Ordinal) && Diagnostics.ParentOf(t) is { Visibility: Visibility.Visible });
+			Marked().ShouldBeTrue();
+
+			fake.Ask("changes off").ShouldBe("off");
+			host.Tick(0.016, 0f, Surface);
+			Marked().ShouldBeFalse();
+			TapWire.Fields(fake.Rows("selection")[0])[3].ShouldBe("0");
+
+			fake.Ask("changes on").ShouldBe("on");
+			host.Tick(0.016, 0f, Surface);
+			Marked().ShouldBeTrue();
+		}
+		finally
+		{
+			fake.Dispose();
+			Tap.Stop();
+		}
+	}
+
 	// --- selecthandle, detach and the rest ---
 
 	[Test]
@@ -599,8 +856,8 @@ public sealed class RoseTapTests
 		using var fake = Connected(host);
 		try
 		{
-			fake.Ask("select rulers").ShouldBe("");
-			fake.Ask("ask 0").ShouldBe("");
+			fake.Ask("rulers").ShouldBe("");
+			fake.Ask("zoom 2").ShouldBe("");
 		}
 		finally
 		{
