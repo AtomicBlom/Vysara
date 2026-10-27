@@ -127,12 +127,26 @@ public sealed class SoftwareRasterizer
 
 	private PixelRect FullSurface => new(0, 0, _width - 1, _height - 1);
 
-	// The pixels whose centres a rect can cover: inclusive integer bounds, clamped to the framebuffer.
+	// Every pixel a rect touches: inclusive integer bounds, rounded out and clamped to the framebuffer. A layer's area,
+	// which must hold all of whatever is drawn into it.
 	private PixelRect PixelBounds(in Rect r) => new(
 		Math.Max(0, (int)MathF.Floor(r.X)),
 		Math.Max(0, (int)MathF.Floor(r.Y)),
 		Math.Min(_width - 1, (int)MathF.Ceiling(r.Right) - 1),
 		Math.Min(_height - 1, (int)MathF.Ceiling(r.Bottom) - 1));
+
+	// The pixels a command's clip keeps: those whose centres it covers, from the first whose centre lies on or past its
+	// near edge to the last whose centre lies before its far edge, as a GPU's scissor of the same rect does (the host
+	// rounds the rect to its scissor by this rule). Inclusive integer bounds, clamped to the framebuffer; empty when the
+	// clip holds no pixel centre.
+	private PixelRect ScissorBounds(in Rect r) => new(
+		Math.Max(0, FirstCentreAtOrPast(r.X)),
+		Math.Max(0, FirstCentreAtOrPast(r.Y)),
+		Math.Min(_width - 1, FirstCentreAtOrPast(r.Right) - 1),
+		Math.Min(_height - 1, FirstCentreAtOrPast(r.Bottom) - 1));
+
+	// The first pixel whose centre (its index + 0.5) lies on or past `edge`.
+	private static int FirstCentreAtOrPast(float edge) => (int)MathF.Ceiling(edge - 0.5f);
 
 	private static PixelRect Intersect(PixelRect a, PixelRect b) =>
 		new(Math.Max(a.X0, b.X0), Math.Max(a.Y0, b.Y0), Math.Min(a.X1, b.X1), Math.Min(a.Y1, b.Y1));
@@ -240,7 +254,7 @@ public sealed class SoftwareRasterizer
 			var target = ActiveTarget;
 
 			// Scissor → inclusive integer pixel bounds, clamped to the framebuffer and to the open layer's rect.
-			var scissor = Intersect(PixelBounds(cmd.ClipRect), _layers.Count > 0 ? _layers.Peek().Rect : FullSurface);
+			var scissor = Intersect(ScissorBounds(cmd.ClipRect), _layers.Count > 0 ? _layers.Peek().Rect : FullSurface);
 			var (sx0, sy0, sx1, sy1) = (scissor.X0, scissor.Y0, scissor.X1, scissor.Y1);
 			if (scissor.IsEmpty)
 				continue;
@@ -348,11 +362,11 @@ public sealed class SoftwareRasterizer
 			if (kind is UIPrimKind.Glyph or UIPrimKind.Image or UIPrimKind.Vector && !TryGetSlot(cmd.TextureIndex, out tex))
 				continue;
 
-			var clip = cmd.ClipRect;
-			var sx0 = Math.Max(bandX0, (int)MathF.Floor(clip.X));
-			var sy0 = Math.Max(bandY0, (int)MathF.Floor(clip.Y));
-			var sx1 = Math.Min(bandX1, (int)MathF.Ceiling(clip.Right) - 1);
-			var sy1 = Math.Min(bandY1, (int)MathF.Ceiling(clip.Bottom) - 1);
+			var clip = ScissorBounds(cmd.ClipRect);
+			var sx0 = Math.Max(bandX0, clip.X0);
+			var sy0 = Math.Max(bandY0, clip.Y0);
+			var sx1 = Math.Min(bandX1, clip.X1);
+			var sy1 = Math.Min(bandY1, clip.Y1);
 			if (sx0 > sx1 || sy0 > sy1)
 				continue;
 

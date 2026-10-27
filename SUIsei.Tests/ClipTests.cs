@@ -69,6 +69,32 @@ public sealed class ClipTests
 		root.Render().Commands.Length.ShouldBe(0);
 	}
 
+	/// <summary>
+	/// A clip whose edges fall between pixel centres keeps exactly the pixels whose centres it covers, as a GPU's scissor
+	/// does when the host rounds the clip by the same rule: a pixel whose centre lies on the near edge is in, one whose
+	/// centre lies on the far edge is out. Rounded out instead, the oracle would draw a row or column the GPU does not.
+	/// Both of the rasterizer's paths, the serial one and the banded one, hold to it.
+	/// </summary>
+	[Test]
+	public void A_fractional_clip_keeps_the_pixels_whose_centres_it_covers()
+	{
+		// In surface pixels the clip is x 15.4..35.4 and y 15.6..25.6: centres from column 15 to 34 and row 16 to 25.
+		var (_, root) = Laid(new RectangleGeometry { Rect = new Rect(5.4f, 5.6f, 20f, 10f) });
+		var draw = root.Render();
+
+		var serial = new SoftwareRasterizer(100, 100);
+		serial.Render(draw);
+		var banded = new SoftwareRasterizer(100, 100);
+		banded.RenderParallel(draw, clearColor: Vector4.Zero);
+		foreach (var (path, rgba) in new[] { ("serial", serial.ResolveToRgba8()), ("banded", banded.ResolveToRgba8()) })
+			for (var y = 10; y < 50; y++)
+				for (var x = 10; x < 50; x++)
+				{
+					var inside = x is >= 15 and <= 34 && y is >= 16 and <= 25;
+					Alpha(rgba, x, y).ShouldBe(inside ? (byte)255 : (byte)0, $"{path}: pixel ({x},{y})");
+				}
+	}
+
 	[Test]
 	public void Hit_testing_honours_the_clip()
 	{
