@@ -21,12 +21,23 @@ public sealed partial class Tessellator
 	/// carries its arc length along the whole geometry, which <see cref="TessellatedPath.Emit{TSink}(ref TSink, PathTrim)"/> trims by.
 	/// </summary>
 	/// <exception cref="InvalidOperationException">The dash pattern would draw more than <see cref="MaxDashes"/> dashes.</exception>
-	public void Stroke(CompositionPath path, CompositionStrokeStyle style, TessellationScale scale, TessellatedPath output)
+	public void Stroke(CompositionPath path, CompositionStrokeStyle style, TessellationScale scale, TessellatedPath output) =>
+		Stroke(path, Matrix3x2.Identity, style, scale, output);
+
+	/// <summary>
+	/// Tessellate the stroke of <paramref name="path"/> with its points mapped through <paramref name="pathTransform"/>,
+	/// as a geometry's <c>Transform</c> maps it, into <paramref name="output"/>, in the mapped coordinates. The pen is not
+	/// mapped: the stroke follows the mapped outline at the style's own thickness. Otherwise as
+	/// <see cref="Stroke(CompositionPath, CompositionStrokeStyle, TessellationScale, TessellatedPath)"/>.
+	/// </summary>
+	/// <exception cref="InvalidOperationException">The dash pattern would draw more than <see cref="MaxDashes"/> dashes.</exception>
+	public void Stroke(CompositionPath path, in Matrix3x2 pathTransform, CompositionStrokeStyle style, TessellationScale scale,
+		TessellatedPath output)
 	{
 		ArgumentNullException.ThrowIfNull(path);
 		ArgumentNullException.ThrowIfNull(style);
 		ArgumentNullException.ThrowIfNull(output);
-		output.Begin(isStroke: true, path, style, scale);
+		output.Begin(isStroke: true, path, pathTransform, style, scale);
 		var h = style.Thickness / 2f;
 		var margin = scale.HalfPixel;
 		var tolerance = scale.Tolerance;
@@ -41,7 +52,7 @@ public sealed partial class Tessellator
 			return;
 		}
 
-		Flatten(path, tolerance);
+		Flatten(path, pathTransform, tolerance);
 		_segmentCorners.Clear();
 		var dashed = PreparePattern(style);
 		var offset = 0f;

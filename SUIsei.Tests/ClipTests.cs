@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Extensions;
@@ -92,6 +93,54 @@ public sealed class ClipTests
 		border.Visual.IsDirty.ShouldBeTrue();
 		border.Visual.Clip.ShouldBe(new Rect(0, 0, 30, 5));
 		root.Render().Commands.Span[0].ClipRect.ShouldBe(new Rect(10, 10, 30, 5));
+	}
+
+	[Test]
+	public void The_geometry_transform_moves_the_clip_with_no_relayout()
+	{
+		var move = new TranslateTransform { X = 5 };
+		var (border, root) = Laid(new RectangleGeometry { Rect = new Rect(0, 0, 10, 10), Transform = move });
+		border.Visual.Clip.ShouldBe(new Rect(5, 0, 10, 10));
+		root.Render();
+
+		move.Y = 4;
+
+		border.ArrangeDirty.ShouldBeFalse();
+		border.Visual.IsDirty.ShouldBeTrue();
+		root.Render().Commands.Span[0].ClipRect.ShouldBe(new Rect(15, 14, 10, 10));
+	}
+
+	[Test]
+	public void A_turned_clip_clips_to_the_bounds_of_the_turned_rectangle()
+	{
+		var clip = new RectangleGeometry { Rect = new Rect(0, 0, 10, 20), Transform = new RotateTransform { Angle = 90 } };
+		Laid(clip).Border.Visual.Clip!.Value.ShouldBeNear(new Rect(-20, 0, 20, 10), 1e-4f);
+	}
+
+	[Test]
+	public void A_storyboard_slides_the_clip_through_its_geometry_transform()
+	{
+		var slide = new TranslateTransform();
+		var border = new Border { Width = 40f, Height = 40f, Clip = new RectangleGeometry { Rect = new Rect(0, 0, 10, 10), Transform = slide } };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = border;
+		host.Tick(0, 0f, new Vector2(50f, 50f));
+
+		host.Clock.Begin(new Storyboard
+		{
+			Children =
+			{
+				new DoubleAnimation
+				{
+					To = 30.0, Duration = TimeSpan.FromSeconds(1), Target = border,
+					TargetProperty = new PropertyPath(UIElement.ClipProperty, Geometry.TransformProperty, TranslateTransform.XProperty),
+				},
+			},
+		});
+		host.Tick(0.5, 0f, new Vector2(50f, 50f));
+
+		slide.X.ShouldBe(15f, 1e-4f);
+		border.Visual.Clip.ShouldBe(new Rect(15, 0, 10, 10));
 	}
 
 	[Test]

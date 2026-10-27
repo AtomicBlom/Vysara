@@ -447,4 +447,46 @@ public sealed class TessellatorTests
 		style.Thickness = 4;
 		stroke.IsCurrentFor(path, style, TessellationScale.Identity).ShouldBeFalse();
 	}
+
+	[Test]
+	public void A_path_transform_maps_the_outline_and_not_the_pen()
+	{
+		var path = Geometry.Parse("M 0,0 C 0,10 10,10 10,0 L 20,5 Z").CompositionPath;
+		var transform = Matrix3x2.CreateScale(3f, 2f) * Matrix3x2.CreateRotation(0.5f) * Matrix3x2.CreateTranslation(4f, 7f);
+		var mapped = new CompositionPath();
+		mapped.Append(path, transform);
+		var style = new CompositionStrokeStyle { Thickness = 2, LineJoin = PenLineJoin.Round };
+		var tessellator = new Tessellator();
+		var throughTransform = new TessellatedPath();
+		var premapped = new TessellatedPath();
+
+		// The same triangles as stroking the mapped outline: the thickness stays 2, unstretched.
+		tessellator.Stroke(path, transform, style, TessellationScale.Identity, throughTransform);
+		tessellator.Stroke(mapped, style, TessellationScale.Identity, premapped);
+		throughTransform.Vertices.ToArray().ShouldBe(premapped.Vertices.ToArray());
+		throughTransform.HalfThickness.ShouldBe(1f);
+
+		tessellator.Fill(path, transform, TessellationScale.Identity, throughTransform);
+		tessellator.Fill(mapped, TessellationScale.Identity, premapped);
+		throughTransform.Vertices.ToArray().ShouldBe(premapped.Vertices.ToArray());
+	}
+
+	[Test]
+	public void The_cache_key_takes_in_the_path_transform_and_which_path_it_is()
+	{
+		var path = Geometry.Parse("M 0,0 L 10,0").CompositionPath;
+		var twin = Geometry.Parse("M 0,0 L 10,0").CompositionPath;
+		var style = new CompositionStrokeStyle();
+		var output = new TessellatedPath();
+		var moved = Matrix3x2.CreateTranslation(1f, 0f);
+
+		new Tessellator().Stroke(path, moved, style, TessellationScale.Identity, output);
+
+		output.IsCurrentFor(path, moved, style, TessellationScale.Identity).ShouldBeTrue();
+		output.IsCurrentFor(path, style, TessellationScale.Identity).ShouldBeFalse();
+		output.IsCurrentFor(path, moved, new CompositionStrokeStyle(), TessellationScale.Identity).ShouldBeFalse();
+		// Another path at the same version number is not the one tessellated.
+		twin.Version.ShouldBe(path.Version);
+		output.IsCurrentFor(twin, moved, style, TessellationScale.Identity).ShouldBeFalse();
+	}
 }

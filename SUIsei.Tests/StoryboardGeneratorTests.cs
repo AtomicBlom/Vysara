@@ -99,6 +99,7 @@ public sealed class StoryboardGeneratorTests
 			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.TranslateX)" To="5" />
 			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="5" />
 			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(Brush.Opacity)" To="0.5" />
+			<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Clip).(Geometry.Transform).(TranslateTransform.X)" To="5" />
 			""");
 		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
 		var code = result.AllGeneratedText();
@@ -109,6 +110,7 @@ public sealed class StoryboardGeneratorTests
 		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.UIElement.RenderTransformProperty, global::SUIsei.Media.CompositeTransform.TranslateXProperty);");
 		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.UIElement.RenderTransformProperty, global::SUIsei.Media.TranslateTransform.YProperty);");
 		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.Controls.Border.BackgroundProperty, global::SUIsei.Media.Brush.OpacityProperty);");
+		code.ShouldContain(".TargetProperty = new global::SUIsei.Animation.PropertyPath(global::SUIsei.UIElement.ClipProperty, global::SUIsei.Media.Geometry.TransformProperty, global::SUIsei.Media.TranslateTransform.XProperty);");
 		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
 	}
 

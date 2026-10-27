@@ -112,6 +112,20 @@ public sealed class GeometryGeneratorTests
 	}
 
 	[Test]
+	public void A_geometry_takes_its_transform_as_a_property_element()
+	{
+		Generates("""
+			<Border>
+			  <Border.Clip>
+			    <RectangleGeometry Rect="0,0,50,20">
+			      <RectangleGeometry.Transform><RotateTransform Angle="30" /></RectangleGeometry.Transform>
+			    </RectangleGeometry>
+			  </Border.Clip>
+			</Border>
+			""").ShouldContain(".Transform = ");
+	}
+
+	[Test]
 	public void Geometry_can_be_written_as_figures_segments_and_groups()
 	{
 		var code = Generates("""
