@@ -38,7 +38,9 @@ public static class VisualStateManager
 	/// Transition <paramref name="control"/> to the state named <paramref name="stateName"/>. Returns false when no
 	/// group contains that state. The groups are read from the control's template root (falling back to the control
 	/// itself when it has no template). Leaving a state releases every property its storyboard holds, whether that is
-	/// still running or has finished and holds its end values, except one the state entered has taken over.
+	/// still running or has finished and holds its end values, except one the state entered has taken over. As in WinUI,
+	/// going to the state a group is already in does nothing and returns true: a storyboard still running carries on rather
+	/// than starting again, so code may set every group's state whenever anything changes.
 	/// </summary>
 	public static bool GoToState(Control control, string stateName, bool useTransitions)
 	{
@@ -62,6 +64,8 @@ public static class VisualStateManager
 			}
 			if (target is null)
 				continue;
+			if (ReferenceEquals(group.CurrentState, target))
+				return true; // already in it: its storyboard carries on, or keeps holding, untouched
 
 			var clock = control.Clock;
 			var previous = group.CurrentState?.Storyboard;

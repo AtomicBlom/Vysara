@@ -221,6 +221,30 @@ public sealed class VisualStateTests
 	}
 
 	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void Going_to_the_state_a_group_is_in_does_nothing(bool useTransitions)
+	{
+		var (host, control) = ControlWithStates();
+		VisualStateManager.GoToState(control, "A", useTransitions: true);
+		host.Tick(0.1, 0f, Surface);
+		control.Opacity.ShouldBe(0.65f, 0.001f); // halfway from 1 to A's 0.3
+
+		// As WinUI's does, and as code setting every group's state whenever anything changes relies on.
+		VisualStateManager.GoToState(control, "A", useTransitions).ShouldBeTrue();
+		control.Opacity.ShouldBe(0.65f, 0.001f); // neither started again from 1 nor snapped to its end
+		host.Tick(0.1, 0.1f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f); // the same run, finishing on time
+		host.Clock.HasActiveClocks.ShouldBeFalse();
+
+		VisualStateManager.GoToState(control, "A", useTransitions).ShouldBeTrue();
+		host.Clock.HasActiveClocks.ShouldBeFalse(); // finished, and not begun again
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+		VisualStateManager.GoToState(control, "B", useTransitions: true);
+		control.Opacity.ShouldBe(1f); // and left as any state is
+	}
+
+	[Test]
 	public void Changing_state_and_running_frames_allocates_nothing_once_warm()
 	{
 		var (host, control) = ControlWithStates();
