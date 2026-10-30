@@ -162,6 +162,10 @@ public sealed class XamlSubsetContractTests
 		("a duration as m:s (hours and minutes in WinUI)", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:30" />"""), "SUISEI012"),
 		("a duration that is not a number", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="NaN" />"""), "SUISEI012"),
 		("a negative duration", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="-0:0:1" />"""), "SUISEI012"),
+		("a child its parent's content can't take", """<StackPanel><SolidColorBrush Color="Red" /></StackPanel>""", "SUISEI026"),
+		("an element of an abstract type", """<Border><Border.Background><Brush /></Border.Background></Border>""", "SUISEI025"),
+		("an element with no public parameterless constructor", """<Image><Image.Source><suisei:HostImageSource /></Image.Source></Image>""", "SUISEI025"),
+		("a property with no public setter", """<ListView SelectedIndex="2" />""", "SUISEI004"),
 	];
 
 	[Test]

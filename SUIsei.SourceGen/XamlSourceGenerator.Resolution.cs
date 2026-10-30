@@ -391,6 +391,38 @@ partial class XamlSourceGenerator
 			t.GetMembers("Add").OfType<IMethodSymbol>().Any(m => m is { MethodKind: MethodKind.Ordinary, Parameters.Length: 1 });
 	}
 
+	// The type a child element must be to go into `target` on `owner`: what a collection's one-argument Add takes, or the
+	// property's own type. Null where it can't be told, which the C# compiler then checks.
+	private static ITypeSymbol? ContentItemType(INamedTypeSymbol owner, ContentTarget target)
+	{
+		for (INamedTypeSymbol? t = owner; t is not null; t = t.BaseType)
+		{
+			if (t.GetMembers(target.Name).OfType<IPropertySymbol>().FirstOrDefault() is not { } prop)
+				continue;
+			if (!target.IsCollection)
+				return prop.Type;
+			foreach (var holder in new[] { prop.Type }.Concat(prop.Type.AllInterfaces))
+			{
+				if (holder.GetMembers("Add").OfType<IMethodSymbol>().FirstOrDefault(m => m is { MethodKind: MethodKind.Ordinary, Parameters.Length: 1 }) is { } add)
+					return add.Parameters[0].Type;
+			}
+			return null;
+		}
+		return null;
+	}
+
+	// Whether markup can build an element of `type`: a class that isn't abstract, with a public parameterless constructor.
+	private static bool IsConstructible(INamedTypeSymbol type) =>
+		type is { IsAbstract: false, IsStatic: false, TypeKind: TypeKind.Class }
+		&& type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
+
+	// Whether generated code may assign `prop`: its setter is public (or internal, for a type in the view's own assembly,
+	// which generated code is compiled into).
+	private static bool HasAccessibleSetter(IPropertySymbol prop, Compilation compilation) =>
+		prop.SetMethod is { } set && (set.DeclaredAccessibility == Accessibility.Public
+			|| (set.DeclaredAccessibility is Accessibility.Internal or Accessibility.ProtectedOrInternal
+				&& SymbolEqualityComparer.Default.Equals(prop.ContainingAssembly, compilation.Assembly)));
+
 	// An attached property set as an attribute — `Grid.Row="0"`, or `suisei:Owner.Prop="…"` from the extension namespace:
 	// a call to the owner type's static Set<Prop>(element, value), the value converted for the setter's parameter type or
 	// produced by a value markup extension. Anything that does not resolve is reported as an error.

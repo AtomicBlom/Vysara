@@ -99,6 +99,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"In a ControlTemplate, {0} is set through its setter as the part's local value, not as the template's: {1}", "SUIsei", DiagnosticSeverity.Warning, true);
 	private static readonly DiagnosticDescriptor OutsideSubset = new("SUISEI025", "Outside the XAML subset",
 		"{0} is outside the XAML subset{1}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor WrongChildType = new("SUISEI026", "Child of the wrong type",
+		"'{0}' cannot hold a {1}: its {2} takes a {3}", "SUIsei", DiagnosticSeverity.Error, true);
 
 	// The x: directives SUIsei reads, and where: x:Name on any element (and on a visual state or group), x:Key on a
 	// resource, x:Class on the root and x:DataType on a DataTemplate. Every other directive (x:Uid, x:Load, x:Phase,
@@ -390,6 +392,13 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			gen.Report(ns == ExtensionNs ? UnknownExtensionMember : UnknownElement, el, el.Name.LocalName);
 			return null;
 		}
+		if (!isRoot && !IsConstructible(type))
+		{
+			gen.Report(OutsideSubset, el, $"An element of {type.Name}", type.IsAbstract
+				? $" ({type.Name} is abstract; write one of the types derived from it)"
+				: $" (markup builds an object through a public parameterless constructor, which {type.Name} doesn't have; make it in code)");
+			return null;
+		}
 
 		var typeName = type.ToDisplayString();
 		var nameAttr = el.Attribute(X + "Name");
@@ -475,6 +484,11 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 
 			var prop = FindProperty(type, name);
 			if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
+			if (!HasAccessibleSetter(prop, gen.Compilation))
+			{
+				gen.Report(OutsideSubset, attr, $"Setting {type.Name}.{name}", " (it has no public setter)");
+				continue;
+			}
 
 			if (!IsMarkup(value, out var inner))
 			{
@@ -552,6 +566,14 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (childEl.Name.LocalName.Contains('.'))
 			{
 				HandlePropertyElement(gen, scope, var, type, childEl);
+				continue;
+			}
+			// A child the content property can't take is reported here, not left to a C# error in generated code.
+			if (content is { } expected && ContentItemType(type, expected) is { } itemType
+				&& ResolveType(gen.Compilation, childEl.Name.Namespace == XNamespace.None ? Ui : childEl.Name.Namespace, childEl.Name.LocalName) is { } childType
+				&& !gen.Compilation.ClassifyConversion(childType, itemType).IsImplicit)
+			{
+				gen.Report(WrongChildType, childEl, type.Name, childType.Name, expected.Name, itemType.Name);
 				continue;
 			}
 			var childVar = EmitElement(gen, scope, childEl);
