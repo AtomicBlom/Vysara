@@ -70,7 +70,6 @@ public static class VisualStateManager
 			var clock = control.Clock;
 			var previous = group.CurrentState?.Storyboard;
 			var previousClock = group.CurrentClock;
-			group.CurrentState = target;
 			var next = target.Storyboard;
 
 			if (next is not null && useTransitions && clock is not null)
@@ -85,7 +84,10 @@ public static class VisualStateManager
 			else
 			{
 				// Release the previous state first, so its release cannot wipe the end values shown next. On a clock they are
-				// held as a finished storyboard's are, so leaving this state releases them in turn.
+				// held as a finished storyboard's are, so leaving this state releases them in turn. The next state is checked
+				// before anything is released, so one that can't begin leaves the previous state showing.
+				if (next is not null)
+					Check(next);
 				if (previous is not null && !ReferenceEquals(previous, next))
 					Leave(previous, previousClock, null);
 				if (next is not null && clock is not null)
@@ -93,6 +95,9 @@ public static class VisualStateManager
 				else if (next is not null)
 					SnapToEnd(next);
 			}
+			// Only once the state's storyboard has begun: one that can't begin throws before anything changes, and leaves
+			// the group in the state it was in, so going to the state again tries again rather than finding it current.
+			group.CurrentState = target;
 			group.CurrentClock = next is null ? null : clock;
 			return true;
 		}
@@ -134,15 +139,26 @@ public static class VisualStateManager
 	// a state change is still observable in headless tests. Leaving the state releases the values directly.
 	private static void SnapToEnd(Storyboard storyboard)
 	{
+		Check(storyboard);
 		var children = storyboard.Children;
 		for (var i = 0; i < children.Count; i++)
 		{
 			if (children[i] is AnimationTimeline anim)
 			{
-				anim.EnsureResolved();
 				anim.CaptureStart();
 				anim.ApplyAt(1.0);
 			}
+		}
+	}
+
+	// Throw, changing nothing, if any animation of the storyboard can't begin (AnimationTimeline.CheckStart).
+	private static void Check(Storyboard storyboard)
+	{
+		var children = storyboard.Children;
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline anim)
+				anim.CheckStart();
 		}
 	}
 }

@@ -83,23 +83,26 @@ public sealed class AnimationClock
 		Settle(entry);
 	}
 
-	// Begin's work up to listing the entry. A running storyboard is stopped first, releasing its targets, while a finished
-	// one is let go with its values held, so a restart starts from them as from any value its targets show.
+	// Begin's work up to listing the entry. Every animation is checked first (its target bound, the values it names
+	// validated), so one that can't begin throws before anything changes: the storyboard is not stopped, nothing is taken
+	// over, and what was running or holding still is. Then a running storyboard is stopped, releasing its targets, while a
+	// finished one is let go with its values held, so a restart starts from them as from any value its targets show.
+	// Children are walked by index: a foreach over the IList would box an enumerator.
 	private Entry Start(Storyboard storyboard)
 	{
-		Remove(_active, storyboard, release: true);
-		Remove(_holding, storyboard, release: false);
-
-		// Resolve any declarative Target/TargetProperty (from generated XAML) into the typed apply now, then record
-		// where each run starts. Children are walked by index: a foreach over the IList would box an enumerator.
 		var children = storyboard.Children;
 		for (var i = 0; i < children.Count; i++)
 		{
 			if (children[i] is AnimationTimeline anim)
-			{
-				anim.EnsureResolved();
+				anim.CheckStart();
+		}
+
+		Remove(_active, storyboard, release: true);
+		Remove(_holding, storyboard, release: false);
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline anim)
 				anim.CaptureStart();
-			}
 		}
 
 		var entry = _freeEntries.Count > 0 ? _freeEntries.Pop() : new Entry();

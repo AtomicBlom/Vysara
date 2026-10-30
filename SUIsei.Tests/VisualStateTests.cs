@@ -244,6 +244,45 @@ public sealed class VisualStateTests
 		control.Opacity.ShouldBe(1f); // and left as any state is
 	}
 
+	/// <summary>
+	/// A state whose storyboard can't begin throws before anything changes: the state being left still holds its values,
+	/// nothing it animates is taken over, and the group is still in it. So going to the broken state again throws again,
+	/// rather than finding it current and doing nothing.
+	/// </summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_that_cannot_begin_changes_nothing_and_throws_again_when_retried(bool useTransitions)
+	{
+		var (host, control) = ControlWithStates();
+		VisualStateManager.GoToState(control, "A", useTransitions: true);
+		host.Tick(0.3, 0f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+		var group = VisualStateManager.GetVisualStateGroups(control)[0];
+		// Its opacity animation is fine; its MaxWidth one has no From, and MaxWidth is infinite by default.
+		group.States.Add(new VisualState
+		{
+			Name = "Broken",
+			Storyboard = new Storyboard
+			{
+				Children =
+					{
+						new DoubleAnimation { To = 0.9, Duration = TimeSpan.FromSeconds(0.2), Target = control, TargetProperty = UIElement.OpacityProperty },
+						new DoubleAnimation { To = 50, Duration = TimeSpan.FromSeconds(0.2), Target = control, TargetProperty = FrameworkElement.MaxWidthProperty },
+					},
+			},
+		});
+
+		Should.Throw<InvalidOperationException>(() => VisualStateManager.GoToState(control, "Broken", useTransitions));
+
+		group.CurrentState!.Name.ShouldBe("A");
+		host.Tick(0.1, 0.3f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f); // A still holds it, untaken
+		Should.Throw<InvalidOperationException>(() => VisualStateManager.GoToState(control, "Broken", useTransitions));
+		VisualStateManager.GoToState(control, "B", useTransitions: true);
+		control.Opacity.ShouldBe(1f); // and A is released when left
+	}
+
 	[Test]
 	public void Changing_state_and_running_frames_allocates_nothing_once_warm()
 	{

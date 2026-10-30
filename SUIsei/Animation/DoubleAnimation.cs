@@ -44,9 +44,9 @@ public sealed class DoubleAnimation : AnimationTimeline<double>
 	// With no From the run starts from the target's value, which must be a number. A size left Auto is NaN, and a
 	// MaxWidth is infinite by default; WinUI interpolates from NaN, so the size stays Auto for the whole run and after, and
 	// WPF throws. This throws, as WPF does, so the missing From is found at once.
-	internal override void CaptureStart()
+	internal override void CheckStart()
 	{
-		base.CaptureStart();
+		base.CheckStart();
 		if (From is null && !double.IsFinite(StartValue))
 			throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture,
 				$"A {nameof(DoubleAnimation)} with no From starts from its target's value, and {TargetProperty?.ToString() ?? "its target"} " +

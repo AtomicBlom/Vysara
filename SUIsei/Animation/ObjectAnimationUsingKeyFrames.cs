@@ -42,8 +42,9 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 		(BoundOwner, BoundProperty) = (owner, target);
 	}
 
-	internal override void CaptureStart()
+	internal override void CheckStart()
 	{
+		EnsureResolved();
 		if (_binding is not { } binding)
 			return;
 		for (var i = 0; i < KeyFrames.Count; i++)
@@ -55,8 +56,9 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 					$"to {(value is null ? "null" : "a " + value.GetType().Name)} (its key at {KeyFrames[i].KeyTime}).");
 			binding.Validate(value);
 		}
-		binding.CaptureStart();
 	}
+
+	internal override void CaptureStart() => _binding?.CaptureStart();
 
 	internal override void ApplyAt(double progress)
 	{

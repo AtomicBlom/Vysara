@@ -27,8 +27,14 @@ public abstract class AnimationTimeline : Timeline
 	/// apply/release/read, once, before the storyboard runs. A no-op when an explicit apply delegate was set in code.</summary>
 	internal abstract void EnsureResolved();
 
+	/// <summary>Throw if this run cannot begin: its target can't be bound, or a value it names is one the target refuses.
+	/// Binds the target (<see cref="EnsureResolved"/>) but changes nothing a clock tracks or a target shows, so a clock
+	/// checks every animation of a storyboard before it changes anything, and a storyboard that can't begin leaves
+	/// everything as it was.</summary>
+	internal abstract void CheckStart();
+
 	/// <summary>Record where this run starts — <c>From</c> when set, else the target's current value. Called as the
-	/// animation begins, after <see cref="EnsureResolved"/>.</summary>
+	/// animation begins, after <see cref="CheckStart"/>; it throws nothing.</summary>
 	internal abstract void CaptureStart();
 
 	/// <summary>The object whose property this animation drives, once it has been bound to that property, as
@@ -106,12 +112,15 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 			throw new InvalidOperationException($"A {GetType().Name} cannot animate {target.Name}, which holds a {target.ValueTypeName}.");
 	}
 
-	internal override void CaptureStart()
+	internal override void CheckStart()
 	{
-		StartValue = ReadCurrent is { } read ? read() : default!;
+		EnsureResolved();
+		CaptureStart(); // the start a missing From stands for, as it is now
 		if (ValidateValue is { } validate)
 			ValidateValues(validate);
 	}
+
+	internal override void CaptureStart() => StartValue = ReadCurrent is { } read ? read() : default!;
 
 	/// <summary>
 	/// Checks a value against the target property's own rules (its <see cref="PropertyMetadata{TOwner, TValue}.Validate"/>),
