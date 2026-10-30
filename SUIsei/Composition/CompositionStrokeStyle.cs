@@ -1,5 +1,3 @@
-using SUIsei.Media;
-
 namespace SUIsei.Composition;
 
 /// <summary>
@@ -22,22 +20,22 @@ public sealed class CompositionStrokeStyle
 	/// <summary>The stroke's width, centred on the path. 1 by default; 0 or less draws nothing.</summary>
 	public float Thickness { get; set => Change(ref field, value); } = 1f;
 
-	/// <summary>How the stroke turns corners. <see cref="PenLineJoin.Miter"/> by default.</summary>
-	public PenLineJoin LineJoin { get; set => Change(ref field, value); }
+	/// <summary>How the stroke turns corners. <see cref="CompositionStrokeLineJoin.Miter"/> by default.</summary>
+	public CompositionStrokeLineJoin LineJoin { get; set => Change(ref field, value); }
 
 	/// <summary>The longest a miter may reach from its corner, in half thicknesses; a longer one is cut off there. 10 by
 	/// default, and treated as at least 1.</summary>
 	public float MiterLimit { get; set => Change(ref field, value); } = 10f;
 
-	/// <summary>The cap at the start of each open figure. <see cref="PenLineCap.Flat"/> by default.</summary>
-	public PenLineCap StartCap { get; set => Change(ref field, value); }
+	/// <summary>The cap at the start of each open figure. <see cref="CompositionStrokeCap.Flat"/> by default.</summary>
+	public CompositionStrokeCap StartCap { get; set => Change(ref field, value); }
 
-	/// <summary>The cap at the end of each open figure. <see cref="PenLineCap.Flat"/> by default.</summary>
-	public PenLineCap EndCap { get; set => Change(ref field, value); }
+	/// <summary>The cap at the end of each open figure. <see cref="CompositionStrokeCap.Flat"/> by default.</summary>
+	public CompositionStrokeCap EndCap { get; set => Change(ref field, value); }
 
 	/// <summary>The cap at both ends of each dash, where a dash does not end at a figure's start or end.
-	/// <see cref="PenLineCap.Flat"/> by default.</summary>
-	public PenLineCap DashCap { get; set => Change(ref field, value); }
+	/// <see cref="CompositionStrokeCap.Flat"/> by default.</summary>
+	public CompositionStrokeCap DashCap { get; set => Change(ref field, value); }
 
 	/// <summary>How far into the dash pattern each figure starts, in thicknesses. 0 by default.</summary>
 	public float DashOffset { get; set => Change(ref field, value); }

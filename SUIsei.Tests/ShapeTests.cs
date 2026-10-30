@@ -74,7 +74,7 @@ public sealed class ShapeTests
 		Laid(shape);
 		var style = Drawn(shape).StrokeStyle;
 		(style.Thickness, style.MiterLimit, style.LineJoin, style.StartCap, style.EndCap, style.DashCap, style.IsDashed)
-			.ShouldBe((1f, 10f, PenLineJoin.Miter, PenLineCap.Flat, PenLineCap.Flat, PenLineCap.Flat, false));
+			.ShouldBe((1f, 10f, CompositionStrokeLineJoin.Miter, CompositionStrokeCap.Flat, CompositionStrokeCap.Flat, CompositionStrokeCap.Flat, false));
 
 		shape.StrokeThickness = 3f;
 		shape.StrokeLineJoin = PenLineJoin.Round;
@@ -87,7 +87,7 @@ public sealed class ShapeTests
 		Laid(shape);
 
 		(style.Thickness, style.MiterLimit, style.LineJoin, style.StartCap, style.EndCap, style.DashCap, style.DashOffset)
-			.ShouldBe((3f, 4f, PenLineJoin.Round, PenLineCap.Round, PenLineCap.Triangle, PenLineCap.Square, 0.5f));
+			.ShouldBe((3f, 4f, CompositionStrokeLineJoin.Round, CompositionStrokeCap.Round, CompositionStrokeCap.Triangle, CompositionStrokeCap.Square, 0.5f));
 		style.DashArray.ToArray().ShouldBe([2f, 1f]);
 	}
 

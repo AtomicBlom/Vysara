@@ -63,8 +63,8 @@ public sealed class ShapeContentTests
 			Trim = new PathTrim(0f, 0.5f, 0.25f),
 		};
 		shape.StrokeStyle.Thickness = 4f;
-		shape.StrokeStyle.LineJoin = PenLineJoin.Round;
-		shape.StrokeStyle.StartCap = PenLineCap.Round;
+		shape.StrokeStyle.LineJoin = CompositionStrokeLineJoin.Round;
+		shape.StrokeStyle.StartCap = CompositionStrokeCap.Round;
 		shape.StrokeStyle.SetDashArray([2f, 1f]);
 		shape.StrokeStyle.DashOffset = 0.5f;
 
@@ -337,7 +337,7 @@ public sealed class ShapeContentTests
 	public void A_letterboxed_image_paints_only_where_it_lies_under_any_transform(float degrees)
 	{
 		// A square image in a 40×20 box, Uniform: it fills x 30..50 and leaves the rest of the box unpainted, turned or not.
-		var image = new CompositionSurfaceBrush { Surface = BitmapSource.FromRgba8(1, 1, [255, 255, 255, 255]), Stretch = Stretch.Uniform };
+		var image = new CompositionSurfaceBrush { Surface = BitmapSource.FromRgba8(1, 1, [255, 255, 255, 255]), Stretch = CompositionStretch.Uniform };
 		var shape = new ShapeContent { Path = PathOf("M 20,40 L 60,40 L 60,60 L 20,60 Z"), Fill = image };
 		var (root, sprite) = Scene(shape);
 		var turn = Matrix3x2.CreateRotation(degrees * MathF.PI / 180f, new Vector2(40f, 50f));

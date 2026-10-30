@@ -45,7 +45,7 @@ public sealed class PathGeometry : Geometry
 
 	private protected override void BuildPath(CompositionPath path)
 	{
-		path.FillRule = FillRule;
+		path.FillRule = FillRule.ToComposition();
 		if (GetValue(FiguresProperty) is not { } figures)
 			return;
 		for (var i = 0; i < figures.Count; i++)

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using SUIsei.Drawing;
-using SUIsei.Media;
 
 namespace SUIsei.Composition;
 
@@ -188,11 +187,11 @@ public sealed class ShapeContent : VisualContent
 			stroke.Describe(sb);
 			if (StrokeBrushAlongLength)
 				sb.Append(" along-length");
-			if (style.LineJoin != PenLineJoin.Miter)
+			if (style.LineJoin != CompositionStrokeLineJoin.Miter)
 				sb.Append(c, $" join={style.LineJoin}");
 			else if (style.MiterLimit != 10f)
 				sb.Append(c, $" miter={style.MiterLimit:0.###}");
-			if (style.StartCap != PenLineCap.Flat || style.EndCap != PenLineCap.Flat)
+			if (style.StartCap != CompositionStrokeCap.Flat || style.EndCap != CompositionStrokeCap.Flat)
 				sb.Append(c, $" caps={style.StartCap},{style.EndCap}");
 			if (style.IsDashed)
 			{
@@ -202,7 +201,7 @@ public sealed class ShapeContent : VisualContent
 					sb.Append(c, $"{(i > 0 ? "," : "")}{dashes[i]:0.###}");
 				if (style.DashOffset != 0f)
 					sb.Append(c, $"@{style.DashOffset:0.###}");
-				if (style.DashCap != PenLineCap.Flat)
+				if (style.DashCap != CompositionStrokeCap.Flat)
 					sb.Append(c, $" dashcap={style.DashCap}");
 				if (_stroke.DashesLimited)
 					sb.Append(" (past the dash limit, the rest drawn solid)");

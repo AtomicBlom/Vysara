@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
-using SUIsei.Media;
 
 namespace SUIsei.Composition;
 
@@ -31,9 +30,9 @@ public sealed class CompositionPath
 	/// <summary>Advances on every change; never 0, so a consumer can use 0 for "not seen yet".</summary>
 	public uint Version { get; private set; } = 1;
 
-	/// <summary>How overlapping figures and self-crossings decide what a fill covers. <see cref="FillRule.EvenOdd"/>
+	/// <summary>How overlapping figures and self-crossings decide what a fill covers. <see cref="CompositionFillRule.EvenOdd"/>
 	/// by default, as WinUI's.</summary>
-	public FillRule FillRule
+	public CompositionFillRule FillRule
 	{
 		get;
 		set
@@ -150,7 +149,7 @@ public sealed class CompositionPath
 	/// they just do; a zero radius draws a straight line, and an arc that ends where it starts draws nothing, as SVG's
 	/// arcs do.
 	/// </summary>
-	public void ArcTo(Vector2 radii, float rotationDegrees, bool isLargeArc, SweepDirection sweepDirection, Vector2 point)
+	public void ArcTo(Vector2 radii, float rotationDegrees, bool isLargeArc, CompositionSweepDirection sweepDirection, Vector2 point)
 	{
 		RequireFigure();
 		var start = _current;
@@ -180,7 +179,7 @@ public sealed class CompositionPath
 		var num = rx2 * ry2 - rx2 * y1 * y1 - ry2 * x1 * x1;
 		var den = rx2 * y1 * y1 + ry2 * x1 * x1;
 		var coef = den > 0 ? Math.Sqrt(Math.Max(0, num / den)) : 0;
-		var clockwise = sweepDirection == SweepDirection.Clockwise;
+		var clockwise = sweepDirection == CompositionSweepDirection.Clockwise;
 		if (isLargeArc == clockwise)
 			coef = -coef;
 		var cxp = coef * rx * y1 / ry;
@@ -248,7 +247,7 @@ public sealed class CompositionPath
 		{
 			LineTo(end);
 			if (r != Vector2.Zero)
-				ArcTo(r, 0f, false, SweepDirection.Clockwise, cornerEnd);
+				ArcTo(r, 0f, false, CompositionSweepDirection.Clockwise, cornerEnd);
 		}
 	}
 
@@ -261,8 +260,8 @@ public sealed class CompositionPath
 		var radii = new Vector2(rect.Width / 2f, rect.Height / 2f);
 		var center = new Vector2(rect.X, rect.Y) + radii;
 		MoveTo(center + new Vector2(radii.X, 0f));
-		ArcTo(radii, 0f, false, SweepDirection.Clockwise, center - new Vector2(radii.X, 0f));
-		ArcTo(radii, 0f, false, SweepDirection.Clockwise, center + new Vector2(radii.X, 0f));
+		ArcTo(radii, 0f, false, CompositionSweepDirection.Clockwise, center - new Vector2(radii.X, 0f));
+		ArcTo(radii, 0f, false, CompositionSweepDirection.Clockwise, center + new Vector2(radii.X, 0f));
 		Close();
 	}
 
@@ -304,7 +303,7 @@ public sealed class CompositionPath
 	public override string ToString()
 	{
 		var sb = new StringBuilder();
-		if (FillRule == FillRule.Nonzero)
+		if (FillRule == CompositionFillRule.Nonzero)
 			sb.Append("F1 ");
 		var points = Points;
 		var p = 0;

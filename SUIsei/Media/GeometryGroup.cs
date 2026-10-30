@@ -51,7 +51,7 @@ public sealed class GeometryGroup : Geometry
 
 	private protected override void BuildPath(CompositionPath path)
 	{
-		path.FillRule = FillRule;
+		path.FillRule = FillRule.ToComposition();
 		if (GetValue(ChildrenProperty) is not { } children)
 			return;
 		for (var i = 0; i < children.Count; i++)

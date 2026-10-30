@@ -1,6 +1,5 @@
 using System.Numerics;
 using SUIsei.Composition;
-using SUIsei.Media;
 
 namespace SUIsei.Drawing;
 
@@ -154,7 +153,7 @@ public sealed partial class Tessellator
 	/// and the closing join. Returns the bodies added.
 	/// </summary>
 	private int AddRun(TessellatedPath output, CompositionStrokeStyle style, in FigureRuns figure, float r0, float r1, bool loop,
-		PenLineCap startCap, PenLineCap endCap)
+		CompositionStrokeCap startCap, CompositionStrokeCap endCap)
 	{
 		var h = output.HalfThickness;
 		var m = output.Margin;
@@ -245,13 +244,13 @@ public sealed partial class Tessellator
 		// At a corner the style's join applies. Inside a flattened curve the turn is the curve's own: a small one is
 		// mitered, which is exact for the flattened outline, and a sharp one (a cusp) rounded, as the curve's offset is.
 		var join = corner ? style.LineJoin
-			: Vector2.Dot(t1, t2) > 0.966f ? PenLineJoin.Miter : PenLineJoin.Round;
+			: Vector2.Dot(t1, t2) > 0.966f ? CompositionStrokeLineJoin.Miter : CompositionStrokeLineJoin.Round;
 		var first = output.Triangles.Count;
 		StrokePrimitives.Join(output.Triangles, join, point, t1, t2, output.HalfThickness, output.Margin, style.MiterLimit, output.Tolerance, arc);
 		output.Pieces.Add(new TessellatedPath.Piece(kind, r, r, first, output.Triangles.Count - first, -1, 0, false, false));
 	}
 
-	private static void AddCap(TessellatedPath output, PenLineCap cap, int segmentIndex, float x, bool atStart, in FigureRuns figure, float r)
+	private static void AddCap(TessellatedPath output, CompositionStrokeCap cap, int segmentIndex, float x, bool atStart, in FigureRuns figure, float r)
 	{
 		var h = output.HalfThickness;
 		var m = output.Margin;
@@ -260,9 +259,9 @@ public sealed partial class Tessellator
 		var first = output.Triangles.Count;
 		switch (cap)
 		{
-			case PenLineCap.Flat or PenLineCap.Square:
+			case CompositionStrokeCap.Flat or CompositionStrokeCap.Square:
 				{
-					var reach = cap == PenLineCap.Square ? h + m : m;
+					var reach = cap == CompositionStrokeCap.Square ? h + m : m;
 					var clip = CapClip(cap, x, atStart ? -1 : 1, h);
 					if (atStart)
 						StrokePrimitives.CapExtension(output.Triangles, s.Start, s.Direction, x - reach, x, h, m, clip, null, arc);
@@ -280,15 +279,15 @@ public sealed partial class Tessellator
 	}
 
 	// One half of a dot: a flat cap draws nothing (a zero-length flat stroke has no area), the others their shape.
-	private static void AddDotCap(TessellatedPath output, PenLineCap cap, in TessellatedPath.Segment s, float x, bool atStart, float h, float m,
+	private static void AddDotCap(TessellatedPath output, CompositionStrokeCap cap, in TessellatedPath.Segment s, float x, bool atStart, float h, float m,
 		float tolerance, float arc)
 	{
 		var first = output.Triangles.Count;
 		switch (cap)
 		{
-			case PenLineCap.Flat:
+			case CompositionStrokeCap.Flat:
 				break;
-			case PenLineCap.Square:
+			case CompositionStrokeCap.Square:
 				if (atStart)
 					StrokePrimitives.CapExtension(output.Triangles, s.Start, s.Direction, x - h - m, x, h, m, x - h, null, arc);
 				else
@@ -305,10 +304,10 @@ public sealed partial class Tessellator
 
 	// Where a flat or square cap's end line lies along its segment, for a cap facing back (-1) or forward (+1) from x;
 	// null for caps drawn on their own.
-	private static float? CapClip(PenLineCap cap, float x, int facing, float h) => cap switch
+	private static float? CapClip(CompositionStrokeCap cap, float x, int facing, float h) => cap switch
 	{
-		PenLineCap.Flat => x,
-		PenLineCap.Square => x + facing * h,
+		CompositionStrokeCap.Flat => x,
+		CompositionStrokeCap.Square => x + facing * h,
 		_ => null,
 	};
 

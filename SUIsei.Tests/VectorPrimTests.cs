@@ -28,7 +28,7 @@ public sealed class VectorPrimTests
 		return output;
 	}
 
-	private static TessellatedPath Stroke(string markup, float thickness, PenLineJoin join = PenLineJoin.Miter)
+	private static TessellatedPath Stroke(string markup, float thickness, CompositionStrokeLineJoin join = CompositionStrokeLineJoin.Miter)
 	{
 		var output = new TessellatedPath();
 		new Tessellator().Stroke(Geometry.Parse(markup).CompositionPath, new CompositionStrokeStyle { Thickness = thickness, LineJoin = join },
@@ -211,7 +211,7 @@ public sealed class VectorPrimTests
 		path.LineTo(new Vector2(640, 190));
 		path.LineTo(new Vector2(720, 70));
 		path.LineTo(new Vector2(800, 190));
-		var style = new CompositionStrokeStyle { Thickness = 18, LineJoin = PenLineJoin.Bevel, StartCap = PenLineCap.Round, EndCap = PenLineCap.Triangle };
+		var style = new CompositionStrokeStyle { Thickness = 18, LineJoin = CompositionStrokeLineJoin.Bevel, StartCap = CompositionStrokeCap.Round, EndCap = CompositionStrokeCap.Triangle };
 		var stroke = new TessellatedPath();
 		new Tessellator().Stroke(path, style, TessellationScale.For(Matrix3x2.Identity), stroke);
 		var builder = new DrawListBuilder();
@@ -315,7 +315,7 @@ public sealed class VectorPrimTests
 	public void Drawing_a_path_moved_recoloured_and_trimmed_allocates_nothing_once_warm()
 	{
 		var fill = Fill("M 0,0 C 0,40 40,40 40,0 Z");
-		var stroke = Stroke("M 0,0 C 0,40 40,40 40,0 L 20,-20 Z", 3, PenLineJoin.Round);
+		var stroke = Stroke("M 0,0 C 0,40 40,40 40,0 L 20,-20 Z", 3, CompositionStrokeLineJoin.Round);
 		var builder = new DrawListBuilder();
 		for (var i = 0; i < 8; i++)
 			Frame(i);

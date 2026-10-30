@@ -30,8 +30,8 @@ public sealed class EllipseGeometry : Geometry
 		// Two half-ellipse arcs from the rightmost point, clockwise on screen as WinUI's ellipse runs.
 		var c = Center.ToVector2();
 		path.MoveTo(c + new Vector2(radii.X, 0));
-		path.ArcTo(radii, 0, false, SweepDirection.Clockwise, c - new Vector2(radii.X, 0));
-		path.ArcTo(radii, 0, false, SweepDirection.Clockwise, c + new Vector2(radii.X, 0));
+		path.ArcTo(radii, 0, false, CompositionSweepDirection.Clockwise, c - new Vector2(radii.X, 0));
+		path.ArcTo(radii, 0, false, CompositionSweepDirection.Clockwise, c + new Vector2(radii.X, 0));
 		path.Close();
 	}
 }

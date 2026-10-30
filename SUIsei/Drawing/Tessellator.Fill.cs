@@ -1,6 +1,5 @@
 using System.Numerics;
 using SUIsei.Composition;
-using SUIsei.Media;
 
 namespace SUIsei.Drawing;
 
@@ -87,12 +86,12 @@ public sealed partial class Tessellator
 
 	// Resolve crossing contours under the fill rule into the filled region's boundary, which replaces them: simple
 	// contours, a filled region on the left of each (a positive area round it, negative round a hole).
-	private void SweepBoundaries(FillRule rule)
+	private void SweepBoundaries(CompositionFillRule rule)
 	{
 		_sweep.Begin();
 		foreach (var contour in _contours.Span)
 			_sweep.AddContour(_contour.Span.Slice(contour.Start, contour.Count));
-		_sweep.Tessellate(rule == FillRule.Nonzero ? SweepTessellator.WindingRule.Nonzero : SweepTessellator.WindingRule.Odd, boundaryOnly: true);
+		_sweep.Tessellate(rule == CompositionFillRule.Nonzero ? SweepTessellator.WindingRule.Nonzero : SweepTessellator.WindingRule.Odd, boundaryOnly: true);
 
 		_contour.Clear();
 		_contours.Clear();
@@ -326,7 +325,7 @@ public sealed partial class Tessellator
 
 	// Find each contour's parent (the smallest contour around it), wind the regions under the fill rule, and decide which
 	// contours are boundaries: outers around a filled region (made to have a positive area) and holes in one (negative).
-	private void ResolveNesting(FillRule rule)
+	private void ResolveNesting(CompositionFillRule rule)
 	{
 		var points = _contour.Span;
 		for (var c = 0; c < _contours.Count; c++)
@@ -349,7 +348,7 @@ public sealed partial class Tessellator
 			var winding = 0;
 			for (var p = c; p >= 0; p = _contours[p].Parent)
 				winding += _contours[p].Area > 0 ? 1 : -1;
-			_contours[c].Filled = rule == FillRule.Nonzero ? winding != 0 : (winding & 1) != 0;
+			_contours[c].Filled = rule == CompositionFillRule.Nonzero ? winding != 0 : (winding & 1) != 0;
 		}
 
 		for (var c = 0; c < _contours.Count; c++)

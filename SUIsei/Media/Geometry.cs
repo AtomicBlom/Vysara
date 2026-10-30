@@ -72,7 +72,7 @@ public abstract class Geometry : DependencyObject, ISubPropertyListener
 			if (!_pathCurrent)
 			{
 				_path.Clear();
-				_path.FillRule = FillRule.EvenOdd;
+				_path.FillRule = CompositionFillRule.EvenOdd;
 				BuildPath(_path);
 				_pathCurrent = true;
 			}

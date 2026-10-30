@@ -38,7 +38,7 @@ public sealed class Image : FrameworkElement
 			return null;
 		var paint = _paint ??= new CompositionSurfaceBrush();
 		paint.Surface = source;
-		paint.Stretch = Stretch;
+		paint.Stretch = Stretch.ToComposition();
 		var ratio = Stretch == Stretch.None ? 0f : 0.5f;
 		paint.HorizontalAlignmentRatio = ratio;
 		paint.VerticalAlignmentRatio = ratio;

@@ -1,6 +1,5 @@
 using System.Numerics;
 using SUIsei.Composition;
-using SUIsei.Media;
 
 namespace SUIsei.Drawing;
 
@@ -34,7 +33,7 @@ public sealed class TessellatedPath
 	/// figure's start.
 	/// </summary>
 	internal readonly record struct Run(int FirstSegment, int SegmentCount, float FigureLength, float FigureOffset, bool ClosedFigure,
-		bool Loop, float R0, float R1, PenLineCap StartCap, PenLineCap EndCap, int FirstPiece, int PieceCount);
+		bool Loop, float R0, float R1, CompositionStrokeCap StartCap, CompositionStrokeCap EndCap, int FirstPiece, int PieceCount);
 
 	// How close two arc lengths along the path must be to count as one: relative to the path's length, since an absolute
 	// tolerance falls below one float step once arc lengths reach the hundreds.
@@ -98,8 +97,8 @@ public sealed class TessellatedPath
 	internal float HalfThickness;
 	internal float Margin;
 	internal float Tolerance;
-	internal PenLineCap TrimStartCap;
-	internal PenLineCap TrimEndCap;
+	internal CompositionStrokeCap TrimStartCap;
+	internal CompositionStrokeCap TrimEndCap;
 
 	internal void Begin(bool isStroke, CompositionPath path, in Matrix3x2 pathTransform, CompositionStrokeStyle? style, TessellationScale scale)
 	{
@@ -333,7 +332,7 @@ public sealed class TessellatedPath
 				RebuildCap(run, _path.TrimEndCap, endAt.Segment, endAt.X, atStart: false);
 		}
 
-		private void RebuildCap(in TessellatedPath.Run run, PenLineCap cap, int segmentIndex, float x, bool atStart)
+		private void RebuildCap(in TessellatedPath.Run run, CompositionStrokeCap cap, int segmentIndex, float x, bool atStart)
 		{
 			var segment = _path.Segments.Span[segmentIndex];
 			var h = _path.HalfThickness;
@@ -342,9 +341,9 @@ public sealed class TessellatedPath
 			var t = segment.Direction;
 			switch (cap)
 			{
-				case PenLineCap.Flat or PenLineCap.Square:
+				case CompositionStrokeCap.Flat or CompositionStrokeCap.Square:
 					{
-						var reach = cap == PenLineCap.Square ? h + m : m;
+						var reach = cap == CompositionStrokeCap.Square ? h + m : m;
 						var clip = Clip(cap, x, atStart ? -1 : 1, h);
 						if (atStart)
 							StrokePrimitives.CapExtension(_path._rebuilt, segment.Start, t, x - reach, x, h, m, clip, null, arc);
@@ -359,10 +358,10 @@ public sealed class TessellatedPath
 		}
 
 		// Where a flat or square cap's end line lies along the segment, for a cap facing back (-1) or forward (+1) at x.
-		private static float? Clip(PenLineCap cap, float x, int facing, float h) => cap switch
+		private static float? Clip(CompositionStrokeCap cap, float x, int facing, float h) => cap switch
 		{
-			PenLineCap.Flat => x,
-			PenLineCap.Square => x + facing * h,
+			CompositionStrokeCap.Flat => x,
+			CompositionStrokeCap.Square => x + facing * h,
 			_ => null,
 		};
 

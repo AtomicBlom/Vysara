@@ -19,7 +19,7 @@ public sealed class CompositionSurfaceBrush : CompositionBrush
 	internal TextureSource? Drawn => Surface is { IsDisposed: false } surface ? surface : null;
 
 	/// <summary>How the image is scaled into the box. Defaults to filling it.</summary>
-	public Stretch Stretch { get; set => Change(ref field, value); } = Stretch.Fill;
+	public CompositionStretch Stretch { get; set => Change(ref field, value); } = CompositionStretch.Fill;
 
 	/// <summary>Where the image sits across the box when it is narrower or wider: 0 at the left, 1 at the right.</summary>
 	public float HorizontalAlignmentRatio { get; set => Change(ref field, value); } = 0.5f;
@@ -31,13 +31,13 @@ public sealed class CompositionSurfaceBrush : CompositionBrush
 	/// box: <see cref="Stretch"/> scales it, the alignment ratios place it.</summary>
 	internal Rect ImageRect(Vector2 size)
 	{
-		if (Surface is not { } surface || surface.Width <= 0 || surface.Height <= 0 || Stretch == Stretch.Fill)
+		if (Surface is not { } surface || surface.Width <= 0 || surface.Height <= 0 || Stretch == CompositionStretch.Fill)
 			return new Rect(0f, 0f, size.X, size.Y);
 		float iw = surface.Width, ih = surface.Height;
 		var scale = Stretch switch
 		{
-			Stretch.None => 1f,
-			Stretch.UniformToFill => MathF.Max(size.X / iw, size.Y / ih),
+			CompositionStretch.None => 1f,
+			CompositionStretch.UniformToFill => MathF.Max(size.X / iw, size.Y / ih),
 			_ => MathF.Min(size.X / iw, size.Y / ih),
 		};
 		var w = iw * scale;

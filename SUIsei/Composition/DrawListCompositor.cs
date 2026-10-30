@@ -1,6 +1,5 @@
 using System.Numerics;
 using SUIsei.Drawing;
-using SUIsei.Media;
 
 namespace SUIsei.Composition;
 
@@ -433,7 +432,7 @@ public sealed class DrawListCompositor : IUICompositor
 			fill.AddRoundedRectangle(outer, Circular(outer, radius));
 			var ring = Border.Path!;
 			ring.Clear();
-			ring.FillRule = FillRule.EvenOdd;
+			ring.FillRule = CompositionFillRule.EvenOdd;
 			ring.AddRoundedRectangle(outer, Circular(outer, radius));
 			ring.AddRoundedRectangle(inner, Circular(inner, radius - thickness));
 		}

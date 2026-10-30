@@ -276,11 +276,11 @@ public abstract class Shape : FrameworkElement
 		content.Stroke = Stroke?.CompositionBrush;
 		var style = content.StrokeStyle;
 		style.Thickness = StrokeThickness;
-		style.LineJoin = StrokeLineJoin;
+		style.LineJoin = StrokeLineJoin.ToComposition();
 		style.MiterLimit = StrokeMiterLimit;
-		style.StartCap = StrokeStartLineCap;
-		style.EndCap = StrokeEndLineCap;
-		style.DashCap = StrokeDashCap;
+		style.StartCap = StrokeStartLineCap.ToComposition();
+		style.EndCap = StrokeEndLineCap.ToComposition();
+		style.DashCap = StrokeDashCap.ToComposition();
 		style.DashOffset = StrokeDashOffset;
 		var dashes = GetValue(StrokeDashArrayProperty);
 		var count = dashes?.Count ?? 0;
