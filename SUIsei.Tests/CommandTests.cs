@@ -51,6 +51,30 @@ public sealed class CommandTests
 		button.IsEnabled.ShouldBeTrue();
 	}
 
+	/// <summary>A command's CanExecute is folded into the effective IsEnabled, as WinUI folds it, rather than written over the
+	/// author's value: a button its author disabled stays disabled however the command changes, and keeps its own value.</summary>
+	[Test]
+	public void CanExecute_never_overrides_the_authors_IsEnabled()
+	{
+		var can = true;
+		var command = new RelayCommand(_ => { }, _ => can);
+		var button = new Button { IsEnabled = false, Command = command };
+
+		button.IsEnabled.ShouldBeFalse(); // the author's false, though the command can execute
+		can = false;
+		command.RaiseCanExecuteChanged();
+		can = true;
+		command.RaiseCanExecuteChanged();
+		button.IsEnabled.ShouldBeFalse();
+
+		button.ClearValue(Control.IsEnabledProperty);
+		button.IsEnabled.ShouldBeTrue(); // the command can, and the author no longer says otherwise
+		can = false;
+		command.RaiseCanExecuteChanged();
+		button.IsEnabled.ShouldBeFalse();
+		button.HasLocalValue(Control.IsEnabledProperty).ShouldBeFalse(); // the command never wrote one
+	}
+
 	[Test]
 	public void Execute_is_gated_by_CanExecute()
 	{

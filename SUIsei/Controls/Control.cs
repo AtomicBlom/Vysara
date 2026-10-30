@@ -16,7 +16,7 @@ public abstract class Control : FrameworkElement
 			new PropertyMetadata<Control, bool>
 			{
 				DefaultValue = true,
-				Coerce = static (c, value) => value && !c._ancestorDisabled,
+				Coerce = static (c, value) => value && !c._ancestorDisabled && !c._commandDisabled,
 				PropertyChanged = static (c, _, _) => c.RefreshIsEnabled(),
 			});
 
@@ -64,6 +64,20 @@ public abstract class Control : FrameworkElement
 		if (_ancestorDisabled == disabled)
 			return;
 		_ancestorDisabled = disabled;
+		RefreshIsEnabled();
+	}
+
+	// Whether a command the control runs can't execute now: folded into the effective IsEnabled, as WinUI folds
+	// CanExecute in, rather than written over the author's own value.
+	private bool _commandDisabled;
+
+	/// <summary>Set whether the control's command can't execute now; called as the command, its parameter or its
+	/// CanExecute changes.</summary>
+	private protected void SetCommandDisabled(bool disabled)
+	{
+		if (_commandDisabled == disabled)
+			return;
+		_commandDisabled = disabled;
 		RefreshIsEnabled();
 	}
 
