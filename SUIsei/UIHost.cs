@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Numerics;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using SUIsei.Animation;
 using SUIsei.Drawing;
@@ -166,19 +167,40 @@ public sealed class UIHost
 		WantsKeyboard = Focus.WantsKeyboard;
 	}
 
-	/// <summary>Composite each view's visual tree → <see cref="DrawLists"/>, and report the texture sources no list
-	/// samples any more → <see cref="ReleasedTextures"/>.</summary>
+	/// <summary>
+	/// Composite each view's visual tree → <see cref="DrawLists"/>, and report the texture sources no list samples any
+	/// more → <see cref="ReleasedTextures"/>. A view whose composite throws keeps its last good list and is composited
+	/// whole again next frame; the other views still draw, the texture report is still made, and then the first such
+	/// exception is rethrown.
+	/// </summary>
 	public void Render()
 	{
 		_textures.BeginRender();
 		_drawLists.Clear();
-		foreach (var view in _views)
+		ExceptionDispatchInfo? failure = null;
+		try
 		{
-			var list = view.Root.Render();
-			_drawLists.Add((view.Surface, list));
-			view.Textures.Track(list, _textures);
+			foreach (var view in _views)
+			{
+				DrawListData list;
+				try
+				{
+					list = view.Root.Render();
+				}
+				catch (Exception exception)
+				{
+					failure ??= ExceptionDispatchInfo.Capture(exception);
+					list = view.Root.LastDraw();
+				}
+				_drawLists.Add((view.Surface, list));
+				view.Textures.Track(list, _textures);
+			}
 		}
-		_textures.EndRender();
+		finally
+		{
+			_textures.EndRender();
+		}
+		failure?.Throw();
 	}
 
 	/// <summary>Focus / capture / over-chains for input + focus tests.</summary>

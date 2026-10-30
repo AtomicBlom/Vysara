@@ -23,7 +23,7 @@ internal static class GradientSplitter
 	private const int MaxCut = MaxCorners + 2;
 
 	// The most bands one polygon is cut into: a repeating gradient whose period is far smaller than what it paints would
-	// otherwise emit without bound.
+	// otherwise emit without bound. Past it, the rest of the polygon is one band.
 	private const int MaxBands = 1 << 16;
 
 	/// <summary>Append <paramref name="local"/>, a convex polygon with corners in order and their <paramref name="uv"/>,
@@ -95,11 +95,9 @@ internal static class GradientSplitter
 		var colorA = gradient.EvaluateAbove(a, opacity);
 		for (var bands = 0; a < tMax; bands++)
 		{
-			if (bands == MaxBands)
-				throw new InvalidOperationException(
-					$"A gradient repeats more than {MaxBands} times across what it paints; make its start and end further apart.");
-
-			var b = MathF.Min(gradient.NextBreak(a), tMax);
+			// The last band the limit allows runs to the end, interpolated straight across: a gradient repeating that finely
+			// has periods far below a pixel, and drawing them wrong beats stopping the frame.
+			var b = bands == MaxBands - 1 ? tMax : MathF.Min(gradient.NextBreak(a), tMax);
 			if (!(b > a))
 				b = MathF.BitIncrement(a); // rounding put the next break on this one: step past it
 			var colorB = gradient.EvaluateBelow(b, opacity);

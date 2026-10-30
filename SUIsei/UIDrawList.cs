@@ -109,6 +109,16 @@ internal sealed class UIDrawList
 		return view;
 	}
 
+	/// <summary>Give up a composite that failed part way, before its <see cref="End"/>: the list handed out last stays
+	/// current and its buffers untouched, and the next <see cref="Begin"/> refills the set this one was filling.</summary>
+	public void Abandon()
+	{
+		Revision--;
+		_set = _sets[Revision & 1];
+		_open = false;
+		_layers.Clear();
+	}
+
 	/// <summary>
 	/// For a frame that reuses the current list unchanged: move its texture revision if a source it samples has
 	/// changed its texels since the list recorded them, so the host re-uploads it although the geometry is the same, and

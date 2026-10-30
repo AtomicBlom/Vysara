@@ -16,7 +16,9 @@ namespace SUIsei;
 /// sRGB-encoded values, which are not linear in the light the GPU blends, so each stop interval is cut into
 /// <see cref="SrgbSubBands"/> pieces sampled exactly at their ends. Between those ends the colour is the straight line in
 /// linear light wherever it is sampled, so polygons that share a point, such as the triangles of a shape, agree on its
-/// colour.
+/// colour. sRGB interpolation is not defined above paper white, so there a stop's channels above 1 are drawn at 1, as
+/// they would be by any 8-bit colour; a colour animation that overshoots, or a stop set above 1, never stops the frame.
+/// Interpolate in linear light to keep colours above 1.
 /// </para>
 /// </summary>
 public abstract class CompositionGradientBrush : CompositionBrush
@@ -77,23 +79,6 @@ public abstract class CompositionGradientBrush : CompositionBrush
 		(_stops, _scratch) = (_scratch, _stops);
 		_count = stops.Length;
 		Touch();
-	}
-
-	/// <summary>Throw when the stops cannot be interpolated in <see cref="InterpolationSpace"/>: sRGB interpolation is
-	/// not defined above paper white, so an <see cref="CompositionColorSpace.Rgb"/> gradient with a stop above 1 is an
-	/// error rather than a guess.</summary>
-	internal void ThrowIfUndefined()
-	{
-		if (InterpolationSpace != CompositionColorSpace.Rgb)
-			return;
-		foreach (var stop in ColorStops)
-		{
-			var c = stop.Color;
-			if (c.R > 1f || c.G > 1f || c.B > 1f)
-				throw new InvalidOperationException(
-					$"A gradient that interpolates in sRGB has a stop above paper white ({c.R:0.###}, {c.G:0.###}, {c.B:0.###}) at offset {stop.Offset:0.###}: " +
-					"sRGB interpolation is not defined there. Interpolate in linear light (ScRgbLinearInterpolation) for colours above 1.");
-		}
 	}
 
 	// --- Evaluation along the gradient: t is 0 at its start and 1 at its end; u is t brought into the stops' range by
@@ -242,11 +227,13 @@ public abstract class CompositionGradientBrush : CompositionBrush
 		var f = Math.Clamp((u - p0) / (p1 - p0), 0f, 1f);
 		return Srgb(a.Color, b.Color, (p0 - a.Offset) / span, opacity) * (1f - f) + Srgb(a.Color, b.Color, (p1 - a.Offset) / span, opacity) * f;
 
-		// The exact sRGB interpolation at fraction t of the interval.
+		// The exact sRGB interpolation at fraction t of the interval, of the stops clamped to paper white: sRGB
+		// interpolation is not defined above it.
 		static Vector4 Srgb(HdrColor ca, HdrColor cb, float t, float opacity)
 		{
 			var r = 1f - t;
-			return new HdrColor(ca.R * r + cb.R * t, ca.G * r + cb.G * t, ca.B * r + cb.B * t, ca.A * r + cb.A * t).ToPremultipliedVector(opacity);
+			return new HdrColor(MathF.Min(ca.R, 1f) * r + MathF.Min(cb.R, 1f) * t, MathF.Min(ca.G, 1f) * r + MathF.Min(cb.G, 1f) * t,
+				MathF.Min(ca.B, 1f) * r + MathF.Min(cb.B, 1f) * t, ca.A * r + cb.A * t).ToPremultipliedVector(opacity);
 		}
 	}
 

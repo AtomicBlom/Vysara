@@ -37,6 +37,7 @@ public sealed class TextBlock : FrameworkElement
 			new PropertyMetadata<TextBlock, Brush?>
 			{
 				Inherits = InheritedText.Foreground,
+				Validate = static (_, brush) => InheritedText.ValidateForeground(brush),
 				PropertyChanged = static (t, old, @new) => t.OnBrushChanged(old, @new),
 			});
 

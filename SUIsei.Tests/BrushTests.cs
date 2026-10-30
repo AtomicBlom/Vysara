@@ -330,7 +330,7 @@ public sealed class BrushTests
 	public void An_image_brush_on_text_is_not_supported_yet()
 	{
 		var image = BitmapSource.FromRgba8(2, 2, new byte[16]);
-		Should.Throw<NotSupportedException>(() => Laid(new TextBlock { Text = "Hi", Foreground = new ImageBrush { ImageSource = image } }).Render())
+		Should.Throw<NotSupportedException>(() => new TextBlock { Text = "Hi", Foreground = new ImageBrush { ImageSource = image } })
 			.Message.ShouldContain("cannot paint text");
 	}
 

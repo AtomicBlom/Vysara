@@ -244,8 +244,11 @@ public sealed class UIRoot
 	public DrawListData Render()
 	{
 		_compositor.Composite(Visual, Surface);
-		return _compositor is DrawListCompositor d ? d.LastDraw(Surface) : DrawListData.Empty;
+		return LastDraw();
 	}
+
+	// The list the last successful composite produced: what a surface keeps showing when its composite fails.
+	internal DrawListData LastDraw() => _compositor is DrawListCompositor d ? d.LastDraw(Surface) : DrawListData.Empty;
 
 	/// <summary>The element tree annotated with <c>DesiredSize</c>/<c>LayoutRect</c> after a layout pass — the
 	/// layout-test snapshot.</summary>

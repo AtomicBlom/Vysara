@@ -37,8 +37,20 @@ public sealed class DrawListCompositor : IUICompositor
 
 		var surfaceRect = new Rect(0, 0, root.SurfaceSize.X, root.SurfaceSize.Y);
 		list.Begin(root.SurfaceSize);
-		Walk(list, root, Matrix3x2.Identity, 1f, surfaceRect);
-		var built = list.End(root.IsHdrSurface);
+		DrawListData built;
+		try
+		{
+			Walk(list, root, Matrix3x2.Identity, 1f, surfaceRect);
+			built = list.End(root.IsHdrSurface);
+		}
+		catch
+		{
+			// The walk cleaned the visuals it reached, and the half-built list must not become the one the next composite
+			// compares against: keep the last good list, and composite the whole tree again next frame.
+			list.Abandon();
+			root.MarkDirty();
+			throw;
+		}
 		built.Damage = list.Previous.Revision == 0
 			? surfaceRect // first build for this surface → repaint all
 			: ComputeDamage(list.Previous, list.Current, root.SurfaceSize).Union(list.Current.TexelDamage());
@@ -211,11 +223,12 @@ public sealed class DrawListCompositor : IUICompositor
 				list.AddGlyphRun(run, color.Color.ToPremultiplied(alpha * color.Opacity), matrix, clip, layer: layer);
 				break;
 			case CompositionLinearGradientBrush gradient:
-				gradient.ThrowIfUndefined();
 				list.AddGlyphRun(run, default, matrix, clip, gradient, GradientLine.For(gradient, run.Size), alpha * gradient.Opacity, layer);
 				break;
 			case CompositionSurfaceBrush:
-				throw new NotSupportedException("An image brush cannot paint text yet: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
+				// Glyphs are drawn from the font atlas, and a glyph prim samples one texture, so an image can't paint them.
+				// The text foregrounds refuse an image brush where it is set; one put on the content directly draws nothing.
+				break;
 		}
 	}
 
@@ -269,7 +282,6 @@ public sealed class DrawListCompositor : IUICompositor
 				}
 			case CompositionLinearGradientBrush gradient:
 				{
-					gradient.ThrowIfUndefined();
 					var line = GradientLine.For(gradient, box);
 					var opacity = alpha * gradient.Opacity;
 					alongLength &= path.IsStroke;
@@ -347,7 +359,6 @@ public sealed class DrawListCompositor : IUICompositor
 				break;
 			case CompositionLinearGradientBrush gradient:
 				{
-					gradient.ThrowIfUndefined();
 					Span<Vector2> corners = [new(rect.X, rect.Y), new(rect.Right, rect.Y), new(rect.Right, rect.Bottom), new(rect.X, rect.Bottom)];
 					Span<Vector2> uvs = [new(0f, 0f), new(1f, 0f), new(1f, 1f), new(0f, 1f)];
 					GradientSplitter.AddPolygon(list, corners, uvs, gradient, GradientLine.For(gradient, new Vector2(rect.Width, rect.Height)),

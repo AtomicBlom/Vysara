@@ -114,6 +114,7 @@ public abstract class Control : FrameworkElement
 			new PropertyMetadata<Control, Brush?>
 			{
 				Inherits = InheritedText.Foreground,
+				Validate = static (_, brush) => InheritedText.ValidateForeground(brush),
 				PropertyChanged = static (c, _, value) => c.OnForegroundChanged(value),
 			});
 

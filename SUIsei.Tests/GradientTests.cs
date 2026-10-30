@@ -104,20 +104,6 @@ public sealed class GradientTests
 	}
 
 	[Test]
-	public void An_sRGB_gradient_with_a_stop_above_paper_white_throws_when_drawn()
-	{
-		var brush = Horizontal(ColorInterpolationMode.SRgbLinearInterpolation, (0f, Red), (1f, new HdrColor(2f, 0f, 0f, 1f)));
-		var root = new UIRoot(new DrawListId(0)) { Content = Box(brush, 10, 10) };
-		root.LayoutPass(new Size(10f, 10f));
-
-		Should.Throw<InvalidOperationException>(() => root.Render()).Message.ShouldContain("sRGB interpolation is not defined there");
-
-		// The same stops are fine in linear light.
-		brush.ColorInterpolationMode = ColorInterpolationMode.ScRgbLinearInterpolation;
-		Should.NotThrow(() => root.Render());
-	}
-
-	[Test]
 	public void SRgb_interpolation_stays_within_its_documented_bound()
 	{
 		// A full black-to-white step, the worst case: the error grows with the square of the step between stops.
