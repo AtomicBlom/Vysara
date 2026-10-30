@@ -122,28 +122,41 @@ public sealed class InheritedTextTests
 		loose.HasAnyValue(TextBlock.ForegroundProperty).ShouldBeFalse();
 	}
 
+	/// <summary>
+	/// As WinUI's default styles do, a built-in control's look sets its own text size and brush, which outrank what it
+	/// would inherit: a page's text properties reach its text, not its buttons and text boxes. Set on the control itself,
+	/// they reach the control's own text.
+	/// </summary>
 	[Test]
-	public void A_control_passes_its_values_to_the_controls_inside_it()
+	public void Built_in_controls_keep_their_own_text_and_pass_what_is_set_on_them_to_their_content()
 	{
 		var button = new Button { Content = "Go" };
 		var box = new TextBox { Text = "Typed" };
+		var plain = new TextBlock { Text = "Label" };
 		var panel = new StackPanel();
 		panel.Children.Add(button);
 		panel.Children.Add(box);
+		panel.Children.Add(plain);
 		var page = new ContentControl { Content = panel, FontSize = 22f, Foreground = Gold };
 		var host = Hosted(page);
 
-		button.FontSize.ShouldBe(22f);
-		button.Foreground.ShouldBeSameAs(Gold);
+		plain.FontSize.ShouldBe(22f);
+		plain.Foreground.ShouldBeSameAs(Gold);
+		button.FontSize.ShouldBe(14f);
+		button.Foreground.ShouldBeSameAs(InheritedText.BuiltInForeground);
+		box.FontSize.ShouldBe(14f);
 		var label = TextOf(PresenterOf(button));
-		label.FontSize.ShouldBe(22f);
-		label.Foreground.ShouldBeSameAs(Gold); // through the button's own {TemplateBinding Foreground} as well
-		box.FontSize.ShouldBe(22f);
+		label.FontSize.ShouldBe(14f);
 
-		page.FontSize = 26f;
+		button.FontSize = 26f;
+		button.Foreground = Gold;
 		host.Tick(0, 0f, new Vector2(300f, 300f));
+		label.FontSize.ShouldBe(26f);
+		label.Foreground.ShouldBeSameAs(Gold); // through the button's own {TemplateBinding Foreground} as well
 		label.DesiredSize.Height.ShouldBe(LineHeight * 26f, 1e-3f);
-		box.DesiredSize.Height.ShouldBeGreaterThan(LineHeight * 26f); // the box measures at its inherited size too
+		button.ClearValue(Control.FontSizeProperty);
+		host.Tick(0, 0f, new Vector2(300f, 300f));
+		label.FontSize.ShouldBe(14f); // back to the built-in look's, not the page's
 	}
 
 	[Test]

@@ -19,7 +19,11 @@ public class ToggleButton : ButtonBase
 	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(40, 40, 55));
 	private static readonly SolidColorBrush AccentBackground = Brush.Sealed(HdrColor.FromRgb(70, 120, 200));
 
-	public ToggleButton() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
+	public ToggleButton()
+	{
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		InheritedText.GiveBuiltInLook(this);
+	}
 
 	public static readonly RoutedEvent CheckedEvent = RoutedEvent.Register(nameof(Checked), RoutingStrategy.Bubble);
 	public static readonly RoutedEvent UncheckedEvent = RoutedEvent.Register(nameof(Unchecked), RoutingStrategy.Bubble);

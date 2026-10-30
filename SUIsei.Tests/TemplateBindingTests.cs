@@ -38,7 +38,7 @@ public sealed class TemplateBindingTests
 		var border = (Border)button.GetTemplateRoot()!;
 		var presenter = (ContentPresenter)border.Child!;
 		border.ShownColor().ShouldBe(HdrColor.FromRgb(60, 60, 70)); // the built-in look
-		TextOf(presenter).Foreground.ShouldBeNull();                 // so the text's own white
+		TextOf(presenter).Foreground.ShouldBeSameAs(InheritedText.BuiltInForeground); // the built-in look's white
 
 		button.Background = Red;
 		button.BorderBrush = Gold;

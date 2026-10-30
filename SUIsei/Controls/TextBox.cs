@@ -60,6 +60,7 @@ public sealed class TextBox : Control
 		AdoptChild(_selectionHighlight);
 		AdoptChild(_textBlock);
 		AdoptChild(_caretVisual);
+		InheritedText.GiveBuiltInLook(this); // once its text is a child, which takes it
 		_caretVisual.Visibility = Visibility.Collapsed;
 		_caretBlink = BuildCaretBlink();
 		ClipToBounds = true; // long text scrolls within the field instead of spilling past its border

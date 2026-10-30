@@ -24,6 +24,7 @@ public sealed class MenuBarItem : ButtonBase
 	public MenuBarItem()
 	{
 		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		InheritedText.GiveBuiltInLook(this);
 		_flyout.Closed += OnFlyoutClosed;
 	}
 
