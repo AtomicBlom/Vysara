@@ -133,6 +133,9 @@ public abstract class DependencyProperty
 	/// typed path.</summary>
 	internal abstract object? GetBoxedValue(DependencyObject target);
 
+	/// <summary>The property's default, boxed: what an object that holds no value for it reads. The diagnostics read.</summary>
+	internal abstract object? BoxedDefaultValue { get; }
+
 	/// <summary>Whether <paramref name="value"/> can be stored in this property: an instance of its value type, or null
 	/// where the value type admits null.</summary>
 	internal abstract bool Accepts(object? value);
@@ -166,6 +169,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 
 	/// <summary>The typed default.</summary>
 	public TValue DefaultValue => Metadata.DefaultValue;
+
+	internal override object? BoxedDefaultValue => Metadata.DefaultValue;
 
 	/// <summary>How the property interpolates when animated: the metadata's, else the standard one for its type, else
 	/// null (not animatable).</summary>

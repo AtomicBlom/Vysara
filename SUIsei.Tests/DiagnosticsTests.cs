@@ -516,6 +516,38 @@ public sealed class DiagnosticsTests
 		Parse<HdrColor?>("#00FF00").ShouldBe(HdrColor.FromRgb(0, 255, 0));
 	}
 
+	/// <summary>The forms the generator converts that a tool may also need to type: radii, sizes, rectangles, path markup
+	/// and number lists, with the generator's own rules (one radius, or four equal ones).</summary>
+	[Test]
+	public void TryParseValue_reads_the_generators_other_value_forms()
+	{
+		Diagnostics.TryParseValue(typeof(CornerRadius), "4", out var radius).ShouldBeTrue();
+		radius.ShouldBe(new CornerRadius(4f));
+		Diagnostics.TryParseValue(typeof(CornerRadius), "1,2,3,4", out _).ShouldBeFalse();
+		Diagnostics.TryParseValue(typeof(Size), "10,20", out var size).ShouldBeTrue();
+		size.ShouldBe(new Size(10f, 20f));
+		Diagnostics.TryParseValue(typeof(Rect), "1,2,3,4", out var rect).ShouldBeTrue();
+		rect.ShouldBe(new Rect(1f, 2f, 3f, 4f));
+		Diagnostics.TryParseValue(typeof(Rect), "1,2,-3,4", out _).ShouldBeFalse();
+		Diagnostics.TryParseValue(typeof(Geometry), "M 0,0 L 10,10", out var geometry).ShouldBeTrue();
+		geometry.ShouldBeOfType<PathGeometry>();
+		Diagnostics.TryParseValue(typeof(PointCollection), "0,0 5,5", out var points).ShouldBeTrue();
+		((PointCollection)points!).Count.ShouldBe(2);
+		Diagnostics.TryParseValue(typeof(PointCollection), "0,0 5", out _).ShouldBeFalse();
+		Diagnostics.TryParseValue(typeof(DoubleCollection), "2 1", out var dashes).ShouldBeTrue();
+		((DoubleCollection)dashes!).ShouldBe([2.0, 1.0]);
+	}
+
+	/// <summary>A property's value type and default, read without reflecting over its generic type.</summary>
+	[Test]
+	public void A_propertys_value_type_and_default_are_readable()
+	{
+		Diagnostics.ValueTypeOf(UIElement.OpacityProperty).ShouldBe(typeof(float));
+		Diagnostics.DefaultValueOf(UIElement.OpacityProperty).ShouldBe(1f);
+		Diagnostics.ValueTypeOf(Border.BackgroundProperty).ShouldBe(typeof(Brush));
+		Diagnostics.DefaultValueOf(Border.BackgroundProperty).ShouldBeNull();
+	}
+
 	[Test]
 	public void TryParseValue_takes_x_null_only_where_null_is_allowed()
 	{

@@ -68,6 +68,18 @@ public static partial class Diagnostics
 				[var l, var t, var r, var b] => new Thickness(l, t, r, b),
 				_ => null,
 			},
+			// One radius, or four equal ones: a Border draws one radius, as the generator refuses four that differ.
+			_ when target == typeof(CornerRadius) => XamlValueSyntax.ParseNumbers(s) switch
+			{
+				[var u] => new CornerRadius(u),
+				[var a, var b, var c, var d] when a == b && a == c && a == d => new CornerRadius(a),
+				_ => null,
+			},
+			_ when target == typeof(Size) => XamlValueSyntax.ParseNumbers(s) is [var w, var h] && w >= 0 && h >= 0 ? new Size(w, h) : null,
+			_ when target == typeof(Rect) => XamlValueSyntax.ParseNumbers(s) is [var x, var y, var w, var h] && w >= 0 && h >= 0 ? new Rect(x, y, w, h) : null,
+			_ when target == typeof(Geometry) => PathMarkup.TryParse(s, null, out _) ? Geometry.Parse(s) : null,
+			_ when target == typeof(PointCollection) => Points(s),
+			_ when target == typeof(DoubleCollection) => Doubles(s),
 			_ when target == typeof(Point) => XamlValueSyntax.ParseNumbers(s) is [var x, var y] ? new Point(x, y) : null,
 			_ when target == typeof(Vector2) => XamlValueSyntax.ParseNumbers(s) is [var x, var y] ? new Vector2(x, y) : null,
 			_ when target == typeof(Vector3) => XamlValueSyntax.ParseNumbers(s) is [var x, var y, var z] ? new Vector3(x, y, z) : null,
@@ -125,5 +137,28 @@ public static partial class Diagnostics
 		|| target == typeof(float) || target == typeof(double) || target == typeof(HdrColor) || target == typeof(Brush)
 		|| target == typeof(SolidColorBrush) || target == typeof(Thickness)
 		|| target == typeof(Point) || target == typeof(Vector2) || target == typeof(Vector3) || target == typeof(GridLength)
-		|| target == typeof(TimeSpan) || target == typeof(RepeatBehavior);
+		|| target == typeof(TimeSpan) || target == typeof(RepeatBehavior) || target == typeof(CornerRadius) || target == typeof(Size)
+		|| target == typeof(Rect) || target == typeof(Geometry) || target == typeof(PointCollection) || target == typeof(DoubleCollection);
+
+	// Pairs of numbers, "x1,y1 x2,y2 …", as the generator reads a point list.
+	private static PointCollection? Points(string s)
+	{
+		if (XamlValueSyntax.ParseNumbers(s) is not { Length: > 0 } numbers || numbers.Length % 2 != 0)
+			return null;
+		var points = new PointCollection();
+		for (var i = 0; i < numbers.Length; i += 2)
+			points.Add(new Point(numbers[i], numbers[i + 1]));
+		return points;
+	}
+
+	// Numbers separated by commas or spaces, as the generator reads a dash array.
+	private static DoubleCollection? Doubles(string s)
+	{
+		if (XamlValueSyntax.ParseNumbers(s) is not { } numbers)
+			return null;
+		var doubles = new DoubleCollection();
+		foreach (var n in numbers)
+			doubles.Add(n);
+		return doubles;
+	}
 }

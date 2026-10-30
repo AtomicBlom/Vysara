@@ -158,4 +158,24 @@ public static partial class Diagnostics
 		}
 		return null;
 	}
+
+	/// <summary>The type of the values <paramref name="property"/> holds, so a tool can parse text for it
+	/// (<see cref="TryParseValue(Type, string, out object?)"/>) without reflecting over the property's generic type.</summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static Type ValueTypeOf(DependencyProperty property)
+	{
+		ArgumentNullException.ThrowIfNull(property);
+		RequireEnabled();
+		return property.ValueType;
+	}
+
+	/// <summary>The value <paramref name="property"/> reads on an object that holds none for it, boxed: what an attached
+	/// property an element has never been given is at.</summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static object? DefaultValueOf(DependencyProperty property)
+	{
+		ArgumentNullException.ThrowIfNull(property);
+		RequireEnabled();
+		return property.BoxedDefaultValue;
+	}
 }

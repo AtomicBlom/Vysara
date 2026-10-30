@@ -15,6 +15,10 @@ public sealed class ColorAnimation : AnimationTimeline<HdrColor>
 	/// <summary>The optional easing applied to the linear progress.</summary>
 	public IEasingFunction? EasingFunction { get; set; }
 
+	/// <summary>WinUI's opt-in for an animation of a property that relayouts; SUIsei runs every animation and reads nothing
+	/// here (<see cref="DoubleAnimation.EnableDependentAnimation"/>).</summary>
+	public bool EnableDependentAnimation { get; set; }
+
 	public override HdrColor ValueAt(double progress)
 	{
 		var from = From ?? StartValue;
