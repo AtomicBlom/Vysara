@@ -78,6 +78,7 @@ public sealed class CheckBox : ToggleButton
 			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(box, BoxBackgroundHover) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(box, BoxBackgroundPressed) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Dimmed(row) });
 			VisualStateManager.SetVisualStateGroups(row, [common]);
 
 			// Reflect the initial checked state as soon as the parts exist.

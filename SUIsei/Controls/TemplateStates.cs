@@ -28,6 +28,16 @@ internal static class TemplateStates
 	/// <summary>A fade of <paramref name="milliseconds"/> between background brushes.</summary>
 	public static BrushTransition Fade(double milliseconds) => new() { Duration = TimeSpan.FromMilliseconds(milliseconds) };
 
+	/// <summary>The Disabled state's storyboard: <paramref name="part"/>, the look's root, at half opacity while the
+	/// control is disabled, so a disabled control looks it, as WinUI's dimmed disabled brushes do.</summary>
+	public static Storyboard Dimmed(UIElement part) => new()
+	{
+		Children =
+		{
+			new DoubleAnimation { To = 0.5, Duration = TimeSpan.Zero, Target = part, TargetProperty = UIElement.OpacityProperty },
+		},
+	};
+
 	private static Storyboard Hold(DependencyObject target, DependencyProperty property, Brush brush) => new()
 	{
 		Children =

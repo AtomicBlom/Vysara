@@ -146,6 +146,7 @@ public class ToggleButton : ButtonBase
 			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(baseBorder, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(baseBorder, PressedBackground) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Dimmed(root) });
 
 			var check = new VisualStateGroup { Name = "CheckStates" };
 			check.States.Add(new VisualState { Name = "Unchecked", Storyboard = OpacityTo(accent, 0f) });

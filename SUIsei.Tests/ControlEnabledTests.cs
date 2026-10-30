@@ -239,30 +239,57 @@ public sealed class ControlEnabledTests
 		common.CurrentState!.Name.ShouldBe("Disabled");
 	}
 
+	/// <summary>The built-in looks show Disabled, a Button's dimming its whole look; a template with no Disabled state
+	/// shows Normal while disabled, so a hover state is never left showing on a control that can no longer leave it.</summary>
 	[Test]
-	public void The_Slider_shows_Disabled_and_a_template_without_one_falls_back_to_Normal()
+	public void Built_in_looks_show_Disabled_and_a_template_without_one_falls_back_to_Normal()
 	{
 		var slider = new Slider { Width = 100f };
 		var button = new Button { Width = 40f, Height = 20f };
+		var custom = new Button
+		{
+			Width = 40f,
+			Height = 20f,
+			Template = new ControlTemplate
+			{
+				Factory = _ =>
+				{
+					var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(10, 10, 10)) };
+					var common = new VisualStateGroup { Name = "CommonStates" };
+					common.States.Add(new VisualState { Name = "Normal" });
+					common.States.Add(new VisualState { Name = "PointerOver" });
+					VisualStateManager.SetVisualStateGroups(border, [common]);
+					return border;
+				},
+			},
+		};
 		var panel = new StackPanel();
 		panel.Children.Add(slider);
 		panel.Children.Add(button);
+		panel.Children.Add(custom);
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = panel;
 		host.Tick(0.016, 0f, new Vector2(200f, 200f));
 
 		slider.IsEnabled = false;
 		CommonState(slider).ShouldBe("Disabled");
+		button.IsEnabled = false;
+		CommonState(button).ShouldBe("Disabled");
+		host.Tick(0.016, 0f, new Vector2(200f, 200f));
+		button.GetTemplateRoot()!.Opacity.ShouldBe(0.5f);
+		button.IsEnabled = true;
+		host.Tick(0.016, 0f, new Vector2(200f, 200f));
+		button.GetTemplateRoot()!.Opacity.ShouldBe(1f); // released as Disabled is left
 
-		// Hover the button so it shows PointerOver; its template has no Disabled state.
-		var buttonCentre = new Vector2(button.LayoutRect.X + 20f, button.LayoutRect.Y + 10f);
-		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, buttonCentre,
+		// Hover the custom button so it shows PointerOver; its template has no Disabled state.
+		var centre = new Vector2(custom.LayoutRect.X + 20f, custom.LayoutRect.Y + 10f);
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, centre,
 			PointerUpdateKind.None, PointerButtons.None, 0f, Vector2.Zero, 0));
 		host.Tick(0.016, 0f, new Vector2(200f, 200f));
-		CommonState(button).ShouldBe("PointerOver");
+		CommonState(custom).ShouldBe("PointerOver");
 
-		button.IsEnabled = false;
-		CommonState(button).ShouldBe("Normal");
+		custom.IsEnabled = false;
+		CommonState(custom).ShouldBe("Normal");
 	}
 
 	private static string? CommonState(Control control) =>
