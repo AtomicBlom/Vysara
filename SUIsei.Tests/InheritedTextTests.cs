@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Media;
 using SUIsei.Tests.Sample;

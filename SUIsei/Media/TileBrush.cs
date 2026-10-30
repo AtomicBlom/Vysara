@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Media;
 
 /// <summary>A brush that paints content scaled into the area painted, as WinUI's <c>TileBrush</c>: the base of

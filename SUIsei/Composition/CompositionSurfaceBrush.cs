@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Text;
 using SUIsei.Drawing;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// Paints an image, as WinUI's <c>CompositionSurfaceBrush</c>: <see cref="Surface"/> is scaled into the box painted by

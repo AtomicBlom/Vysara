@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>What a gradient's points are measured in, as WinUI's <c>CompositionMappingMode</c>.</summary>
 public enum CompositionMappingMode

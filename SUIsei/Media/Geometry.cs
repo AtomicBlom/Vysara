@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Markup;
 
 namespace SUIsei.Media;
@@ -62,7 +63,7 @@ public abstract class Geometry : DependencyObject, ISubPropertyListener
 
 	/// <summary>
 	/// The geometry as a neutral path, rebuilt in place on the first read after a change. Its
-	/// <see cref="SUIsei.CompositionPath.Version"/> moves with every rebuild.
+	/// <see cref="SUIsei.Composition.CompositionPath.Version"/> moves with every rebuild.
 	/// </summary>
 	internal CompositionPath CompositionPath
 	{

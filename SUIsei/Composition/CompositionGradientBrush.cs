@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// The colour stops and modes a gradient shares, as WinUI's <c>CompositionGradientBrush</c>; a

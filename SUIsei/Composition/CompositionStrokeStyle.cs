@@ -1,6 +1,6 @@
 using SUIsei.Media;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// How a path is stroked: thickness, joins, caps and dashes, as WinUI's composition shapes describe it

@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>What a gradient paints before its start and past its end, as WinUI's <c>CompositionGradientExtendMode</c>.</summary>
 public enum CompositionGradientExtendMode

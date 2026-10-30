@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// Paints a gradient along the line from <see cref="StartPoint"/> to <see cref="EndPoint"/>, as WinUI's

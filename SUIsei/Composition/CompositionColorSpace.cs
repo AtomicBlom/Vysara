@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>The space a gradient interpolates its colours in, as WinUI's <c>CompositionColorSpace</c> (its RGB
 /// members).</summary>

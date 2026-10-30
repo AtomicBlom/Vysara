@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>One drawing command of a <see cref="CompositionPath"/>, with the number of points it takes from
 /// <see cref="CompositionPath.Points"/>.</summary>

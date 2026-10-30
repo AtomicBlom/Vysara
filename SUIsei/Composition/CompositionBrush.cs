@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// Paint for composition content: what fills a <see cref="RectContent"/> or its border, or colours a

@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// A run of laid-out text drawn from a <see cref="FontAtlas"/>. The compositor lays the glyphs out against

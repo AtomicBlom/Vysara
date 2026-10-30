@@ -2,7 +2,7 @@ using System.Numerics;
 using SUIsei.Drawing;
 using SUIsei.Media;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// Loom's default <see cref="IUICompositor"/>: walks a surface's composition tree, folds transform/clip/opacity

@@ -1,4 +1,5 @@
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Input;
 using SUIsei.Media;
 using SUIsei.RoutedEvents;

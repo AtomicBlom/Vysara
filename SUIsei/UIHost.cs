@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 using SUIsei.Input;
 using SUIsei.RoutedEvents;

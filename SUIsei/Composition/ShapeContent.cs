@@ -4,7 +4,7 @@ using System.Text;
 using SUIsei.Drawing;
 using SUIsei.Media;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// A vector shape: a <see cref="CompositionPath"/> filled and stroked, as WinUI's <c>CompositionSpriteShape</c> draws its

@@ -1,4 +1,5 @@
 using System.Globalization;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Media;
 

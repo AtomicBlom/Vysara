@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Documents;
 using SUIsei.Drawing;

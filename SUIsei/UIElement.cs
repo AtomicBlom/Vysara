@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Extensions;
@@ -667,7 +668,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 
 	/// <summary>
 	/// Return the top-most element of this subtree drawn at <paramref name="surfacePoint"/> (surface pixels). The walk
-	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Visual.Transform"/>
+	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Composition.Visual.Transform"/>
 	/// is composed onto <paramref name="parentWorld"/>, so render transforms, animated translates and layout scale all
 	/// count, and each visual's clip is intersected into <paramref name="clip"/> as its surface-space bounds, the same
 	/// bound the compositor clips with, so a point is hittable exactly where something can be seen. Children are tested

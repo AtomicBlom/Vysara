@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Documents;
 using SUIsei.Extensions;
 using SUIsei.Media;

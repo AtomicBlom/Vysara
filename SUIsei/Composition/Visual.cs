@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// A retained composition node — the tree a pluggable <see cref="IUICompositor"/> renders.

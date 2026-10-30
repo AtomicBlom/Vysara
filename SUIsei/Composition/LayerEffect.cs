@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// A composition-tree post effect applied to a group's render-to-texture layer. A visual that

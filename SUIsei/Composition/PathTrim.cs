@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// The part of a path's stroke that is drawn, as WinUI's <c>CompositionGeometry.TrimStart</c>, <c>TrimEnd</c> and

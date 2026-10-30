@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>Paints one colour, as WinUI's <c>CompositionColorBrush</c>.</summary>
 public sealed class CompositionColorBrush(HdrColor color) : CompositionBrush

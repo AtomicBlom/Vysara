@@ -185,6 +185,7 @@ public sealed class XamlSubsetContractTests
 		("a property with no public setter", """<ListView SelectedIndex="2" />""", "SUISEI004"),
 		("a property whose setter the generated class can't reach", """<local:Plate Locked="1" />""", "SUISEI025"),
 		("a property with an init-only setter", """<local:Plate><local:Plate.Depth>1</local:Plate.Depth></local:Plate>""", "SUISEI025"),
+		("a composition type, which the default namespace does not map", """<StackPanel><CompositionColorBrush /></StackPanel>""", "SUISEI003"),
 	];
 
 	// WinUI forms that build with one warning, since ignoring them changes nothing the view shows.

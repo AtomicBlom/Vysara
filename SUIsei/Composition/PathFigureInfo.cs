@@ -1,4 +1,4 @@
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// Where one figure of a <see cref="CompositionPath"/> lies in its <see cref="CompositionPath.Verbs"/> and

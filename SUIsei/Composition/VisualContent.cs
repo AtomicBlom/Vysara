@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// What a <see cref="SpriteVisual"/> draws: the rectangle family (fill + border, or an image), MSDF glyph-run text, and

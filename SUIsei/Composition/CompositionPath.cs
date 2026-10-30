@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Text;
 using SUIsei.Media;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// A retained, versioned vector path: figures of lines and quadratic and cubic Béziers, with a fill rule. It is the

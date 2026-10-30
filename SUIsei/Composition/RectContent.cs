@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>
 /// A rectangle, optionally rounded, with a fill and an optional border: the Border, Panel and Image primitive. Each

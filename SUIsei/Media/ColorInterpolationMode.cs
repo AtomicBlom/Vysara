@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Media;
 
 /// <summary>The space a gradient's colours interpolate in, as WinUI's <c>ColorInterpolationMode</c>.</summary>

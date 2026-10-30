@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>The root of one surface's composition tree.</summary>
 public sealed class RootVisual : Visual

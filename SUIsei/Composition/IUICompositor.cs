@@ -1,7 +1,7 @@
 
 using SUIsei.Drawing;
 
-namespace SUIsei;
+namespace SUIsei.Composition;
 
 /// <summary>The portability boundary: renders a surface's <see cref="RootVisual"/> tree.
 /// Loom ships <see cref="DrawListCompositor"/>; a foreign engine substitutes its own and consumes the tree directly.</summary>
