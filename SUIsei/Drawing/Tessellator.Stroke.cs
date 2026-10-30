@@ -5,8 +5,9 @@ namespace SUIsei.Drawing;
 
 public sealed partial class Tessellator
 {
-	/// <summary>The most dashes one tessellation draws; a finer pattern throws rather than drawing a near-solid line
-	/// from millions of triangles.</summary>
+	/// <summary>The most dashes one tessellation draws. Past it the rest of the stroke is drawn solid, and
+	/// <see cref="TessellatedPath.DashesLimited"/> says so, rather than drawing a near-solid line from millions of
+	/// triangles. A pattern this fine for its path is far below a pixel per dash, or the path is very long.</summary>
 	public const int MaxDashes = 100_000;
 
 	// Dash intervals of the figure being stroked, in figure-local arc length.
@@ -19,8 +20,8 @@ public sealed partial class Tessellator
 	/// triangle) and its dashes, in multiples of the thickness, restarting at each figure and capped with the dash cap.
 	/// A figure with no length that still draws (<c>M 5,5 L 5,5</c>) is a dot, its caps back to back. Every vertex
 	/// carries its arc length along the whole geometry, which <see cref="TessellatedPath.Emit{TSink}(ref TSink, PathTrim)"/> trims by.
+	/// Past <see cref="MaxDashes"/> dashes, the rest of the stroke is solid.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">The dash pattern would draw more than <see cref="MaxDashes"/> dashes.</exception>
 	public void Stroke(CompositionPath path, CompositionStrokeStyle style, TessellationScale scale, TessellatedPath output) =>
 		Stroke(path, Matrix3x2.Identity, style, scale, output);
 
@@ -30,7 +31,6 @@ public sealed partial class Tessellator
 	/// mapped: the stroke follows the mapped outline at the style's own thickness. Otherwise as
 	/// <see cref="Stroke(CompositionPath, CompositionStrokeStyle, TessellationScale, TessellatedPath)"/>.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">The dash pattern would draw more than <see cref="MaxDashes"/> dashes.</exception>
 	public void Stroke(CompositionPath path, in Matrix3x2 pathTransform, CompositionStrokeStyle style, TessellationScale scale,
 		TessellatedPath output)
 	{
@@ -58,6 +58,7 @@ public sealed partial class Tessellator
 		var offset = 0f;
 		var bodies = 0;
 		var dashCount = 0;
+		var dashesLimited = false;
 		foreach (var figure in _figures.Span)
 		{
 			if (!figure.Draws)
@@ -76,7 +77,7 @@ public sealed partial class Tessellator
 			}
 			else
 			{
-				DashIntervals(length, style.DashOffset * style.Thickness, runs.Closed, ref dashCount);
+				DashIntervals(length, style.DashOffset * style.Thickness, runs.Closed, ref dashCount, ref dashesLimited);
 				var dashes = _dashes.Span;
 				for (var i = 0; i < dashes.Length; i++)
 				{
@@ -89,7 +90,7 @@ public sealed partial class Tessellator
 			}
 			offset += length;
 		}
-		output.Finish(offset, bodies);
+		output.Finish(offset, bodies, dashesLimited);
 	}
 
 	/// <summary>Where a figure's segments are in the output, and its length and offset along the whole geometry.</summary>
@@ -175,19 +176,26 @@ public sealed partial class Tessellator
 			if (!loop)
 				AddCap(output, startCap, startSegment, startX, atStart: true, figure, r0);
 
-			// Walk the segments from r0 to r1, joining each to the one before.
+			// Walk the segments from r0's to r1's by index, joining each to the one before. Where the run ends is found once,
+			// rather than by comparing a running sum against r1, which float rounding can carry past a segment's end or leave
+			// short of it: so the walk never draws a body or join the run doesn't reach, never wraps an open figure, and
+			// takes at most one step per segment and one more.
 			var segments = output.Segments.Span;
+			var (endSegment, endX) = Locate(output, figure, r1, endward: true);
+			var steps = endSegment - startSegment;
+			if (steps < 0 || (steps == 0 && endX < startX))
+				steps += figure.SegmentCount; // a closed figure's dash crossing its start, round to where it ends
 			var index = startSegment;
 			var x0 = startX;
 			var r = r0;
 			var last = figure.FirstSegment + figure.SegmentCount - 1;
 			var firstBody = true;
-			while (r < r1 - 1e-6f)
+			for (var step = 0; step <= steps; step++)
 			{
 				var s = segments[index];
-				var x1 = MathF.Min(s.Length, x0 + (r1 - r));
-				var rEnd = r + (x1 - x0);
-				var lastBody = rEnd >= r1 - 1e-6f;
+				var lastBody = step == steps;
+				var x1 = lastBody ? MathF.Max(x0, endX) : s.Length;
+				var rEnd = lastBody ? r1 : r + (x1 - x0);
 				var startClip = firstBody && !loop ? CapClip(startCap, x0, -1, h) : null;
 				var endClip = lastBody && !loop ? CapClip(endCap, x1, 1, h) : null;
 				var first = output.Triangles.Count;
@@ -216,10 +224,7 @@ public sealed partial class Tessellator
 					figure.Offset, r0);
 			}
 			else
-			{
-				var (endSegment, endX) = Locate(output, figure, r1, endward: true);
 				AddCap(output, endCap, endSegment, endX, atStart: false, figure, r1);
-			}
 		}
 
 		output.Runs.Add(new TessellatedPath.Run(figure.FirstSegment, figure.SegmentCount, figure.Length, figure.Offset, figure.Closed,
@@ -324,8 +329,9 @@ public sealed partial class Tessellator
 	}
 
 	// The dashes of a figure of `length`, starting `offset` into the pattern, in figure-local arc length, merged where a
-	// zero gap joins them. On a closed figure a dash crossing its start is one dash, running past `length`.
-	private void DashIntervals(float length, float offset, bool closed, ref int dashCount)
+	// zero gap joins them. On a closed figure a dash crossing its start is one dash, running past `length`. Past
+	// MaxDashes, across all the figures, the rest of the figure is one dash, and `limited` is set.
+	private void DashIntervals(float length, float offset, bool closed, ref int dashCount, ref bool limited)
 	{
 		_dashes.Clear();
 		var pattern = _pattern.Span;
@@ -351,14 +357,19 @@ public sealed partial class Tessellator
 			var e = s + remaining;
 			if (index % 2 == 0)
 			{
-				if (++dashCount > MaxDashes)
-					throw new InvalidOperationException(
-						$"The dash pattern is too fine for the path: it would draw more than {MaxDashes} dashes. Lengthen the dashes or thicken the stroke.");
 				var b = MathF.Min(e, length);
+				var solid = ++dashCount > MaxDashes;
+				if (solid)
+				{
+					limited = true;
+					b = length;
+				}
 				if (_dashes.Count > 0 && _dashes[_dashes.Count - 1].B >= s)
 					_dashes[_dashes.Count - 1] = (_dashes[_dashes.Count - 1].A, b);
 				else
 					_dashes.Add((s, b));
+				if (solid)
+					break;
 			}
 			if (length == 0)
 				break;

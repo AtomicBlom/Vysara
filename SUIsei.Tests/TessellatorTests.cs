@@ -455,11 +455,65 @@ public sealed class TessellatorTests
 		Stroke("M 0,0 L 10,0", s => s.Thickness = -1).TriangleCount.ShouldBe(0);
 	}
 
+	/// <summary>Past the limit the rest of the stroke is drawn solid, rather than the tessellation throwing out of a
+	/// frame; the path says the pattern was limited.</summary>
 	[Test]
-	public void A_dash_pattern_finer_than_the_limit_throws()
+	public void A_dash_pattern_finer_than_the_limit_draws_the_rest_solid()
 	{
-		Should.Throw<InvalidOperationException>(() =>
-			Stroke("M 0,0 L 1000000,0", s => { s.Thickness = 0.01f; s.SetDashArray([0.5f, 0.5f]); }));
+		var path = Stroke("M 0,0 L 1000000,0", s => { s.Thickness = 0.01f; s.SetDashArray([0.5f, 0.5f]); });
+
+		path.DashesLimited.ShouldBeTrue();
+		path.Runs.Count.ShouldBe(Tessellator.MaxDashes + 1); // the dashes, then the rest as one
+		path.Runs[path.Runs.Count - 1].R1.ShouldBe(path.Length);
+		Stroke("M 0,0 L 100,0", s => s.SetDashArray([1f, 1f])).DashesLimited.ShouldBeFalse();
+	}
+
+	/// <summary>
+	/// A dash walks the segments it covers and no more: every join it draws lies inside the dash, an open figure's dash
+	/// never wraps to draw a join at the figure's start, and a dash takes at most one body per segment and one more. Float
+	/// sums aren't exact off integer coordinates, which is where a walk that compared running sums went wrong.
+	/// </summary>
+	[Test]
+	public void Dashes_on_non_integer_polylines_draw_nothing_past_their_ends()
+	{
+		var random = new Random(7);
+		for (var trial = 0; trial < 300; trial++)
+		{
+			var sb = new System.Text.StringBuilder(FormattableString.Invariant($"M {random.NextSingle() * 50f},{random.NextSingle() * 50f}"));
+			var points = random.Next(2, 12);
+			for (var p = 0; p < points; p++)
+				sb.Append(FormattableString.Invariant($" L {random.NextSingle() * 400f - 100f},{random.NextSingle() * 400f - 100f}"));
+			var closed = trial % 3 == 0;
+			if (closed)
+				sb.Append(" Z");
+			var dash = 0.37f + random.NextSingle() * 3f;
+			var path = Stroke(sb.ToString(), s => { s.Thickness = 1.3f; s.SetDashArray([dash, dash * 0.71f]); });
+
+			var pieces = path.Pieces.Span;
+			var segments = path.Segments.Span;
+			foreach (var run in path.Runs.Span)
+			{
+				var bodies = 0;
+				for (var i = run.FirstPiece; i < run.FirstPiece + run.PieceCount; i++)
+				{
+					var piece = pieces[i];
+					if (piece.Kind == TessellatedPath.PieceKind.Body)
+						bodies++;
+					if (piece.Kind != TessellatedPath.PieceKind.Join)
+						continue;
+					// A join stands at a vertex: the body before it must reach its segment's end, and the body after it
+					// start the next segment, which on an open figure is never the first.
+					var before = pieces[i - 1];
+					var after = pieces[i + 1];
+					var reached = before.X0 + (before.R1 - before.R0);
+					reached.ShouldBeGreaterThan(segments[before.Segment].Length - 0.01f,
+						$"trial {trial}: a join at a vertex the dash stops {segments[before.Segment].Length - reached} short of");
+					if (!run.ClosedFigure)
+						after.Segment.ShouldBe(before.Segment + 1, $"trial {trial}: an open figure's dash wrapped to its start");
+				}
+				bodies.ShouldBeLessThanOrEqualTo(run.SegmentCount + 1, $"trial {trial}");
+			}
+		}
 	}
 
 	[Test]
