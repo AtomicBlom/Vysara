@@ -23,7 +23,7 @@ public sealed class ListViewItem : ContentControl
 	{
 		BackgroundTransition = TemplateStates.Fade(80);
 		var selection = new VisualStateGroup { Name = "SelectionStates" };
-		selection.States.Add(new VisualState { Name = "Unselected", Storyboard = TemplateStates.RestoreBackground(this) });
+		selection.States.Add(new VisualState { Name = "Unselected" });
 		selection.States.Add(new VisualState { Name = "Selected", Storyboard = TemplateStates.Background(this, SelectedBackground) });
 		SetBuiltInValue(VisualStateManager.VisualStateGroupsProperty, [selection]);
 	}

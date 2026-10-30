@@ -140,7 +140,7 @@ public class ToggleButton : ButtonBase
 			root.Children.Add(presenter);
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(baseBorder) });
+			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(baseBorder, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(baseBorder, PressedBackground) });
 

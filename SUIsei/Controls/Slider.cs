@@ -258,7 +258,7 @@ public sealed class Slider : Control
 			slider._track = track;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(thumb) });
+			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(thumb, ThumbOver) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(thumb, ThumbPressed) });
 			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Background(thumb, ThumbDisabled) });

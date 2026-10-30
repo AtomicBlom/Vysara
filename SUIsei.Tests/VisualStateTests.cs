@@ -283,6 +283,60 @@ public sealed class VisualStateTests
 		control.Opacity.ShouldBe(1f); // and A is released when left
 	}
 
+	/// <summary>
+	/// A template with a group whose "Held" state fades the control's own opacity to 0.3 and holds it, and whose border
+	/// part takes the control's background through a template binding.
+	/// </summary>
+	private static ControlTemplate HoldingTemplate(out Func<Border> part) => HoldingTemplate(out part, 0.3f);
+
+	private static ControlTemplate HoldingTemplate(out Func<Border> part, float held)
+	{
+		Border? built = null;
+		part = () => built!;
+		return new ControlTemplate
+		{
+			Factory = control =>
+			{
+				var border = new Border();
+				built = border;
+				control.RegisterTemplateBinding(Control.BackgroundProperty, border, Border.BackgroundProperty);
+				var group = new VisualStateGroup { Name = "Common" };
+				group.States.Add(new VisualState { Name = "Normal" });
+				group.States.Add(Fading("Held", control, held, bound: true));
+				VisualStateManager.GetVisualStateGroups(border).Add(group);
+				return border;
+			},
+		};
+	}
+
+	/// <summary>
+	/// Replacing a template leaves its states, so one holding a property of the control itself lets go of it, and drops
+	/// its template bindings, so the old parts hear nothing more from the control.
+	/// </summary>
+	[Test]
+	public void Replacing_a_template_leaves_its_states_and_drops_its_template_bindings()
+	{
+		var host = new UIHost();
+		var control = new ContentControl { Width = 20, Height = 20, Template = HoldingTemplate(out var oldPart) };
+		host.CreateRoot(UILayer.Default).Root.Content = control;
+		host.Tick(0.016, 0f, Surface);
+		VisualStateManager.GoToState(control, "Held", useTransitions: true);
+		host.Tick(0.3, 0.016f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+		var first = oldPart();
+
+		control.Template = HoldingTemplate(out var newPart, 0.6f);
+		host.Tick(0.016, 0.32f, Surface);
+
+		control.Opacity.ShouldBe(1f); // the old template's held state let go
+		var red = new SolidColorBrush(new HdrColor(1f, 0f, 0f, 1f));
+		control.Background = red;
+		newPart().Background.ShouldBeSameAs(red);
+		first.Background.ShouldBeNull(); // the old part is no longer pushed to
+		VisualStateManager.GoToState(control, "Held", useTransitions: false).ShouldBeTrue(); // the new template's states
+		control.Opacity.ShouldBe(0.6f, 0.001f);
+	}
+
 	[Test]
 	public void Changing_state_and_running_frames_allocates_nothing_once_warm()
 	{

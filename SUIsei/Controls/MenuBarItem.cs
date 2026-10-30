@@ -101,7 +101,7 @@ public sealed class MenuBarItem : ButtonBase
 			host.ContentChanged += (_, _) => presenter.Content = host.Content;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(border) });
+			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);

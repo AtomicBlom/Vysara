@@ -321,6 +321,10 @@ public abstract class DependencyObject
 		where TTargetOwner : DependencyObject =>
 		RegisterTemplateBinding(source, value => target.SetTemplateValue(targetProperty, convert(value)));
 
+	// Drop every template binding registered on this object: its template is being replaced, and the parts they push to
+	// with it.
+	internal void ClearTemplateBindings() => _templateTargets = null;
+
 	private ValueSlot<TValue>? Slot<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
 		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) ? (ValueSlot<TValue>)s : null;
 

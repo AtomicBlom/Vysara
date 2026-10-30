@@ -220,10 +220,15 @@ public abstract class Control : FrameworkElement
 	/// <summary>Hook for a control to grab named parts after its template is realized.</summary>
 	protected virtual void OnApplyTemplate() { }
 
+	// The old template goes whole: its states are left, releasing what they hold (which can include this control's own
+	// properties), and the template bindings its factory registered are dropped, so later changes reach only the new
+	// template's parts and the old parts can be collected. Template bindings are registered only by template factories.
 	private void OnTemplateChanged()
 	{
 		if (_templateRoot is not null)
 		{
+			VisualStateManager.LeaveAll(_templateRoot);
+			ClearTemplateBindings();
 			DropChild(_templateRoot);
 			_templateRoot = null;
 			_templateRootList = [];

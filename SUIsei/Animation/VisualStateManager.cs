@@ -105,6 +105,25 @@ public static class VisualStateManager
 		return false;
 	}
 
+	/// <summary>
+	/// Leave every group's current state on <paramref name="host"/>, releasing what each holds through the clock it ran on,
+	/// as a control does when its template is replaced: a state of the old template may hold a property of the control itself,
+	/// or of an object reached through a path that outlives the template, such as a shared brush.
+	/// </summary>
+	internal static void LeaveAll(UIElement host)
+	{
+		var groups = host.GetValue(VisualStateGroupsProperty);
+		if (groups is null)
+			return;
+		foreach (var group in groups)
+		{
+			if (group.CurrentState?.Storyboard is { } storyboard)
+				Leave(storyboard, group.CurrentClock, null);
+			group.CurrentState = null;
+			group.CurrentClock = null;
+		}
+	}
+
 	// Release what the state being left set, as leaving a WinUI visual state does: through the clock its storyboard ran or
 	// held its values on, which leaves alone any property a later animation has taken over, or, for a state shown with no
 	// clock, directly, except the properties the state being entered (`next`) animates now.
