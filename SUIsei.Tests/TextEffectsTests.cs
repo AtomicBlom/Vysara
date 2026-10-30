@@ -14,9 +14,9 @@ namespace SUIsei.Tests;
 
 /// <summary>
 /// <c>suisei:TextEffects</c>: an outline and a shadow on a <see cref="TextBlock"/>, sized in EM and handed to its
-/// <see cref="GlyphRunContent"/>. A size is checked against the text's font where it enters (set on text in a tree, or
-/// as text joins a root as its content, or before a root's font changes), and an animation's own values as it begins,
-/// never mid-animation. Animating them recomposites with no layout, no shaping and no allocation.
+/// <see cref="GlyphRunContent"/>. A negative or non-finite size is refused where it is set, and an animation's own values
+/// as it begins, never mid-animation; one past its font's field is drawn clamped to it, whatever order the text, its font
+/// and its root met in. Animating them recomposites with no layout, no shaping and no allocation.
 /// </summary>
 public sealed class TextEffectsTests
 {
@@ -72,19 +72,24 @@ public sealed class TextEffectsTests
 		draw.Vertices.Length.ShouldBe(3 * 2 * 4); // a shadow, an outline and a glyph quad for each glyph
 	}
 
+	/// <summary>What a font's field holds depends on the font and the size the text is drawn at, so a size past it is
+	/// taken where it is set, drawn clamped, and named in the dump.</summary>
 	[Test]
-	public void A_size_its_font_cannot_hold_throws_when_set_and_changes_nothing()
+	public void A_size_past_its_fonts_field_is_taken_and_drawn_clamped()
 	{
-		var text = InRoot(out _);
-		TextEffects.SetOutlineThickness(text, Reach); // the field's whole reach is allowed
-		var thick = Should.Throw<ArgumentOutOfRangeException>(() => TextEffects.SetOutlineThickness(text, Reach + 0.01f));
-		thick.Message.ShouldContain("TextBlock \"Go\"");
-		thick.Message.ShouldContain("0.188 EM");
-		TextEffects.GetOutlineThickness(text).ShouldBe(Reach);
+		var text = InRoot(out var root);
+		TextEffects.SetOutlineThickness(text, Reach + 0.05f);
+		TextEffects.SetOutlineBrush(text, new SolidColorBrush(Black));
+		TextEffects.SetShadowSoftness(text, 2f * Reach + 0.05f);
+		TextEffects.SetShadowBrush(text, new SolidColorBrush(Black));
 
-		TextEffects.SetShadowSoftness(text, 2f * Reach);
-		Should.Throw<ArgumentOutOfRangeException>(() => TextEffects.SetShadowSoftness(text, 2f * Reach + 0.01f));
-		TextEffects.GetShadowSoftness(text).ShouldBe(2f * Reach);
+		var draw = Render(root);
+
+		TextEffects.GetOutlineThickness(text).ShouldBe(Reach + 0.05f);
+		var bias = draw.Vertices.ToArray().Max(v => v.Custom.Y);
+		bias.ShouldBeGreaterThan(0f);
+		bias.ShouldBeLessThan(0.5f); // the outline's bias, clamped to what the field holds at this size
+		text.Visual.Dump().ShouldContain("(past the font's field, drawn clamped)");
 	}
 
 	[Test]
@@ -100,22 +105,21 @@ public sealed class TextEffectsTests
 		TextEffects.GetOutlineBrush(text).ShouldBeNull();
 	}
 
+	/// <summary>Whatever order the text, its font and its root are put together in, the text joins and draws: clamped by
+	/// a font whose field can't hold its outline, as set by one baked with the range for it.</summary>
 	[Test]
-	public void Text_set_up_outside_a_tree_is_checked_as_it_becomes_a_roots_content()
+	public void Text_set_up_outside_a_tree_joins_a_root_and_draws_as_its_font_allows()
 	{
-		// Outside a tree the font is not known, so a thick outline is taken, and checked against the root's font as the
-		// text becomes its content: refused by the default's field, without the root or the text changing, and taken by a
-		// font baked with twice the range.
 		var text = new TextBlock { Text = "Go" };
 		TextEffects.SetOutlineThickness(text, 1.5f * Reach);
 		TextEffects.SetOutlineBrush(text, new SolidColorBrush(Black));
 		var panel = new StackPanel();
 		panel.Children.Add(text);
 
-		var root = new UIRoot(new DrawListId(0));
-		Should.Throw<ArgumentOutOfRangeException>(() => root.Content = panel);
-		root.Content.ShouldBeNull();
-		text.AttachedRoot.ShouldBeNull();
+		var root = new UIRoot(new DrawListId(0)) { Content = panel };
+		text.AttachedRoot.ShouldBe(root);
+		Render(root).Vertices.Span[0].Custom.Y.ShouldBeLessThan(0.5f); // clamped by the default's field
+		root.Content = null;
 
 		var wide = new UIRoot(new DrawListId(1)) { Font = AtlasWithRange(24) };
 		wide.Content = panel;
@@ -124,33 +128,25 @@ public sealed class TextEffectsTests
 	}
 
 	[Test]
-	public void A_roots_font_is_checked_against_its_text_before_it_changes()
+	public void A_roots_font_changes_whatever_its_text_effects_and_they_draw_clamped_to_it()
 	{
 		var text = InRoot(out var root);
 		TextEffects.SetOutlineThickness(text, 0.15f);
-		var before = root.Font;
-		var narrow = AtlasWithRange(4); // a field reaching 0.0625 EM, as the default's did before X1
-		Should.Throw<ArgumentOutOfRangeException>(() => root.Font = narrow).Message.ShouldContain("0.063 EM");
-		root.Font.ShouldBeSameAs(before);
+		TextEffects.SetOutlineBrush(text, new SolidColorBrush(Black));
+		var narrow = AtlasWithRange(4); // a field reaching 0.0625 EM
 
-		TextEffects.SetOutlineThickness(text, 0.05f);
 		root.Font = narrow;
-		root.Font.ShouldBe(narrow);
-		Should.Throw<ArgumentOutOfRangeException>(() => TextEffects.SetOutlineThickness(text, 0.07f)); // now against the new font
+
+		root.Font.ShouldBeSameAs(narrow);
+		Render(root).Vertices.ToArray().Max(v => v.Custom.Y).ShouldBeLessThan(0.5f);
+		text.Visual.Dump().ShouldContain("(past the font's field, drawn clamped)");
 	}
 
 	[Test]
-	public void An_animation_is_checked_as_it_begins()
+	public void An_animation_naming_a_negative_size_is_refused_as_it_begins()
 	{
 		var text = InRoot(out _);
 		var clock = new AnimationClock();
-		Should.Throw<ArgumentOutOfRangeException>(() => clock.Begin(StoryboardOf(new DoubleAnimation
-		{
-			To = 2.0 * Reach,
-			Duration = TimeSpan.FromSeconds(1),
-			Target = text,
-			TargetProperty = TextEffects.OutlineThicknessProperty,
-		})));
 		Should.Throw<ArgumentOutOfRangeException>(() => clock.Begin(StoryboardOf(new DoubleAnimation
 		{
 			From = -0.1,
@@ -162,10 +158,19 @@ public sealed class TextEffectsTests
 
 		var keyed = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(1), Target = text, TargetProperty = TextEffects.ShadowSoftnessProperty };
 		keyed.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.Zero, Value = 0.1 });
-		keyed.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.FromSeconds(0.5), Value = 3.0 * Reach });
+		keyed.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.FromSeconds(0.5), Value = -0.2 });
 		keyed.KeyFrames.Add(new DoubleKeyFrame { KeyTime = TimeSpan.FromSeconds(1), Value = 0.1 });
 		Should.Throw<ArgumentOutOfRangeException>(() => clock.Begin(StoryboardOf(keyed)));
 		TextEffects.GetShadowSoftness(text).ShouldBe(0f);
+
+		// Past the field is not refused: it draws clamped.
+		Should.NotThrow(() => clock.Begin(StoryboardOf(new DoubleAnimation
+		{
+			To = 2.0 * Reach,
+			Duration = TimeSpan.FromSeconds(1),
+			Target = text,
+			TargetProperty = TextEffects.OutlineThicknessProperty,
+		})));
 	}
 
 	[Test]

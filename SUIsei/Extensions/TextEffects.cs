@@ -22,13 +22,10 @@ namespace SUIsei.Extensions;
 /// <para>
 /// The atlas holds distances <see cref="FontAtlas.DistanceRangeEm"/> / 2 past each edge, so an outline can be at most
 /// that thick and a shadow at most <see cref="FontAtlas.DistanceRangeEm"/> soft, as it fades half its softness past the
-/// edge. A size beyond its font's field throws where it enters: when it is set on text in a tree, whose font is known,
-/// and for text set up outside one, when it becomes a root's <c>Content</c> or overlay; setting a root's
-/// <see cref="UIRoot.Font"/> checks the text it holds first. Each throws before anything changes. An animation's own
-/// values (its start and end, its keyframes) are checked as it begins, never mid-animation. A negative or non-finite
-/// size throws whenever it is set. Text added to a panel or template already in a tree is not checked as it joins
-/// (adding it cannot be undone part-way), a gap: like an easing's overshoot, an effect the field cannot hold is drawn
-/// clamped to it.
+/// edge; at a small size, less, since the edge's own ramp takes some of the field. An effect its font's field cannot
+/// hold at the size it is drawn is drawn clamped to what it can, whatever the order the text, its font and its root
+/// were put together in, and the text's visual says so in <see cref="Visual.Dump"/>. A negative or non-finite size
+/// throws whenever it is set, as does an animation that names one (its start and end, its keyframes) as it begins.
 /// </para>
 /// <para>
 /// The effects take a colour or a linear gradient, measured over the text's layout box (moved with the shadow, for the
@@ -46,7 +43,7 @@ public sealed class TextEffects : DependencyObject
 	/// <summary>How far the outline reaches past the glyphs' edges, in EM. 0 by default: no outline.</summary>
 	public static readonly DependencyProperty<TextBlock, float> OutlineThicknessProperty =
 		DependencyProperty.RegisterAttached("OutlineThickness",
-			new PropertyMetadata<TextBlock, float> { Validate = static (text, value) => ValidateOutline(text, value, text.AttachedRoot?.Font), PropertyChanged = static (text, _, _) => text.OnTextEffectChanged() });
+			new PropertyMetadata<TextBlock, float> { Validate = static (_, value) => ValidateOutline(value), PropertyChanged = static (text, _, _) => text.OnTextEffectChanged() });
 
 	/// <summary>The outline's paint, a colour or a linear gradient over the text's layout box. Null by default: no
 	/// outline.</summary>
@@ -63,7 +60,7 @@ public sealed class TextEffects : DependencyObject
 	/// moved glyphs' edge. 0 by default: a hard shadow.</summary>
 	public static readonly DependencyProperty<TextBlock, float> ShadowSoftnessProperty =
 		DependencyProperty.RegisterAttached("ShadowSoftness",
-			new PropertyMetadata<TextBlock, float> { Validate = static (text, value) => ValidateSoftness(text, value, text.AttachedRoot?.Font), PropertyChanged = static (text, _, _) => text.OnTextEffectChanged() });
+			new PropertyMetadata<TextBlock, float> { Validate = static (_, value) => ValidateSoftness(value), PropertyChanged = static (text, _, _) => text.OnTextEffectChanged() });
 
 	/// <summary>The shadow's paint, a colour or a linear gradient over the text's layout box, moved with the shadow. Null
 	/// by default: no shadow.</summary>
@@ -86,39 +83,18 @@ public sealed class TextEffects : DependencyObject
 	public static void SetShadowBrush(TextBlock element, Brush? value) => element.SetValue(ShadowBrushProperty, value);
 	public static Brush? GetShadowBrush(TextBlock element) => element.GetValue(ShadowBrushProperty);
 
-	/// <summary>
-	/// Check the effects of every <see cref="TextBlock"/> under <paramref name="element"/> against <paramref name="font"/>,
-	/// the font they are about to draw with, throwing on the first its field cannot hold: called before a tree becomes a
-	/// root's content or overlay, and before a root's font changes, so nothing has changed when it throws.
-	/// </summary>
-	internal static void ValidateTree(UIElement element, FontAtlas font)
-	{
-		if (element is TextBlock text)
-		{
-			ValidateOutline(text, GetOutlineThickness(text), font);
-			ValidateSoftness(text, GetShadowSoftness(text), font);
-		}
-		var children = element.VisualChildren;
-		for (var i = 0; i < children.Count; i++)
-			ValidateTree(children[i], font);
-	}
-
-	private static void ValidateOutline(TextBlock text, float thickness, FontAtlas? font)
+	// Only the value itself is checked where it is set: what the font's field can hold depends on the font and the size
+	// the text is drawn at, which the emitter clamps to.
+	private static void ValidateOutline(float thickness)
 	{
 		if (!(thickness >= 0f) || float.IsPositiveInfinity(thickness))
 			throw new ArgumentOutOfRangeException("value", thickness, "An outline's thickness is a distance in EM, 0 or more.");
-		if (font is not null && thickness > font.DistanceRangeEm / 2f)
-			throw new ArgumentOutOfRangeException("value", thickness, string.Create(CultureInfo.InvariantCulture,
-				$"An outline {thickness:0.###} EM thick on {Describe(text)} reaches past the {font.DistanceRangeEm / 2f:0.###} EM its font's distance field holds past each edge. Make it thinner, or bake the font with a wider distance range."));
 	}
 
-	private static void ValidateSoftness(TextBlock text, float softness, FontAtlas? font)
+	private static void ValidateSoftness(float softness)
 	{
 		if (!(softness >= 0f) || float.IsPositiveInfinity(softness))
 			throw new ArgumentOutOfRangeException("value", softness, "A shadow's softness is a distance in EM, 0 or more.");
-		if (font is not null && softness > font.DistanceRangeEm)
-			throw new ArgumentOutOfRangeException("value", softness, string.Create(CultureInfo.InvariantCulture,
-				$"A shadow {softness:0.###} EM soft on {Describe(text)} fades {softness / 2f:0.###} EM past its edge, past the {font.DistanceRangeEm / 2f:0.###} EM its font's distance field holds. Make it sharper, or bake the font with a wider distance range."));
 	}
 
 	private static void ValidateOffset(Point offset)
@@ -133,6 +109,4 @@ public sealed class TextEffects : DependencyObject
 			throw new NotSupportedException(
 				"A text effect is painted by a colour or a linear gradient: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
 	}
-
-	private static string Describe(TextBlock text) => $"the TextBlock \"{text.Text}\"";
 }

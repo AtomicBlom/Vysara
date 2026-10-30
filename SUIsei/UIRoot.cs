@@ -43,8 +43,6 @@ public sealed class UIRoot
 		set
 		{
 			if (ReferenceEquals(field, value)) return;
-			if (value is not null)
-				Extensions.TextEffects.ValidateTree(value, Font);
 			field?.SetAttachedRoot(null);
 			field = value;
 			field?.SetAttachedRoot(this);
@@ -73,9 +71,8 @@ public sealed class UIRoot
 	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
 	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
 	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
-	/// everything under the root. It is the whole surface's font until elements choose their own. The text effects under
-	/// the root are checked against a new font first (<see cref="Extensions.TextEffects"/>): one its distance field cannot
-	/// hold throws, and the root keeps its font.
+	/// everything under the root. It is the whole surface's font until elements choose their own. A text effect the new
+	/// font's distance field cannot hold is drawn clamped to it (<see cref="Extensions.TextEffects"/>).
 	/// </summary>
 	public FontAtlas Font
 	{
@@ -85,10 +82,6 @@ public sealed class UIRoot
 			ArgumentNullException.ThrowIfNull(value);
 			if (ReferenceEquals(field, value))
 				return;
-			if (Content is { } content)
-				Extensions.TextEffects.ValidateTree(content, value);
-			foreach (var (element, _, _) in _overlays)
-				Extensions.TextEffects.ValidateTree(element, value);
 			field = value;
 			Content?.InvalidateMeasureTree();
 			foreach (var (element, _, _) in _overlays)
@@ -101,8 +94,6 @@ public sealed class UIRoot
 	/// stays top-most. Marks the tree dirty so the next composite shows it.</summary>
 	internal void AddOverlay(UIElement element, Vector2 position, bool fullSurface = false)
 	{
-		Extensions.TextEffects.ValidateTree(element, Font);
-
 		element.SetAttachedRoot(this);
 		_overlays.Insert(_overlays.Count - _diagnosticOverlays, (element, position, fullSurface));
 		Visual.MarkDirty();

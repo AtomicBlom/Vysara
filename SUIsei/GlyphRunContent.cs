@@ -142,6 +142,8 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 		{
 			sb.Append(CultureInfo.InvariantCulture, $" outline={OutlineThickness:0.###}");
 			outline.Describe(sb);
+			if (OutlineThickness > Font.DistanceRangeEm / 2f)
+				sb.Append(" (past the font's field, drawn clamped)");
 		}
 		if (ShadowBrush is { } shadow)
 		{
@@ -149,6 +151,8 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 			shadow.Describe(sb);
 			if (ShadowSoftness > 0f)
 				sb.Append(CultureInfo.InvariantCulture, $" softness={ShadowSoftness:0.###}");
+			if (ShadowSoftness > Font.DistanceRangeEm)
+				sb.Append(" (past the font's field, drawn clamped)");
 		}
 	}
 }
