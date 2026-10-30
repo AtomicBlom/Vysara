@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    SUIsei XAML build machinery (PlanningUI.md MU0 Phase C) — property defaults.
+    SUIsei XAML build machinery — property defaults.
 
     Imported by any project that authors SUIsei XAML views: SUIsei itself (real views, later milestones)
     and SUIsei.Tests (the generator proof). It carries NO runtime/backend reference — the SUIsei.SourceGen

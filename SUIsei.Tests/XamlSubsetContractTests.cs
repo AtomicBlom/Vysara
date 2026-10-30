@@ -77,7 +77,7 @@ public sealed class XamlSubsetContractTests
 		</ContentControl>
 		""";
 
-	// Planning §4 "In".
+	// The contract's In forms.
 	private static readonly (string Form, string Body)[] InForms =
 	[
 		("elements and attributes", """<Border Width="10" Background="#FF0000" HorizontalAlignment="Left" />"""),
@@ -143,7 +143,7 @@ public sealed class XamlSubsetContractTests
 		("suisei:TextEffects", """<TextBlock x:Name="Title" Text="Go" suisei:TextEffects.OutlineThickness="0.08" suisei:TextEffects.OutlineBrush="Black" suisei:TextEffects.ShadowOffset="0.05,0.1" suisei:TextEffects.ShadowSoftness="0.2" suisei:TextEffects.ShadowBrush="#80000000" /><ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A" /><VisualState x:Name="B"><Storyboard><DoubleAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineThickness)" To="0.12" /><ColorAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineBrush).(SolidColorBrush.Color)" To="Red" /></Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>"""),
 	];
 
-	// Planning §4 "Planned": named in the contract but not implemented yet. Each must be reported, not ignored.
+	// The contract's Planned forms: named in it but not implemented yet. Each must be reported, not ignored.
 	private static readonly (string Form, string Body, string Id)[] PlannedForms =
 	[
 		("{ThemeResource}", """<StackPanel.Resources><Style x:Key="T" TargetType="Border" /></StackPanel.Resources><Border Style="{ThemeResource T}" />""", "SUISEI007"),

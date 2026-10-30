@@ -15,8 +15,8 @@ namespace SUIsei.Extensions;
 /// across its softness, centred on the moved edge; it is cast by the glyphs, not their outline. Every glyph's shadow
 /// lies under every glyph's outline, and every outline under every glyph, so an opaque effect is exact: no glyph's
 /// effect covers a neighbouring glyph. A translucent effect blends twice where neighbouring glyphs' effects overlap
-/// (outlines meet between letters, soft halos run into each other), a gap; for a soft translucent shadow the fallback is
-/// S-37's layer drop shadow. The outline lies under the whole glyph rather than round it, so a translucent
+/// (outlines meet between letters, soft halos run into each other), a gap; a soft translucent shadow needs a drop shadow on
+/// the element's whole layer instead. The outline lies under the whole glyph rather than round it, so a translucent
 /// <see cref="TextBlock.Foreground"/> shows it through. Fading the element with <c>Opacity</c> fades the text and its
 /// effects as one.
 /// </para>
