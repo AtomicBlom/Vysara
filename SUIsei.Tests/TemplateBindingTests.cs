@@ -225,4 +225,32 @@ public sealed class TemplateBindingTests
 		view.Card.Background = teal; // live
 		border.Background.ShouldBeSameAs(teal);
 	}
+
+	/// <summary>
+	/// A value a template sets on a part sits at the templated-parent level, as in WinUI, whether written plainly or
+	/// bound: below the part's local value, so ClearValue on the part goes back to the template's value. Both the
+	/// generated templates and the built-in ones set their values there.
+	/// </summary>
+	[Test]
+	public void A_templates_values_sit_on_the_template_level_below_the_parts_own()
+	{
+		var view = new TemplatedView();
+		view.InitializeComponent();
+		var root = new UIRoot(UISurface.Hud) { Content = view.Root };
+		root.LayoutPass(new Size(200f, 120f));
+		var border = (Border)view.Card.GetTemplateRoot()!;
+
+		border.TopRung(Border.CornerRadiusProperty).ShouldBe(DependencyObject.ValueRung.Template); // CornerRadius="4"
+		border.TopRung(Border.BackgroundProperty).ShouldBe(DependencyObject.ValueRung.Template); // {TemplateBinding}
+		border.CornerRadius = new CornerRadius(9f);
+		border.ClearValue(Border.CornerRadiusProperty);
+		border.CornerRadius.ShouldBe(new CornerRadius(4f)); // back to the template's, not the default
+
+		var button = new Button();
+		var buttonRoot = new UIRoot(UISurface.Hud) { Content = button };
+		buttonRoot.LayoutPass(new Size(200f, 120f));
+		var chrome = (Border)button.GetTemplateRoot()!;
+		chrome.TopRung(Border.BackgroundProperty).ShouldBe(DependencyObject.ValueRung.Template);
+		chrome.TopRung(Border.BorderThicknessProperty).ShouldBe(DependencyObject.ValueRung.Template);
+	}
 }

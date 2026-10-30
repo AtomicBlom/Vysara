@@ -67,7 +67,7 @@ public sealed class CheckBox : ToggleButton
 				Margin = new Thickness(8f, 0f),
 				VerticalAlignment = VerticalAlignment.Center,
 			};
-			checkBox.RegisterTemplateBinding(BackgroundProperty, value => row.Background = value);
+			checkBox.RegisterTemplateBinding(BackgroundProperty, row, Panel.BackgroundProperty);
 			checkBox.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
 			presenter.Content = checkBox.Content;
 			checkBox.ContentChanged += (_, _) => presenter.Content = checkBox.Content;

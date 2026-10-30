@@ -37,9 +37,9 @@ public sealed class Button : ButtonBase
 			};
 			var presenter = new ContentPresenter();
 			border.Child = presenter;
-			host.RegisterTemplateBinding(BackgroundProperty, value => border.Background = value ?? NormalBackground);
-			host.RegisterTemplateBinding(BorderBrushProperty, value => border.BorderBrush = value);
-			host.RegisterTemplateBinding(BorderThicknessProperty, value => border.BorderThickness = value);
+			host.RegisterTemplateBinding(BackgroundProperty, border, Border.BackgroundProperty, static value => value ?? NormalBackground);
+			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty);
+			host.RegisterTemplateBinding(BorderThicknessProperty, border, Border.BorderThicknessProperty);
 			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
 			presenter.Content = host.Content;                        // {TemplateBinding Content} — initial
 			host.ContentChanged += (_, _) => presenter.Content = host.Content; // live

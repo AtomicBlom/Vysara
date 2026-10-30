@@ -77,6 +77,19 @@ partial class XamlSourceGenerator
 			gen.Report(UnknownProperty, propEl, attachedOwner.ToDisplayString(), prop);
 	}
 
+	// Set a property the markup gives a value. Inside a ControlTemplate a dependency property takes it on its Template rung,
+	// as WinUI puts every value a template sets on its parts at the templated-parent level: below Local, so a value the app
+	// sets on a part wins, and ClearValue on the part reverts to the template's value. Elsewhere, and for a CLR property, the
+	// value goes through the property's setter.
+	private static void EmitSet(Scope scope, INamedTypeSymbol ownerType, string ownerVar, IPropertySymbol prop, string code)
+	{
+		if (scope.IsControlTemplate && FindDependencyProperty(ownerType, prop.Name) is { } dp && DependencyValueType(dp) is { } valueType
+			&& SymbolEqualityComparer.Default.Equals(valueType, prop.Type))
+			scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({ownerVar}, {Fq(dp.ContainingType!)}.{dp.Name}, {code});");
+		else
+			scope.Emit($"{ownerVar}.{prop.Name} = {code};");
+	}
+
 	// <Owner.Prop> for a property of the element: text is converted for the property's type, one object is assigned, and
 	// for a collection (a type with a one-argument Add) each object is added — the only form a get-only collection takes.
 	private static void EmitMemberPropertyElement(Gen gen, Scope scope, string ownerVar, IPropertySymbol member, XElement propEl)
@@ -88,7 +101,7 @@ partial class XamlSourceGenerator
 			if (text is null || member.SetMethod is null)
 				gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (needs a value, or objects for a collection)");
 			else if (ConvertOrReport(gen, propEl, member.Type, text, member.Name, member) is { } code)
-				scope.Emit($"{ownerVar}.{member.Name} = {code};");
+				EmitSet(scope, member.ContainingType, ownerVar, member, code);
 			return;
 		}
 		if (text is not null)
@@ -100,7 +113,7 @@ partial class XamlSourceGenerator
 		if (children.Count == 1 && member.SetMethod is not null && ChildFits(gen, children[0], member.Type))
 		{
 			if (EmitElement(gen, scope, children[0]) is { } childVar)
-				scope.Emit($"{ownerVar}.{member.Name} = {childVar};");
+				EmitSet(scope, member.ContainingType, ownerVar, member, childVar);
 			return;
 		}
 		if (!IsAddable(member.Type))

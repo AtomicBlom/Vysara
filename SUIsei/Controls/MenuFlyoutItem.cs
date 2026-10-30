@@ -17,7 +17,7 @@ public sealed class MenuFlyoutItem : ButtonBase
 
 	public MenuFlyoutItem()
 	{
-		HorizontalAlignment = HorizontalAlignment.Stretch;
+		SetBuiltInValue(HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
 		SetBuiltInValue(TemplateProperty, DefaultTemplate);
 	}
 
@@ -42,9 +42,9 @@ public sealed class MenuFlyoutItem : ButtonBase
 			};
 			var presenter = new ContentPresenter();
 			border.Child = presenter;
-			host.RegisterTemplateBinding(BackgroundProperty, value => border.Background = value ?? NormalBackground);
-			host.RegisterTemplateBinding(BorderBrushProperty, value => border.BorderBrush = value);
-			host.RegisterTemplateBinding(BorderThicknessProperty, value => border.BorderThickness = value);
+			host.RegisterTemplateBinding(BackgroundProperty, border, Border.BackgroundProperty, static value => value ?? NormalBackground);
+			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty);
+			host.RegisterTemplateBinding(BorderThicknessProperty, border, Border.BorderThicknessProperty);
 			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
 			presenter.Content = host.Content;
 			host.ContentChanged += (_, _) => presenter.Content = host.Content;

@@ -128,9 +128,9 @@ public class ToggleButton : ButtonBase
 			};
 			// As WinUI's default template: the base border paints the toggle's Background, BorderBrush and BorderThickness,
 			// and the presenter its Foreground.
-			toggle.RegisterTemplateBinding(BackgroundProperty, value => baseBorder.Background = value ?? NormalBackground);
-			toggle.RegisterTemplateBinding(BorderBrushProperty, value => baseBorder.BorderBrush = value);
-			toggle.RegisterTemplateBinding(BorderThicknessProperty, value => baseBorder.BorderThickness = value);
+			toggle.RegisterTemplateBinding(BackgroundProperty, baseBorder, Border.BackgroundProperty, static value => value ?? NormalBackground);
+			toggle.RegisterTemplateBinding(BorderBrushProperty, baseBorder, Border.BorderBrushProperty);
+			toggle.RegisterTemplateBinding(BorderThicknessProperty, baseBorder, Border.BorderThicknessProperty);
 			toggle.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
 			presenter.Content = toggle.Content;
 			toggle.ContentChanged += (_, _) => presenter.Content = toggle.Content;

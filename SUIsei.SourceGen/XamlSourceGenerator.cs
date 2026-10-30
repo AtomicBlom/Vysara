@@ -446,7 +446,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			{
 				// Plain text, converted for the property's type.
 				if (ConvertOrReport(gen, attr, prop.Type, value, name, prop) is { } code)
-					scope.Emit($"{var}.{prop.Name} = {code};");
+					EmitSet(scope, type, var, prop, code);
 				continue;
 			}
 
@@ -493,7 +493,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (TryMarkupValue(gen, scope, attr, var, inner, prop.Type, name, out var markupCode))
 			{
 				if (markupCode is not null)
-					scope.Emit($"{var}.{prop.Name} = {markupCode};");
+					EmitSet(scope, type, var, prop, markupCode);
 				continue;
 			}
 

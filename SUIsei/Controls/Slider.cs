@@ -239,8 +239,8 @@ public sealed class Slider : Control
 
 			var rail = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
 			var fill = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
-			slider.RegisterTemplateBinding(BackgroundProperty, value => rail.Background = value ?? RailColor);
-			slider.RegisterTemplateBinding(ForegroundProperty, value => fill.Background = value ?? FillColor);
+			slider.RegisterTemplateBinding(BackgroundProperty, rail, Border.BackgroundProperty, static value => value ?? RailColor);
+			slider.RegisterTemplateBinding(ForegroundProperty, fill, Border.BackgroundProperty, static value => value ?? FillColor);
 			var thumb = new Border
 			{
 				Background = ThumbNormal,
