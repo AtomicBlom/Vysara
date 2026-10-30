@@ -27,16 +27,14 @@ public sealed class Border : FrameworkElement
 			new PropertyMetadata<Border, Brush?> { PropertyChanged = static (b, old, @new) => b.OnBrushChanged(old, @new) });
 
 	/// <summary>The corner radius. SUIsei draws one radius for all four corners: radii that differ throw
-	/// <see cref="NotSupportedException"/> when set.</summary>
+	/// <see cref="NotSupportedException"/> when set, and are refused at build time in markup.</summary>
 	public static readonly DependencyProperty<Border, CornerRadius> CornerRadiusProperty =
 		DependencyProperty.Register(nameof(CornerRadius),
 			new PropertyMetadata<Border, CornerRadius>
 			{
-				PropertyChanged = static (b, old, value) =>
-				{
-					_ = value.Uniform; // fail loud now, not at the next draw
-					b.InvalidateContent();
-				},
+				// Checked before the value is stored, so a refused value leaves the border as it was.
+				Validate = static (border, value) => _ = value.Uniform,
+				PropertyChanged = static (b, _, _) => b.InvalidateContent(),
 			});
 
 	/// <summary>The width of the border on each side. SUIsei strokes all four sides at the left side's width.</summary>

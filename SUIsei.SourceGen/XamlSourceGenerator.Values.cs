@@ -25,7 +25,7 @@ partial class XamlSourceGenerator
 		["SUIsei.Media.Brush"] = (ConvertBrush, "#RRGGBB, #AARRGGBB or a named colour, for a SolidColorBrush"),
 		["SUIsei.Media.SolidColorBrush"] = (ConvertBrush, "#RRGGBB, #AARRGGBB or a named colour"),
 		["SUIsei.Thickness"] = (ConvertThickness, "one, two or four numbers"),
-		["SUIsei.CornerRadius"] = (ConvertCornerRadius, "one or four numbers"),
+		["SUIsei.CornerRadius"] = (ConvertCornerRadius, "one number, or four equal ones: SUIsei draws one radius for every corner"),
 		["System.Numerics.Matrix3x2"] = (ConvertMatrix, "six numbers, 'M11,M12,M21,M22,OffsetX,OffsetY'"),
 		["SUIsei.Point"] = (ConvertPoint, "two numbers, 'x,y'"),
 		["SUIsei.Size"] = (ConvertSize, "two numbers of 0 or more, 'width,height'"),
@@ -152,14 +152,15 @@ partial class XamlSourceGenerator
 		return code.Length > 0;
 	}
 
-	// WinUI corner radius: "u" (uniform) or "topLeft,topRight,bottomRight,bottomLeft".
+	// WinUI corner radius: "u" (uniform) or "topLeft,topRight,bottomRight,bottomLeft". Radii that differ are refused here,
+	// where the markup can be pointed at, rather than throwing as the view is built: SUIsei draws one radius.
 	private static bool ConvertCornerRadius(string raw, out string code)
 	{
 		var n = XamlValueSyntax.ParseNumbers(raw);
 		code = n?.Length switch
 		{
 			1 => $"new global::SUIsei.CornerRadius({F(n[0])})",
-			4 => $"new global::SUIsei.CornerRadius({F(n[0])}, {F(n[1])}, {F(n[2])}, {F(n[3])})",
+			4 when n[0] == n[1] && n[0] == n[2] && n[0] == n[3] => $"new global::SUIsei.CornerRadius({F(n[0])})",
 			_ => "",
 		};
 		return code.Length > 0;

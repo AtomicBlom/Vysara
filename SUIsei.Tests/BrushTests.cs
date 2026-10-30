@@ -341,6 +341,12 @@ public sealed class BrushTests
 		border.CornerRadius.ShouldBe(new CornerRadius(4f, 4f, 4f, 4f));
 
 		Should.Throw<NotSupportedException>(() => border.CornerRadius = new CornerRadius(1f, 2f, 3f, 4f)).Message.ShouldContain("not supported yet");
+
+		// Refused before it was stored: the border keeps its radius, and lays out and draws.
+		border.CornerRadius.ShouldBe(new CornerRadius(4f));
+		var root = new UIRoot(new DrawListId(0)) { Content = border };
+		Should.NotThrow(() => root.LayoutPass(new Size(100f, 100f)));
+		Should.NotThrow(() => root.Render());
 	}
 
 	[Test]
