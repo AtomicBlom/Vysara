@@ -52,15 +52,15 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 	/// value, so an equal set does not advance <see cref="VisualContent.Version"/>.</summary>
 	public FontFeatureSet Features { get; set => Change(ref field, value ?? throw new ArgumentNullException(nameof(value))); } = features ?? FontFeatureSet.Empty;
 
-	/// <summary>How each line sits across <see cref="Size"/>'s width; <see cref="SUIsei.TextAlignment.Left"/> unless set.
+	/// <summary>How each line sits across <see cref="Size"/>'s width; <see cref="CompositionTextAlignment.Left"/> unless set.
 	/// Whitespace at a line's end hangs past where the line is placed.</summary>
-	public TextAlignment TextAlignment { get; set => Change(ref field, value); } = TextAlignment.Left;
+	public CompositionTextAlignment TextAlignment { get; set => Change(ref field, value); } = CompositionTextAlignment.Left;
 
 	/// <summary>Where <paramref name="line"/>'s pen starts across <see cref="Size"/>'s width, in the visual's units.</summary>
 	internal float LineStart(in ShapedLine line) => TextAlignment switch
 	{
-		TextAlignment.Center => (Size.X - line.PlacedWidthEm * FontSize) / 2f,
-		TextAlignment.Right => Size.X - line.PlacedWidthEm * FontSize,
+		CompositionTextAlignment.Center => (Size.X - line.PlacedWidthEm * FontSize) / 2f,
+		CompositionTextAlignment.Right => Size.X - line.PlacedWidthEm * FontSize,
 		_ => 0f, // Left (Start), and Justify: no line wraps, so none is stretched
 	};
 
@@ -136,8 +136,8 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 		sb.Append(CultureInfo.InvariantCulture, $" glyphs=\"{Text}\" size={FontSize:0.###}");
 		if (!Features.IsEmpty)
 			sb.Append(CultureInfo.InvariantCulture, $" features=\"{Features}\"");
-		if (TextAlignment != TextAlignment.Left)
-			sb.Append(TextAlignment switch { TextAlignment.Center => " align=center", TextAlignment.Right => " align=right", _ => " align=justify" });
+		if (TextAlignment != CompositionTextAlignment.Left)
+			sb.Append(TextAlignment switch { CompositionTextAlignment.Center => " align=center", CompositionTextAlignment.Right => " align=right", _ => " align=justify" });
 		if (Brush is { } b)
 		{
 			sb.Append(" brush=");

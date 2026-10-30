@@ -108,7 +108,7 @@ public sealed class TextBlock : FrameworkElement
 		var content = _glyphRun ??= new GlyphRunContent();
 		content.Update(text, FontSize, Foreground?.CompositionBrush ?? DefaultForeground, new Vector2(LayoutRect.Width, LayoutRect.Height),
 			TextFont, Typography.FeaturesOf(this));
-		content.TextAlignment = TextAlignment;
+		content.TextAlignment = TextAlignment.ToComposition();
 		content.UpdateEffects(TextEffects.GetOutlineThickness(this), TextEffects.GetOutlineBrush(this)?.CompositionBrush,
 			TextEffects.GetShadowOffset(this).ToVector2(), TextEffects.GetShadowSoftness(this), TextEffects.GetShadowBrush(this)?.CompositionBrush);
 		return content;

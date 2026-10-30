@@ -58,4 +58,16 @@ internal static class CompositionValues
 			_ => CompositionStretch.Fill,
 		};
 	}
+
+	extension(TextAlignment alignment)
+	{
+		/// <summary>The alignment as a glyph run takes it.</summary>
+		internal CompositionTextAlignment ToComposition() => alignment switch
+		{
+			TextAlignment.Center => CompositionTextAlignment.Center,
+			TextAlignment.Right => CompositionTextAlignment.Right,
+			TextAlignment.Justify => CompositionTextAlignment.Justify,
+			_ => CompositionTextAlignment.Left,
+		};
+	}
 }
