@@ -24,7 +24,7 @@ namespace SUIsei.Extensions;
 /// that thick and a shadow at most <see cref="FontAtlas.DistanceRangeEm"/> soft, as it fades half its softness past the
 /// edge; at a small size, less, since the edge's own ramp takes some of the field. An effect its font's field cannot
 /// hold at the size it is drawn is drawn clamped to what it can, whatever the order the text, its font and its root
-/// were put together in, and the text's visual says so in <see cref="Visual.Dump"/>. A negative or non-finite size
+/// were put together in, and the text's visual says so in <see cref="Visual.Dump()"/>. A negative or non-finite size
 /// throws whenever it is set, as does an animation that names one (its start and end, its keyframes) as it begins.
 /// </para>
 /// <para>
