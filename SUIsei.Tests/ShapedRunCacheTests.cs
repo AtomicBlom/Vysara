@@ -99,6 +99,43 @@ public sealed class ShapedRunCacheTests
 		}
 	}
 
+	/// <summary>
+	/// A line's width in EM doesn't depend on the size, so an animated FontSize passed down from a control re-measures and
+	/// redraws the text below it without calling the shaper at all. And measuring and drawing share one shaping: a text
+	/// block laid out and drawn shapes each of its lines once between them.
+	/// </summary>
+	[Test]
+	public void An_animated_font_size_re_measures_the_text_below_it_without_shaping()
+	{
+		var shaper = new CountingShaper();
+		var first = new TextBlock { Text = "Lap 1:23.456" };
+		var second = new TextBlock { Text = "Best\n1:21.002" };
+		var panel = new StackPanel();
+		panel.Children.Add(first);
+		panel.Children.Add(second);
+		var card = new ContentControl { Content = panel };
+		var host = new UIHost();
+		var root = host.CreateRoot(UILayer.Default).Root;
+		root.Font = StandaloneAtlas(shaper);
+		root.Content = card;
+		host.Tick(0.016, 0f, new Vector2(400f, 300f));
+		host.Render();
+		shaper.Shapes.ShouldBe(3); // three lines, each shaped once for both measure and draw
+		var height = second.DesiredSize.Height;
+
+		host.Clock.Tween(card, Control.FontSizeProperty, 28f, TimeSpan.FromSeconds(0.5));
+		for (var i = 1; i <= 40; i++)
+		{
+			host.Tick(1.0 / 60, i / 60f, new Vector2(400f, 300f));
+			host.Render();
+		}
+
+		second.FontSize.ShouldBe(28f);
+		second.DesiredSize.Height.ShouldBe(height * 2f, 1e-3f); // re-measured at the new size
+		shaper.Shapes.ShouldBe(3);
+		shaper.Measures.ShouldBe(0);
+	}
+
 	[Test]
 	public void A_resize_or_a_new_brush_keeps_the_shaped_run_and_its_inputs_reshape_it()
 	{
