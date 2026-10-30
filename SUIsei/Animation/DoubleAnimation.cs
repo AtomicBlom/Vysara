@@ -39,6 +39,8 @@ public sealed class DoubleAnimation : AnimationTimeline<double>
 		return from + (to - from) * eased;
 	}
 
+	private protected override bool StartsFromTarget => From is null;
+
 	// With no From the run starts from the target's value, which must be a number. A size left Auto is NaN, and a
 	// MaxWidth is infinite by default; WinUI interpolates from NaN, so the size stays Auto for the whole run and after, and
 	// WPF throws. This throws, as WPF does, so the missing From is found at once.

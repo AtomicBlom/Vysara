@@ -20,5 +20,7 @@ public sealed class PointAnimation : AnimationTimeline<Point>
 		return Lerps.Point(from, to, t);
 	}
 
+	private protected override bool StartsFromTarget => From is null;
+
 	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => BindDirect(owner, target);
 }

@@ -122,12 +122,17 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 
 	/// <summary>Check the values this animation names as it begins, through <paramref name="validate"/>: its start and its
 	/// end, and an animation with keyframes each of them. What it produces between them is not checked, so an easing's
-	/// overshoot never throws mid-animation.</summary>
+	/// overshoot never throws mid-animation; nor is a start read from the target (<see cref="StartsFromTarget"/>), which
+	/// is whatever is on screen, an earlier animation's overshoot included.</summary>
 	private protected virtual void ValidateValues(Action<T> validate)
 	{
-		validate(ValueAt(0d));
+		if (!StartsFromTarget)
+			validate(ValueAt(0d));
 		validate(ValueAt(1d));
 	}
+
+	/// <summary>True when the run starts from the target's value rather than one the animation names (no <c>From</c>).</summary>
+	private protected virtual bool StartsFromTarget => false;
 
 	internal override void ApplyAt(double progress)
 	{

@@ -260,6 +260,7 @@ public sealed class AnimationClock
 			if (!tween.Advance(deltaSeconds))
 				continue;
 			_tweens.RemoveAt(i);
+			tween.Complete();
 			tween.Recycle();
 		}
 	}
@@ -290,8 +291,11 @@ public sealed class AnimationClock
 	}
 
 	/// <summary>
-	/// Animate a dependency property from its value now to <paramref name="to"/>, writing its local value every frame as
-	/// code setting it would; otherwise as the delegate-based
+	/// Animate a dependency property from its value now to <paramref name="to"/>. Each frame's value is written to the
+	/// property's animation value, as a storyboard's is, so it outranks the local value without replacing it and is never
+	/// checked frame by frame: an easing that overshoots the property's valid range never throws mid-tween. The end value
+	/// is checked here, as the tween starts, and when the tween finishes it becomes the property's local value, as code
+	/// setting it would. Otherwise as the delegate-based
 	/// <see cref="Tween{TTarget, T}(TTarget, Func{TTarget, T}, Action{TTarget, T}, T, TimeSpan, IEasingFunction, Lerp{T})"/>.
 	/// The property must be animatable.
 	/// </summary>
@@ -302,6 +306,8 @@ public sealed class AnimationClock
 		var lerp = property.Lerp ?? throw new ArgumentException($"{property.Name} is not animatable; its type has no interpolation.", nameof(property));
 		var from = target.GetValue(property);
 		ThrowIfNoStart(from, property); // before a running tween is taken over or a new one listed
+		if (property.Metadata.Validate is { } validate && target is TOwner owner)
+			validate(owner, to); // the start is what is on screen, and is not checked
 		PropertyTween<TOwner, T>? tween = null;
 		for (var i = 0; tween is null && i < _tweens.Count; i++)
 			if (_tweens[i] is PropertyTween<TOwner, T> running && running.Matches(target, property))
@@ -311,7 +317,9 @@ public sealed class AnimationClock
 		tween.Start(target, property, lerp, from, to, duration, easing);
 	}
 
-	/// <summary>Stop every tween running on <paramref name="target"/>, leaving its properties where they are.</summary>
+	/// <summary>Stop every tween running on <paramref name="target"/>, leaving its properties where they are. A dependency
+	/// property's value where it stopped becomes its local value; one its validation rejects, as an easing's overshoot can
+	/// be, is left at the tween's end value instead.</summary>
 	public void StopTweens(object target)
 	{
 		for (var i = _tweens.Count - 1; i >= 0; i--)
@@ -320,6 +328,7 @@ public sealed class AnimationClock
 			if (!tween.Targets(target))
 				continue;
 			_tweens.RemoveAt(i);
+			tween.Stop();
 			tween.Recycle();
 		}
 	}
@@ -359,6 +368,15 @@ public sealed class AnimationClock
 		{
 			_easing = null;
 			ReturnToPool();
+		}
+
+		// Called once the end value has been written, before Recycle; and in its place when the tween is stopped part way.
+		public virtual void Complete()
+		{
+		}
+
+		public virtual void Stop()
+		{
 		}
 
 		protected void Restart(TimeSpan duration, IEasingFunction? easing)
@@ -427,7 +445,33 @@ public sealed class AnimationClock
 
 		public override bool Targets(object target) => ReferenceEquals(_target, target);
 
-		protected override void Write(float progress) => _target!.SetValue(_property!, _lerp!(_from, _to, progress));
+		protected override void Write(float progress) => _target!.SetAnimatedValue(_property!, _lerp!(_from, _to, progress));
+
+		// The end value, checked as the tween started, becomes the local value, and the animation value is released.
+		public override void Complete() => Settle(_to);
+
+		public override void Stop()
+		{
+			var here = _target!.GetValue(_property!);
+			if (_property!.Metadata.Validate is { } validate && _target is TOwner owner)
+			{
+				try
+				{
+					validate(owner, here);
+				}
+				catch (ArgumentException)
+				{
+					here = _to; // an overshoot the property can't hold
+				}
+			}
+			Settle(here);
+		}
+
+		private void Settle(T value)
+		{
+			_target!.SetValue(_property!, value);
+			_target.ClearAnimatedValue(_property!);
+		}
 
 		protected override void ReturnToPool()
 		{

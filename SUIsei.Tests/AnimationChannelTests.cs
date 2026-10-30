@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
+using SUIsei.Extensions;
 using SUIsei.Media;
 using SUIsei.Tests.Sample;
 
@@ -203,8 +204,10 @@ public sealed class AnimationChannelTests
 		clock.HasActiveClocks.ShouldBeFalse(); // the first tween was replaced, not left running
 	}
 
+	/// <summary>Each frame is the property's animation value, which outranks the local value without replacing it; the end
+	/// becomes the local value, as code setting it would.</summary>
 	[Test]
-	public void A_dependency_property_tween_writes_its_local_value()
+	public void A_dependency_property_tween_animates_the_property_and_leaves_its_end_as_the_local_value()
 	{
 		var border = new Border();
 		var clock = new AnimationClock();
@@ -212,9 +215,68 @@ public sealed class AnimationChannelTests
 
 		clock.Advance(0.25);
 		border.Opacity.ShouldBe(0.75f);
-		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeTrue();
+		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeFalse();
 		clock.Advance(1.0);
 		border.Opacity.ShouldBe(0f);
+		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeTrue();
+		border.TopRung(UIElement.OpacityProperty).ShouldBe(DependencyObject.ValueRung.Local);
+	}
+
+	/// <summary>
+	/// An outline can't be negative, and a BackEase overshoots its end: tweening to 0 passes through negative values. Only
+	/// the end is checked, as the tween starts, so the tween runs to its end without throwing.
+	/// </summary>
+	[Test]
+	public void A_tween_that_overshoots_the_valid_range_never_throws_mid_tween()
+	{
+		var text = new TextBlock { Text = "Hi" };
+		TextEffects.SetOutlineThickness(text, 0.05f);
+		var clock = new AnimationClock();
+		clock.Tween(text, TextEffects.OutlineThicknessProperty, 0f, OneSecond, new BackEase { EasingMode = EasingMode.EaseOut });
+
+		var lowest = float.MaxValue;
+		for (var i = 0; i < 60; i++)
+		{
+			clock.Advance(1.0 / 60);
+			lowest = MathF.Min(lowest, TextEffects.GetOutlineThickness(text));
+		}
+
+		lowest.ShouldBeLessThan(0f); // the overshoot happened
+		TextEffects.GetOutlineThickness(text).ShouldBe(0f);
+		Should.Throw<ArgumentException>(() => clock.Tween(text, TextEffects.OutlineThicknessProperty, -1f, OneSecond));
+	}
+
+	/// <summary>Stopped mid-overshoot, the value it can't hold is left at the tween's end instead.</summary>
+	[Test]
+	public void Stopping_a_tween_mid_overshoot_leaves_its_end_value()
+	{
+		var text = new TextBlock { Text = "Hi" };
+		TextEffects.SetOutlineThickness(text, 0.05f);
+		var clock = new AnimationClock();
+		clock.Tween(text, TextEffects.OutlineThicknessProperty, 0f, OneSecond, new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 2 });
+		while (TextEffects.GetOutlineThickness(text) >= 0f)
+			clock.Advance(1.0 / 60);
+
+		clock.StopTweens(text);
+
+		TextEffects.GetOutlineThickness(text).ShouldBe(0f);
+		clock.HasActiveClocks.ShouldBeFalse();
+	}
+
+	/// <summary>A storyboard with no From starts from what is on screen, which may be another animation's overshoot; that
+	/// start isn't checked, so taking over never throws.</summary>
+	[Test]
+	public void A_storyboard_with_no_From_takes_over_from_an_overshoot_without_throwing()
+	{
+		var text = new TextBlock { Text = "Hi" };
+		TextEffects.SetOutlineThickness(text, 0.05f);
+		var clock = new AnimationClock();
+		clock.Tween(text, TextEffects.OutlineThicknessProperty, 0f, OneSecond, new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 2 });
+		while (TextEffects.GetOutlineThickness(text) >= 0f)
+			clock.Advance(1.0 / 60);
+		var takeOver = new DoubleAnimation { To = 0.1, Duration = OneSecond, Target = text, TargetProperty = TextEffects.OutlineThicknessProperty };
+
+		Should.NotThrow(() => clock.Begin(StoryboardOf(takeOver)));
 	}
 
 	[Test]
