@@ -43,7 +43,9 @@ public sealed class ForeignCompositorTests
 		host.Render();
 		compositor.ChangedVisuals.ShouldBe(0);
 		box.Visual.IsDirty.ShouldBeTrue();
-		host.DrawLists[0].Data.ShouldBeSameAs(list);
+		var again = host.DrawLists[0].Data;
+		again.Revision.ShouldBe(list.Revision);
+		again.Damage.IsEmpty.ShouldBeTrue();
 
 		// A recolour writes no visual property, but marks the box's visual and so moves its version.
 		var before = box.Visual.Version;
@@ -55,13 +57,14 @@ public sealed class ForeignCompositorTests
 		var recoloured = host.DrawLists[0].Data;
 		recoloured.Revision.ShouldBeGreaterThan(list.Revision);
 		recoloured.Vertices.Span[0].Color.ShouldBe(Blue.ToPremultiplied());
+		recoloured.Damage.IsEmpty.ShouldBeFalse();
 	}
 
 	// Draws each rect filled with a colour as one quad, rebuilding its list only when a visual's version has moved
 	// since the composite before.
 	private sealed class QuadCompositor : IUICompositor, IDrawListSource
 	{
-		private readonly Dictionary<int, DrawListData> _lists = [];
+		private readonly Dictionary<int, Built> _lists = [];
 		private readonly Dictionary<Visual, uint> _seen = new(ReferenceEqualityComparer.Instance);
 		private uint _revision;
 
@@ -72,15 +75,19 @@ public sealed class ForeignCompositorTests
 		{
 			ChangedVisuals = 0;
 			Changes(root);
-			if (ChangedVisuals == 0 && _lists.ContainsKey(surface.Value))
+			if (_lists.TryGetValue(surface.Value, out var built) && ChangedVisuals == 0)
+			{
+				// The same list again: its twin with no damage, made with it, so a clean frame allocates nothing.
+				_lists[surface.Value] = built with { Fresh = false };
 				return;
+			}
 
 			var vertices = new List<OverlayVertex>();
 			var indices = new List<ushort>();
 			var commands = new List<DrawCommand>();
 			var surfaceRect = new Rect(0f, 0f, root.SurfaceSize.X, root.SurfaceSize.Y);
 			Emit(root, Matrix3x2.Identity, vertices, indices, commands, surfaceRect);
-			_lists[surface.Value] = new DrawListData
+			var changed = new DrawListData
 			{
 				Vertices = vertices.ToArray(),
 				Indices = indices.ToArray(),
@@ -91,9 +98,23 @@ public sealed class ForeignCompositorTests
 				TextureRevision = 1,
 				Damage = surfaceRect,
 			};
+			var unchanged = new DrawListData
+			{
+				Vertices = changed.Vertices,
+				Indices = changed.Indices,
+				Commands = changed.Commands,
+				TextureSlots = changed.TextureSlots,
+				CoordinateSize = changed.CoordinateSize,
+				Revision = changed.Revision,
+				TextureRevision = changed.TextureRevision,
+			};
+			_lists[surface.Value] = new Built(changed, unchanged, true);
 		}
 
-		public DrawListData LastDraw(DrawListId surface) => _lists.GetValueOrDefault(surface.Value, DrawListData.Empty);
+		public DrawListData LastDraw(DrawListId surface) =>
+			_lists.TryGetValue(surface.Value, out var built) ? built.Fresh ? built.Changed : built.Unchanged : DrawListData.Empty;
+
+		private readonly record struct Built(DrawListData Changed, DrawListData Unchanged, bool Fresh);
 
 		private void Changes(Visual v)
 		{

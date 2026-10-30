@@ -23,14 +23,15 @@ public sealed class DrawListCompositor : IUICompositor, IDrawListSource
 	public void Composite(RootVisual root, DrawListId surface)
 	{
 		// Frame-level no-op: once a surface has been composited, a fully-clean visual
-		// tree re-submits the cached draw data with the same Revision — a static frame does zero compositing work
-		// (and the backend can skip re-upload). A visual-only change marks its subtree dirty and forces a rebuild. A
-		// texture source whose texels changed still moves the cached list's TextureRevision, so the host re-uploads it.
+		// tree re-submits the cached draw data with the same Revision and no damage — a static frame does zero compositing
+		// work (and the backend can skip re-upload and repaint). A visual-only change marks its subtree dirty and forces a
+		// rebuild. A texture source whose texels changed still moves the cached list's TextureRevision and damages what it
+		// drew, so the host re-uploads and repaints it.
 		if (!_surfaces.TryGetValue(surface.Value, out var list))
 			_surfaces[surface.Value] = list = new UIDrawList();
 		else if (!AnyDirty(root))
 		{
-			list.RefreshTextureRevision();
+			list.Resubmit();
 			return;
 		}
 

@@ -111,26 +111,34 @@ internal sealed class UIDrawList
 	}
 
 	/// <summary>Give up a composite that failed part way, before its <see cref="End"/>: the list handed out last stays
-	/// current and its buffers untouched, and the next <see cref="Begin"/> refills the set this one was filling.</summary>
+	/// current and its buffers untouched, and the next <see cref="Begin"/> refills the set this one was filling. Handed
+	/// out again, that list has changed nothing, so its damage is nothing.</summary>
 	public void Abandon()
 	{
 		Revision--;
 		_set = _sets[Revision & 1];
 		_open = false;
 		_layers.Clear();
+		if (Revision > 0)
+			Last.StampDamage(Rect.Zero);
 	}
 
 	/// <summary>
-	/// For a frame that reuses the current list unchanged: move its texture revision if a source it samples has
-	/// changed its texels since the list recorded them, so the host re-uploads it although the geometry is the same, and
-	/// make the list's damage the pixels drawn with those sources: the whole surface when the list has group layers, whose
-	/// composite (an effect's blur, say) can carry a change past what was drawn, as a recomposite's damage does.
-	/// Allocation-free; one version comparison per slot.
+	/// For a frame that reuses the current list unchanged: its damage is nothing, unless a source it samples has changed
+	/// its texels since the list recorded them. Then its texture revision moves, so the host re-uploads it although the
+	/// geometry is the same, and its damage is the pixels drawn with those sources: the whole surface when the list has
+	/// group layers, whose composite (an effect's blur, say) can carry a change past what was drawn, as a recomposite's
+	/// damage does. Allocation-free; one version comparison per slot.
 	/// </summary>
-	public void RefreshTextureRevision()
+	public void Resubmit()
 	{
-		if (Revision == 0 || !_set.RefreshVersions())
+		if (Revision == 0)
 			return;
+		if (!_set.RefreshVersions())
+		{
+			Last.StampDamage(Rect.Zero);
+			return;
+		}
 		_textureRevision++;
 		Last.StampTextureRevision(_textureRevision);
 		Last.StampDamage(_set.HasLayers() ? new Rect(0f, 0f, _surfaceSize.X, _surfaceSize.Y) : _set.TexelDamage());

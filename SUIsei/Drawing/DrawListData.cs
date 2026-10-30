@@ -116,10 +116,12 @@ public sealed class DrawListData
 	public uint Revision { get => _revision; init => _revision = value; }
 
 	/// <summary>
-	/// The region (in surface pixels) that changed versus the previous revision — the union of the bounds of every
-	/// vertex that differs, expanded to the whole surface on a structural change (commands added/removed/reordered),
+	/// The region (in surface pixels) that changed since the list this surface handed out before — the union of the bounds
+	/// of every vertex that differs, expanded to the whole surface on a structural change (commands added/removed/reordered),
 	/// when group-opacity layers are present, or on the first build. Lets a host repaint only the dirty rectangle.
-	/// The compositor stamps it; <see cref="Rect.IsEmpty"/> means nothing changed. A foreign
+	/// The compositor stamps it each time it hands the list out; <see cref="Rect.IsEmpty"/> means nothing changed. The same
+	/// list handed out again unchanged has empty damage, unless a source it samples has changed its texels, when it covers the
+	/// pixels drawn with that source (the whole surface when the list has group layers). A foreign
 	/// <see cref="IDrawListSource"/> sets it on the lists it makes.
 	/// </summary>
 	public Rect Damage { get => _damage; init => _damage = value; }

@@ -13,7 +13,8 @@ public interface IDrawListSource
 {
 	/// <summary>
 	/// The list the last successful composite of <paramref name="surface"/> produced, or <see cref="DrawListData.Empty"/>
-	/// before the first. A surface whose composite throws keeps showing it.
+	/// before the first. A surface whose composite throws keeps showing it. Its <see cref="DrawListData.Damage"/> is what
+	/// changed since the list handed out before it, and empty when the same list is handed out again unchanged.
 	/// </summary>
 	DrawListData LastDraw(DrawListId surface);
 }
