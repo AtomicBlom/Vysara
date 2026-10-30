@@ -3,7 +3,8 @@ namespace SUIsei;
 /// <summary>
 /// The OpenType feature settings a run of text is shaped with, immutable and compared by value. An
 /// <see cref="ITextShaper"/> takes one for both measuring and laying out a run, so the width layout reserves is the
-/// width the run draws at. Each tag appears once: a later setting of the same tag replaces an earlier one. Sets are
+/// width the run draws at. Each tag appears once: a later setting of the same tag replaces an earlier one. The settings
+/// are kept in tag order, so two sets that set the same tags to the same values are equal however they were written. Sets are
 /// cheap to share; the common ones are kept here so an element switching between them allocates nothing.
 /// </summary>
 public sealed class FontFeatureSet : IEquatable<FontFeatureSet>
@@ -23,6 +24,9 @@ public sealed class FontFeatureSet : IEquatable<FontFeatureSet>
 				list.Add(feature);
 		}
 
+		// In tag order, so equality and the hash don't depend on the order the settings were written in. Each tag is a
+		// feature of its own, so the order a shaper takes them in doesn't change what it does.
+		list.Sort(static (a, b) => a.Tag.CompareTo(b.Tag));
 		_features = [.. list];
 	}
 
