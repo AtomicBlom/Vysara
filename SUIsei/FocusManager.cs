@@ -45,6 +45,21 @@ public sealed class FocusManager
 	}
 
 	/// <summary>
+	/// <paramref name="subtree"/> left the live tree. If the focused element is in it, focus is cleared and LostFocus raised
+	/// on that element, so keys no longer go to a detached element and it can stop what focus started (a caret's blink). An
+	/// element that is leaving can't cancel this, so no LosingFocus is raised.
+	/// </summary>
+	internal void ReleaseWithin(UIElement subtree)
+	{
+		if (FocusedElement is not { } focused || !focused.IsWithin(subtree))
+			return;
+		FocusedElement = null;
+		FocusState = FocusState.Unfocused;
+		_gotArgs.Reset(UIElement.LostFocusEvent, focused);
+		focused.RaiseEvent(UIElement.LostFocusEvent, _gotArgs);
+	}
+
+	/// <summary>
 	/// Move focus to <paramref name="newEl"/> with the given <paramref name="state"/>. Raises
 	/// GettingFocus (tunnel on <paramref name="newEl"/>) and LosingFocus (tunnel on the old focused
 	/// element); if neither cancels, transfers focus and raises GotFocus + LostFocus bubbling events.

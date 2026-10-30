@@ -57,6 +57,17 @@ public sealed class UIRoot
 	/// storyboards (e.g. <see cref="VisualStateManager"/>). Null for a root used standalone in tests.</summary>
 	internal AnimationClock? Clock { get; set; }
 
+	/// <summary>The host's <see cref="FocusManager"/>, set by <see cref="UIHost"/>, so a subtree leaving the root gives up
+	/// focus. Null for a root used standalone in tests.</summary>
+	internal FocusManager? FocusManager { get; set; }
+
+	// A subtree left this root: let go of the focus and pointer state held for any element in it.
+	internal void ReleaseWithin(UIElement subtree)
+	{
+		FocusManager?.ReleaseWithin(subtree);
+		InputManager?.ReleaseWithin(subtree);
+	}
+
 	/// <summary>The composition tree this root renders.</summary>
 	public RootVisual Visual { get; } = new();
 

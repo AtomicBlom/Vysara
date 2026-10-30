@@ -105,6 +105,7 @@ public sealed class UIHost
 		{
 			LayoutScale = layer.LayoutScale,
 			InputManager = Input,
+			FocusManager = Focus,
 			Clock = Clock
 		};
 		var view = new UIView(root, layer, interactive);

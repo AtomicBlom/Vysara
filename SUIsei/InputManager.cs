@@ -127,6 +127,31 @@ public sealed class InputManager
 		return true;
 	}
 
+	/// <summary>
+	/// <paramref name="subtree"/> left the live tree: release every capture an element in it holds, raising
+	/// <see cref="UIElement.PointerCaptureLostEvent"/> on an explicit captee, and drop its elements from the pointers'
+	/// over-chains, so a detached element neither keeps receiving a drag nor keeps the host reporting that it wants the
+	/// pointer. Runs as elements leave, not per frame.
+	/// </summary>
+	internal void ReleaseWithin(UIElement subtree)
+	{
+		foreach (var pointerId in _explicitCapture.Keys.ToArray())
+		{
+			var captee = _explicitCapture[pointerId];
+			if (!captee.IsWithin(subtree))
+				continue;
+			_explicitCapture.Remove(pointerId);
+			RaiseCaptureLost(captee);
+		}
+		foreach (var pointerId in _implicitCapture.Keys.ToArray())
+		{
+			if (_implicitCapture[pointerId] is { } captee && captee.IsWithin(subtree))
+				_implicitCapture.Remove(pointerId);
+		}
+		foreach (var chain in _overChains.Values)
+			chain.RemoveAll(element => element.IsWithin(subtree));
+	}
+
 	// Diff the new over-chain against the previous one and raise enter/exit (direct, per element). The previous
 	// chain is reused as the next scratch buffer to avoid per-move allocation.
 	private void UpdateOverChain(in PointerInput e, UIElement? hit)

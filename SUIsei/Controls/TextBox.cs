@@ -219,14 +219,22 @@ public sealed class TextBox : Control
 	private void RestartCaretBlink()
 	{
 		if (_focused && Clock is { } clock)
+		{
 			clock.Begin(_caretBlink);
+			_caretClock = clock;
+		}
 	}
 
+	// Stopped on the clock it was begun on, which a box that has left its tree (and its root's clock with it) still has.
 	private void StopCaretBlink()
 	{
-		Clock?.Stop(_caretBlink);
+		(_caretClock ?? Clock)?.Stop(_caretBlink);
+		_caretClock = null;
 		_caretVisual.ClearAnimatedValue(OpacityProperty);
 	}
+
+	// The clock the caret's blink runs on, while it runs.
+	private AnimationClock? _caretClock;
 
 	// The x pixel of the caret/selection edge before character index `i`.
 	private float OffsetOf(int index)

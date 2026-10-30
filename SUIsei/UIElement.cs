@@ -181,19 +181,41 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 
 	internal void SetAttachedRoot(UIRoot? root)
 	{
+		var previous = AttachedRoot;
+		AttachTree(root);
+		// Once the whole subtree has left, what the root it left held for any of it is let go: focus, pointer capture,
+		// over-chains.
+		if (previous is not null && !ReferenceEquals(previous, root))
+			previous.ReleaseWithin(this);
+	}
+
+	private void AttachTree(UIRoot? root)
+	{
 		var wasAttached = AttachedRoot is not null;
 		AttachedRoot = root;
 		if (wasAttached != root is not null)
 			OnLiveTreeChanged(root is not null);
 		foreach (var child in VisualChildren)
-			child.SetAttachedRoot(root);
+			child.AttachTree(root);
+	}
+
+	/// <summary>Whether this element is <paramref name="subtree"/> or lies beneath it.</summary>
+	internal bool IsWithin(UIElement subtree)
+	{
+		for (var e = this; e is not null; e = e.Parent)
+		{
+			if (ReferenceEquals(e, subtree))
+				return true;
+		}
+		return false;
 	}
 
 	/// <summary>
 	/// The element joined (<paramref name="attached"/>) or left a live tree: start or stop listening to the brushes,
 	/// transform and clip geometry it shows. An override registers its own brush properties through
-	/// <see cref="Listen(Brush, bool)"/> and calls the base. Joining also re-applies the clip and marks the visual dirty,
-	/// since a shared brush or geometry may have changed while the element was away.
+	/// <see cref="Listen(Brush, bool)"/> and calls the base. Joining also re-applies the transform and the clip and marks the
+	/// visual dirty, since a shared brush, transform or geometry may have changed while the element was away, and a layout
+	/// pass that finds the element where it was arranges nothing.
 	/// </summary>
 	private protected virtual void OnLiveTreeChanged(bool attached)
 	{
@@ -201,7 +223,8 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		Listen(Clip, attached);
 		if (attached)
 		{
-			ApplyClip(); // the clip geometry may have changed while the element was away
+			ApplyTransform();
+			ApplyClip();
 			Visual.MarkDirty();
 		}
 	}

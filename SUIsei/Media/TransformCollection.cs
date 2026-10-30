@@ -24,6 +24,7 @@ public sealed class TransformCollection : IList<Transform>
 			var old = _items[index];
 			if (ReferenceEquals(old, value))
 				return;
+			ThrowIfHoldsOwner(value);
 			old.RemoveListener(_owner);
 			_items[index] = value;
 			value.AddListener(_owner);
@@ -36,9 +37,31 @@ public sealed class TransformCollection : IList<Transform>
 	public void Insert(int index, Transform item)
 	{
 		ArgumentNullException.ThrowIfNull(item);
+		ThrowIfHoldsOwner(item);
 		_items.Insert(index, item);
 		item.AddListener(_owner);
 		_owner.ChildrenChanged();
+	}
+
+	// A group that held itself, directly or through a group inside it, would compose and notify itself without end.
+	private void ThrowIfHoldsOwner(Transform item)
+	{
+		if (Holds(item, _owner))
+			throw new ArgumentException("A TransformGroup can't hold itself, directly or through a group inside it.", nameof(item));
+
+		static bool Holds(Transform item, TransformGroup group)
+		{
+			if (ReferenceEquals(item, group))
+				return true;
+			if (item is not TransformGroup inner)
+				return false;
+			foreach (var child in inner.Children.Items)
+			{
+				if (Holds(child, group))
+					return true;
+			}
+			return false;
+		}
 	}
 
 	public bool Remove(Transform item)
