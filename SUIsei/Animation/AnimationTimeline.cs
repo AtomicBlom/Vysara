@@ -37,6 +37,11 @@ public abstract class AnimationTimeline : Timeline
 	/// animation begins, after <see cref="CheckStart"/>; it throws nothing.</summary>
 	internal abstract void CaptureStart();
 
+	/// <summary>True between a <see cref="CheckStart"/> whose walk of the target path reached a different object than the
+	/// last begin bound and the <see cref="CaptureStart"/> after it. Until then <see cref="ReleaseTarget"/> releases the
+	/// object the earlier run set.</summary>
+	internal abstract bool BindingMoved { get; }
+
 	/// <summary>The object whose property this animation drives, once it has been bound to that property, as
 	/// <see cref="Target"/> and <see cref="TargetProperty"/> bind it (<see cref="EnsureResolved"/>); null for one whose
 	/// delegates were set in code.</summary>
@@ -103,24 +108,42 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 		return true;
 	}
 
+	// The path is walked again on every begin, as WinUI walks it: a path through objects (a border's background brush)
+	// reaches whatever object is there now, so a storyboard never animates a brush that has since been replaced, which may
+	// be a resource shared with other elements. The delegates are bound again only when the walk reaches a different
+	// object or property, so beginning the same state again allocates nothing.
 	internal override void EnsureResolved()
 	{
-		if (Apply is not null || Target is null || TargetProperty is null)
-			return;
+		if (Target is null || TargetProperty is null || (Apply is not null && BoundOwner is null))
+			return; // nothing declared, or delegates set in code
 		var (owner, target) = TargetProperty.Resolve(Target, interpolates: true);
+		if (ReferenceEquals(owner, BoundOwner) && ReferenceEquals(target, BoundProperty))
+			return;
+		var before = BoundOwner is null ? null : Release;
 		if (!TryBind(owner, target))
 			throw new InvalidOperationException($"A {GetType().Name} cannot animate {target.Name}, which holds a {target.ValueTypeName}.");
+		_releaseMoved ??= before;
 	}
+
+	// The release of the object an earlier begin bound, kept from the moment a begin's walk reached a different one until
+	// that begin records its start: what the earlier run set there is released through it.
+	private Action? _releaseMoved;
+
+	internal override bool BindingMoved => _releaseMoved is not null;
 
 	internal override void CheckStart()
 	{
 		EnsureResolved();
-		CaptureStart(); // the start a missing From stands for, as it is now
+		StartValue = ReadCurrent is { } read ? read() : default!; // the start a missing From stands for, as it is now
 		if (ValidateValue is { } validate)
 			ValidateValues(validate);
 	}
 
-	internal override void CaptureStart() => StartValue = ReadCurrent is { } read ? read() : default!;
+	internal override void CaptureStart()
+	{
+		_releaseMoved = null;
+		StartValue = ReadCurrent is { } read ? read() : default!;
+	}
 
 	/// <summary>
 	/// Checks a value against the target property's own rules (its <see cref="PropertyMetadata{TOwner, TValue}.Validate"/>),
@@ -149,5 +172,5 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 			apply(ValueAt(progress));
 	}
 
-	internal override void ReleaseTarget() => Release?.Invoke();
+	internal override void ReleaseTarget() => (_releaseMoved ?? Release)?.Invoke();
 }

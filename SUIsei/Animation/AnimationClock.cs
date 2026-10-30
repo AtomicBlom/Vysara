@@ -118,7 +118,8 @@ public sealed class AnimationClock
 	}
 
 	// Drop the entries of `list` that run or hold `storyboard`, releasing its targets first when `release` is set, and
-	// with them any holding entry whose storyboard has been collected.
+	// with them any holding entry whose storyboard has been collected. Kept values are released anyway where the
+	// animation's binding has moved to another object, since nothing of this storyboard drives the old one any more.
 	private void Remove(List<Entry> list, Storyboard storyboard, bool release)
 	{
 		for (var i = list.Count - 1; i >= 0; i--)
@@ -127,8 +128,8 @@ public sealed class AnimationClock
 			var listed = entry.Storyboard ?? Held(entry);
 			if (listed is not null && !ReferenceEquals(listed, storyboard))
 				continue;
-			if (listed is not null && release)
-				Release(entry, listed);
+			if (listed is not null)
+				Release(entry, listed, movedOnly: !release);
 			list.RemoveAt(i);
 			Recycle(entry);
 		}
@@ -199,13 +200,13 @@ public sealed class AnimationClock
 	}
 
 	// Release each target the entry's storyboard still drives: not one released as it finished (FillBehavior.Stop), nor
-	// one a later animation has taken over.
-	private static void Release(Entry entry, Storyboard storyboard)
+	// one a later animation has taken over. With `movedOnly`, only those whose binding has moved to another object.
+	private static void Release(Entry entry, Storyboard storyboard, bool movedOnly = false)
 	{
 		var children = storyboard.Children;
 		for (var c = 0; c < entry.Count; c++)
 		{
-			if (entry.Runs[c] is Run.Running or Run.Holding && children[c] is AnimationTimeline anim)
+			if (entry.Runs[c] is Run.Running or Run.Holding && children[c] is AnimationTimeline anim && (!movedOnly || anim.BindingMoved))
 				anim.ReleaseTarget();
 		}
 	}

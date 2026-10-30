@@ -49,6 +49,54 @@ public sealed class AnimationChannelTests
 		border.Background.SolidColor().ShouldBe(new HdrColor(0.5f, 0f, 0.5f, 1f));
 	}
 
+	/// <summary>
+	/// The path is walked again each time the storyboard begins: a background replaced since (by a style, a binding or
+	/// code) is the brush animated, and the old brush, which may be shared with other elements, is let go of the colour
+	/// the earlier run held on it.
+	/// </summary>
+	[Test]
+	public void A_storyboard_animates_the_brush_its_path_reaches_now_and_lets_go_of_a_replaced_one()
+	{
+		var first = new SolidColorBrush(Red);
+		var border = new Border { Background = first };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor });
+		clock.Begin(storyboard);
+		clock.Advance(1.5);
+		first.Color.ShouldBe(Blue); // finished, and holding
+
+		var second = new SolidColorBrush(Red);
+		border.Background = second;
+		clock.Begin(storyboard);
+		clock.Advance(1.5);
+
+		second.Color.ShouldBe(Blue);
+		first.Color.ShouldBe(Red); // released
+
+		clock.Stop(storyboard);
+		second.Color.ShouldBe(Red);
+	}
+
+	/// <summary>Restarted while it runs, the storyboard releases the old brush through the binding it ran on.</summary>
+	[Test]
+	public void Restarting_after_the_brush_is_replaced_mid_run_releases_the_old_one()
+	{
+		var first = new SolidColorBrush(Red);
+		var border = new Border { Background = first };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor });
+		clock.Begin(storyboard);
+		clock.Advance(0.5);
+
+		var second = new SolidColorBrush(Red);
+		border.Background = second;
+		clock.Begin(storyboard);
+
+		first.Color.ShouldBe(Red);
+		clock.Advance(1.5);
+		second.Color.ShouldBe(Blue);
+	}
+
 	// WinUI's (Border.Background).(SolidColorBrush.Color), and the same through Control's background.
 	private static readonly PropertyPath BackgroundColor = new(Border.BackgroundProperty, SolidColorBrush.ColorProperty);
 	private static readonly PropertyPath ControlBackgroundColor = new(Control.BackgroundProperty, SolidColorBrush.ColorProperty);

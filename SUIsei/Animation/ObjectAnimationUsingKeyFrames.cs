@@ -35,9 +35,14 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 
 	internal override void EnsureResolved()
 	{
-		if (_binding is not null || Target is null || TargetProperty is null)
+		if (Target is null || TargetProperty is null)
 			return;
+		// Walked again on every begin, so a replaced object along the path is the one animated; bound again only when the
+		// walk reaches a different one (AnimationTimeline<T>.EnsureResolved).
 		var (owner, target) = TargetProperty.Resolve(Target, interpolates: false);
+		if (_binding is not null && ReferenceEquals(owner, BoundOwner) && ReferenceEquals(target, BoundProperty))
+			return;
+		_bindingMoved ??= _binding;
 		_binding = target.BindObjects(owner);
 		(BoundOwner, BoundProperty) = (owner, target);
 	}
@@ -58,7 +63,17 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 		}
 	}
 
-	internal override void CaptureStart() => _binding?.CaptureStart();
+	internal override void CaptureStart()
+	{
+		_bindingMoved = null;
+		_binding?.CaptureStart();
+	}
+
+	// The binding an earlier begin made, kept while a begin whose walk reached a different object is under way, so what the
+	// earlier run set is released there (AnimationTimeline.BindingMoved).
+	private ObjectBinding? _bindingMoved;
+
+	internal override bool BindingMoved => _bindingMoved is not null;
 
 	internal override void ApplyAt(double progress)
 	{
@@ -70,7 +85,7 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 			binding.WriteStart();
 	}
 
-	internal override void ReleaseTarget() => _binding?.Release();
+	internal override void ReleaseTarget() => (_bindingMoved ?? _binding)?.Release();
 
 	// The key showing at normalized `progress`: of those reached, the one with the latest KeyTime (the last listed of
 	// equal ones). Null before the first.
