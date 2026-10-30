@@ -133,7 +133,7 @@ internal sealed class UIDrawList
 			return;
 		_textureRevision++;
 		Last.StampTextureRevision(_textureRevision);
-		Last.Damage = _set.HasLayers() ? new Rect(0f, 0f, _surfaceSize.X, _surfaceSize.Y) : _set.TexelDamage();
+		Last.StampDamage(_set.HasLayers() ? new Rect(0f, 0f, _surfaceSize.X, _surfaceSize.Y) : _set.TexelDamage());
 	}
 
 	// The slot `source` holds in the list being built, assigning it the next one on first use, so slots are dense and

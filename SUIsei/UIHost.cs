@@ -77,7 +77,9 @@ public sealed class UIHost
 	/// <summary>The roots this host owns.</summary>
 	public IReadOnlyList<UIView> Views => _views;
 
-	/// <summary>The last <see cref="Render"/> output — the draw lists handed to the Loom backend.</summary>
+	/// <summary>The last <see cref="Render"/>'s output: each view's surface and the list its compositor last produced,
+	/// read through <see cref="IDrawListSource"/>, or <see cref="DrawListData.Empty"/> from a compositor that produces
+	/// none.</summary>
 	public IReadOnlyList<(DrawListId Id, DrawListData Data)> DrawLists => _drawLists;
 
 	/// <summary>
@@ -91,8 +93,9 @@ public sealed class UIHost
 	/// A source whose texels changed is not released but replaced, which the host does itself on seeing its
 	/// <see cref="TextureSource.Version"/> move. <see cref="TextureSource.White"/> is never released.
 	/// <para>
-	/// It covers the lists this host hands out. A view composited by a foreign <see cref="IUICompositor"/> hands out
-	/// none, so that compositor tracks what it draws itself, and reads <see cref="TextureSource.IsDisposed"/>.
+	/// It covers the lists this host hands out, whichever <see cref="IDrawListSource"/> produced them. A view whose
+	/// <see cref="IUICompositor"/> is not one hands out none, so that compositor tracks what it draws itself, and reads
+	/// <see cref="TextureSource.IsDisposed"/>.
 	/// </para>
 	/// </summary>
 	public IReadOnlyList<TextureSource> ReleasedTextures => _textures.Released;

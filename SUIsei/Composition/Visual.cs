@@ -33,16 +33,32 @@ public abstract class Visual
 	/// </summary>
 	public LayerEffect? Effect { get; set => Change(ref field, value); }
 
-	/// <summary>Damage flag — a visual-only change marks the subtree for recomposition (the incremental path).</summary>
+	/// <summary>Damage flag — a visual-only change marks the subtree for recomposition (the incremental path). Only
+	/// <see cref="DrawListCompositor"/> clears it, as it composites the visual; another compositor reads
+	/// <see cref="Version"/> instead.</summary>
 	public bool IsDirty { get; internal set; } = true;
+
+	/// <summary>
+	/// Moves on every change that marks this visual dirty: a property set to a different value, a child added or the
+	/// children cleared, different content, or <see cref="MarkDirty"/> from whoever changed the content in place or a
+	/// paint it shows. Never 0, so a compositor can use 0 for "not seen yet", and never cleared, so each compositor
+	/// keeps the last version it composited and compares. A change to a child moves the child's version, not this one's.
+	/// </summary>
+	public uint Version { get; private set; } = 1;
 
 	public IReadOnlyList<Visual> Children => _children;
 
 	public void Add(Visual child) { _children.Add(child); MarkDirty(); }
 	public void Clear() { _children.Clear(); MarkDirty(); }
 
-	/// <summary>Mark this visual (and implicitly its subtree, via the walk) as needing recomposition.</summary>
-	public void MarkDirty() => IsDirty = true;
+	/// <summary>Mark this visual (and implicitly its subtree, via the walk) as needing recomposition, and move its
+	/// <see cref="Version"/>.</summary>
+	public void MarkDirty()
+	{
+		IsDirty = true;
+		if (++Version == 0)
+			Version = 1;
+	}
 
 	/// <summary>Store <paramref name="value"/> in <paramref name="slot"/>, marking the visual dirty if it differs.</summary>
 	private protected void Change<T>(ref T slot, T value)

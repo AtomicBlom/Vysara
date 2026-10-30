@@ -33,6 +33,7 @@ public sealed class DrawListData
 	private Vector2 _coordinateSize;
 	private bool _isHdrTarget;
 	private uint _revision;
+	private Rect _damage;
 
 	/// <summary>An empty list — the no-op a clean or disabled producer hands the channel.</summary>
 	public static DrawListData Empty { get; } = new();
@@ -118,9 +119,13 @@ public sealed class DrawListData
 	/// The region (in surface pixels) that changed versus the previous revision — the union of the bounds of every
 	/// vertex that differs, expanded to the whole surface on a structural change (commands added/removed/reordered),
 	/// when group-opacity layers are present, or on the first build. Lets a host repaint only the dirty rectangle.
-	/// The compositor stamps it; <see cref="Rect.IsEmpty"/> means nothing changed.
+	/// The compositor stamps it; <see cref="Rect.IsEmpty"/> means nothing changed. A foreign
+	/// <see cref="IDrawListSource"/> sets it on the lists it makes.
 	/// </summary>
-	public Rect Damage { get; internal set; }
+	public Rect Damage { get => _damage; init => _damage = value; }
+
+	/// <summary>Stamp the damage of the list the compositor is handing out.</summary>
+	internal void StampDamage(Rect damage) => _damage = damage;
 
 	/// <summary>
 	/// Point this list at <paramref name="source"/>'s current contents, as the list of the composite that filled it.
@@ -138,7 +143,7 @@ public sealed class DrawListData
 		_coordinateSize = coordinateSize;
 		_isHdrTarget = isHdrTarget;
 		_textureRevision = textureRevision;
-		Damage = default;
+		_damage = default;
 	}
 
 	/// <summary>Move the texture revision of the list the compositor is re-submitting unchanged, when a source it

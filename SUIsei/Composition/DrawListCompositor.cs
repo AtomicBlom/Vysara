@@ -11,7 +11,7 @@ namespace SUIsei.Composition;
 /// by cutting the geometry where its colour stops being linear (<see cref="GradientSplitter"/>). Output is asserted on
 /// CPU via <see cref="DrawListData.Dump"/> — the primary test seam, no backend needed.
 /// </summary>
-public sealed class DrawListCompositor : IUICompositor
+public sealed class DrawListCompositor : IUICompositor, IDrawListSource
 {
 	// Each surface's builder, kept across composites: it owns the surface's retained buffers and its revision.
 	private readonly Dictionary<int, UIDrawList> _surfaces = [];
@@ -50,9 +50,9 @@ public sealed class DrawListCompositor : IUICompositor
 			root.MarkDirty();
 			throw;
 		}
-		built.Damage = list.Previous.Revision == 0
+		built.StampDamage(list.Previous.Revision == 0
 			? surfaceRect // first build for this surface → repaint all
-			: ComputeDamage(list.Previous, list.Current, root.SurfaceSize).Union(list.Current.TexelDamage());
+			: ComputeDamage(list.Previous, list.Current, root.SurfaceSize).Union(list.Current.TexelDamage()));
 		CompositeCount++;
 	}
 

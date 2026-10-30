@@ -243,16 +243,18 @@ public sealed class UIRoot
 		Visual.MarkDirty();
 	}
 
-	/// <summary>Composite the current visual tree to a neutral <see cref="DrawListData"/> (default-path convenience —
-	/// returns <see cref="DrawListData.Empty"/> when a foreign compositor is in use).</summary>
+	/// <summary>Composite the current visual tree and return the list it produced: the compositor's
+	/// <see cref="IDrawListSource.LastDraw"/>, or <see cref="DrawListData.Empty"/> when the compositor is not an
+	/// <see cref="IDrawListSource"/>.</summary>
 	public DrawListData Render()
 	{
 		_compositor.Composite(Visual, Surface);
 		return LastDraw();
 	}
 
-	// The list the last successful composite produced: what a surface keeps showing when its composite fails.
-	internal DrawListData LastDraw() => _compositor is DrawListCompositor d ? d.LastDraw(Surface) : DrawListData.Empty;
+	// The list the last successful composite produced: what a surface keeps showing when its composite fails. A compositor
+	// that produces no draw lists hands out the empty one.
+	internal DrawListData LastDraw() => _compositor is IDrawListSource source ? source.LastDraw(Surface) : DrawListData.Empty;
 
 	/// <summary>The element tree annotated with <c>DesiredSize</c>/<c>LayoutRect</c> after a layout pass — the
 	/// layout-test snapshot.</summary>
