@@ -251,6 +251,31 @@ public sealed class CompositionPath
 		}
 	}
 
+	/// <summary>Add a closed figure of <paramref name="rect"/> with each corner rounded by a circular arc of its own radius
+	/// from <paramref name="radii"/>, fitted to the rectangle (<see cref="CompositionCornerRadius.FitTo"/>), clockwise from
+	/// the top edge; nothing when the rectangle is empty.</summary>
+	internal void AddRoundedRectangle(in Rect rect, CompositionCornerRadius radii)
+	{
+		if (!(rect.Width > 0f) || !(rect.Height > 0f))
+			return;
+		var r = radii.FitTo(new Vector2(rect.Width, rect.Height));
+		float x0 = rect.X, y0 = rect.Y, x1 = rect.Right, y1 = rect.Bottom;
+		MoveTo(new Vector2(x0 + r.TopLeft, y0));
+		Side(new Vector2(x1 - r.TopRight, y0), new Vector2(x1, y0 + r.TopRight), r.TopRight);
+		Side(new Vector2(x1, y1 - r.BottomRight), new Vector2(x1 - r.BottomRight, y1), r.BottomRight);
+		Side(new Vector2(x0 + r.BottomLeft, y1), new Vector2(x0, y1 - r.BottomLeft), r.BottomLeft);
+		Side(new Vector2(x0, y0 + r.TopLeft), new Vector2(x0 + r.TopLeft, y0), r.TopLeft);
+		Close();
+
+		// A side up to where the next corner starts, then the corner; a square corner adds nothing.
+		void Side(Vector2 end, Vector2 cornerEnd, float radius)
+		{
+			LineTo(end);
+			if (radius > 0f)
+				ArcTo(new Vector2(radius), 0f, false, CompositionSweepDirection.Clockwise, cornerEnd);
+		}
+	}
+
 	/// <summary>Add a closed figure of the ellipse inscribed in <paramref name="rect"/>, clockwise from its rightmost
 	/// point, as WinUI's ellipse runs; nothing when the rectangle is empty.</summary>
 	internal void AddEllipse(in Rect rect)

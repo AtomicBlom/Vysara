@@ -160,26 +160,38 @@ public sealed class DrawListCompositor : IUICompositor, IDrawListSource
 				{
 					var rect = new Rect(0, 0, rc.Size.X, rc.Size.Y);
 					var hasBorder = rc.BorderBrush is not null && rc.BorderThickness > 0;
+					if (rc.CornerRadius is { IsRounded: true, IsUniform: false })
+					{
+						// Corners of their own radii, which the rounded-rect prims don't draw: the fill and the border ring are
+						// outlines filled through the Vector prim, painted as a shape's fill is.
+						var shapes = RectShapes.Of(rc);
+						if (rc.Fill is { } paint)
+							AddRectShape(list, shapes.Fill, paint, rect, matrix, alpha, localClip);
+						if (hasBorder)
+							AddRectShape(list, shapes.Border, rc.BorderBrush!, rect, matrix, alpha, localClip);
+						break;
+					}
+					var radius = rc.CornerRadius.TopLeft;
 					if (rc.Fill is { } fill)
 					{
-						var kind = rc.CornerRadius > 0 ? UIPrimKind.RoundedRect : UIPrimKind.Fill;
+						var kind = radius > 0 ? UIPrimKind.RoundedRect : UIPrimKind.Fill;
 						// params = (cornerRadius, borderThickness, sizeX, sizeY) — the layout ui.slang's analytic rounded-box
 						// SDF reads (uv is 0..1 across the rect; the shader scales by params.zw to local pixels). Fill ignores it.
-						var prm = new Vector4(rc.CornerRadius, 0f, rc.Size.X, rc.Size.Y);
+						var prm = new Vector4(radius, 0f, rc.Size.X, rc.Size.Y);
 						if (fill is not CompositionSurfaceBrush surface)
 							AddPaintedRect(list, fill, rect, matrix, alpha, kind, prm, localClip);
 						else if (kind == UIPrimKind.Fill)
 							AddSurface(list, surface, rc.Size, matrix, alpha, localClip);
 						else
-							AddImageShape(list, RectShapes.Of(rc).Fill, surface, rect, matrix, alpha, localClip);
+							AddRectShape(list, RectShapes.Of(rc).Fill, surface, rect, matrix, alpha, localClip);
 					}
 					if (hasBorder)
 					{
 						if (rc.BorderBrush is CompositionSurfaceBrush surface)
-							AddImageShape(list, RectShapes.Of(rc).Border, surface, rect, matrix, alpha, localClip);
+							AddRectShape(list, RectShapes.Of(rc).Border, surface, rect, matrix, alpha, localClip);
 						else
 							AddPaintedRect(list, rc.BorderBrush!, rect, matrix, alpha, UIPrimKind.Border,
-								new Vector4(rc.CornerRadius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
+								new Vector4(radius, rc.BorderThickness, rc.Size.X, rc.Size.Y), localClip);
 					}
 					break;
 				}
@@ -390,25 +402,27 @@ public sealed class DrawListCompositor : IUICompositor, IDrawListSource
 		list.AddImage(visible, uv0, uv1, matrix, PremultipliedHdrColor.FromStraight(1f, 1f, 1f, alpha * surface.Opacity), source, clip);
 	}
 
-	// An image painting a rect's rounded fill or its border, which the rect prims cannot texture (their uv and params
-	// carry the rounded box): the outline is filled through the Vector prim, the image placed in the rect as on a plain one.
-	private static void AddImageShape(UIDrawList list, ShapeContent outline, CompositionSurfaceBrush surface, in Rect rect, in Matrix3x2 matrix,
+	// A rect's fill or border ring as an outline filled through the Vector prim: corners the rect prims can't draw (their
+	// own radii), or an image on rounded corners or as the border, which the rect prims can't texture (their uv and params
+	// carry the rounded box). The paint is placed over the rect as on a plain one.
+	private static void AddRectShape(UIDrawList list, ShapeContent outline, CompositionBrush paint, in Rect rect, in Matrix3x2 matrix,
 		float alpha, in Rect clip)
 	{
 		if (outline.TessellateFill(TessellationScale.For(matrix)) is { TriangleCount: > 0 } path)
-			AddVectorImage(list, path, PathTrim.None, surface, rect, matrix, alpha, clip, overlaps: false);
+			AddPaintedVector(list, path, PathTrim.None, paint, rect, matrix, alpha, clip);
 	}
 
 	/// <summary>
-	/// The outlines of a rect's rounded fill and of its border ring (the rect less its inner rounded rect, whose radius is
-	/// the corner radius less the thickness, as the rect prims draw it), for the rects an image paints. Kept on the content
-	/// as its derived work, with their tessellations, and rebuilt only when the size, radius or thickness change.
+	/// The outlines of a rect's rounded fill and of its border ring (the rect less its inner rounded rect, each of whose
+	/// radii is the fitted corner radius less the thickness, as the rect prims draw it), for the rects drawn through the
+	/// Vector prim. Kept on the content as its derived work, with their tessellations, and rebuilt only when the size,
+	/// radii or thickness change.
 	/// </summary>
 	private sealed class RectShapes
 	{
 		public readonly ShapeContent Fill = new() { Path = new CompositionPath() };
 		public readonly ShapeContent Border = new() { Path = new CompositionPath() };
-		private (Vector2 Size, float Radius, float Thickness) _built = (new Vector2(float.NaN), float.NaN, float.NaN);
+		private (Vector2 Size, CompositionCornerRadius Radii, float Thickness) _built = (new Vector2(float.NaN), float.NaN, float.NaN);
 
 		public static RectShapes Of(RectContent rect)
 		{
@@ -421,24 +435,23 @@ public sealed class DrawListCompositor : IUICompositor, IDrawListSource
 			return shapes;
 		}
 
-		private void Update(Vector2 size, float radius, float thickness)
+		private void Update(Vector2 size, CompositionCornerRadius radii, float thickness)
 		{
-			if (_built == (size, radius, thickness))
+			if (_built == (size, radii, thickness))
 				return;
-			_built = (size, radius, thickness);
+			_built = (size, radii, thickness);
 			var outer = new Rect(0f, 0f, size.X, size.Y);
 			var inner = new Rect(thickness, thickness, size.X - 2f * thickness, size.Y - 2f * thickness);
+			var r = radii.FitTo(size);
+			var innerRadii = new CompositionCornerRadius(r.TopLeft - thickness, r.TopRight - thickness, r.BottomRight - thickness, r.BottomLeft - thickness);
 			var fill = Fill.Path!;
 			fill.Clear();
-			fill.AddRoundedRectangle(outer, Circular(outer, radius));
+			fill.AddRoundedRectangle(outer, r);
 			var ring = Border.Path!;
 			ring.Clear();
 			ring.FillRule = CompositionFillRule.EvenOdd;
-			ring.AddRoundedRectangle(outer, Circular(outer, radius));
-			ring.AddRoundedRectangle(inner, Circular(inner, radius - thickness));
+			ring.AddRoundedRectangle(outer, r);
+			ring.AddRoundedRectangle(inner, innerRadii);
 		}
-
-		// Circular corners of `radius`, at most half the rect's shorter side, as the rounded-box prims draw them.
-		private static Vector2 Circular(in Rect rect, float radius) => new(Math.Clamp(radius, 0f, MathF.Max(0f, MathF.Min(rect.Width, rect.Height) / 2f)));
 	}
 }

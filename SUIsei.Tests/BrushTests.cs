@@ -14,7 +14,7 @@ namespace SUIsei.Tests;
 /// <summary>
 /// Brushes: what each kind paints, that a brush is shared and a change to it reaches every user in place with no
 /// layout, that users register only while they are in a live tree (so a long-lived brush pins nothing removed), that a
-/// storyboard on a shared brush animates every user as in WinUI, the image brush's limits, uniform corner radii and the
+/// storyboard on a shared brush animates every user as in WinUI, the image brush's limits, corner radii and the
 /// background transition.
 /// </summary>
 public sealed class BrushTests
@@ -336,18 +336,60 @@ public sealed class BrushTests
 	}
 
 	[Test]
-	public void A_corner_radius_must_be_uniform()
+	public void Corners_of_their_own_radii_draw_through_the_vector_prim()
 	{
-		var border = new Border { CornerRadius = new CornerRadius(4f) };
-		border.CornerRadius.ShouldBe(new CornerRadius(4f, 4f, 4f, 4f));
+		// Rounded at the top left and bottom right, square at the other two.
+		var leaf = new Border { Width = 40f, Height = 40f, CornerRadius = new CornerRadius(16f, 0f, 8f, 0f), Background = new SolidColorBrush(Red) };
+		leaf.CornerRadius.ShouldBe(new CornerRadius(16f, 0f, 8f, 0f));
+		var draw = Laid(leaf, 40f, 40f).Render();
+		((UIPrimKind)draw.Commands.Span.ToArray().ShouldHaveSingleItem().Tag).ShouldBe(UIPrimKind.Vector);
+		leaf.Visual.Dump().ShouldContain("radii=(16,0,8,0)");
+		var raster = Raster(draw);
+		raster.ReadLinear(20, 20).W.ShouldBe(1f);
+		raster.ReadLinear(0, 0).W.ShouldBe(0f); // cut away by the 16 radius
+		raster.ReadLinear(3, 3).W.ShouldBe(0f);
+		raster.ReadLinear(39, 0).W.ShouldBe(1f, 0.01f); // square
+		raster.ReadLinear(39, 39).W.ShouldBe(0f); // cut away by the 8 radius
+		raster.ReadLinear(34, 34).W.ShouldBe(1f, 0.01f);
+		raster.ReadLinear(0, 39).W.ShouldBe(1f, 0.01f); // square
 
-		Should.Throw<ArgumentException>(() => border.CornerRadius = new CornerRadius(1f, 2f, 3f, 4f)).Message.ShouldContain("not supported");
+		// A border follows each corner, its inside rounded by the radius less the thickness: 12 at the top left.
+		leaf.BorderBrush = new SolidColorBrush(Blue);
+		leaf.BorderThickness = new Thickness(4f);
+		leaf.AttachedRoot!.LayoutPass(new Size(40f, 40f));
+		draw = leaf.AttachedRoot.Render();
+		draw.Commands.Span.ToArray().ShouldAllBe(static c => (UIPrimKind)c.Tag == UIPrimKind.Vector);
+		raster = Raster(draw);
+		IsBlue(raster.ReadLinear(20, 1)).ShouldBeTrue(); // the top side
+		IsBlue(raster.ReadLinear(6, 6)).ShouldBeTrue(); // 13.4 from the corner's centre: between 12 and 16
+		IsBlue(raster.ReadLinear(8, 8)).ShouldBeFalse(); // 10.6 from it: inside the border
+		raster.ReadLinear(8, 8).W.ShouldBe(1f, 0.01f);
+		IsBlue(raster.ReadLinear(20, 20)).ShouldBeFalse();
 
-		// Refused before it was stored: the border keeps its radius, and lays out and draws.
-		border.CornerRadius.ShouldBe(new CornerRadius(4f));
-		var root = new UIRoot(new DrawListId(0)) { Content = border };
-		Should.NotThrow(() => root.LayoutPass(new Size(100f, 100f)));
-		Should.NotThrow(() => root.Render());
+		// One radius at every corner keeps the rounded-rect prim.
+		leaf.CornerRadius = new CornerRadius(6f);
+		leaf.AttachedRoot!.Render().Commands.Span.ToArray().Select(static c => (UIPrimKind)c.Tag).ShouldBe([UIPrimKind.RoundedRect, UIPrimKind.Border]);
+
+		static SoftwareRasterizer Raster(DrawListData draw)
+		{
+			var raster = new SoftwareRasterizer(40, 40);
+			raster.Clear(Vector4.Zero);
+			raster.Render(draw);
+			return raster;
+		}
+
+		static bool IsBlue(Vector4 color) => color.Z > 2f * color.X;
+	}
+
+	/// <summary>Radii a rect is too small for shrink together by one factor until each side holds its two corners, as CSS
+	/// fits them; a negative or NaN radius is a square corner.</summary>
+	[Test]
+	public void Radii_too_large_for_a_rect_shrink_together()
+	{
+		new CompositionCornerRadius(30f, 10f, 0f, 0f).FitTo(new Vector2(20f, 40f)).ShouldBe(new CompositionCornerRadius(15f, 5f, 0f, 0f));
+		new CompositionCornerRadius(40f).FitTo(new Vector2(40f, 80f)).ShouldBe(new CompositionCornerRadius(20f)); // half the shorter side
+		new CompositionCornerRadius(4f, -2f, float.NaN, 6f).FitTo(new Vector2(40f, 40f)).ShouldBe(new CompositionCornerRadius(4f, 0f, 0f, 6f));
+		new CompositionCornerRadius(8f, 2f, 0f, 5f).FitTo(new Vector2(40f, 40f)).ShouldBe(new CompositionCornerRadius(8f, 2f, 0f, 5f));
 	}
 
 	[Test]

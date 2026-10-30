@@ -147,8 +147,8 @@ public sealed class RenderFailureTests
 		DependencyProperty.RegisterAttached("BoundRadius", new PropertyMetadata<Border, CornerRadius>());
 
 	/// <summary>A value bound from a template comes from another property, checked where it was set there, so a part that
-	/// would refuse it set directly takes it and draws what it can: text bound to an image brush draws nothing, and a border
-	/// bound to radii that differ draws at the top-left radius.</summary>
+	/// would refuse it set directly takes it and draws what it can: text bound to an image brush draws nothing. A border
+	/// bound to radii that differ draws each corner at its own radius, as one given them directly does.</summary>
 	[Test]
 	public void A_template_bound_value_a_part_would_refuse_is_taken_and_drawn_as_it_can_be()
 	{
@@ -175,8 +175,11 @@ public sealed class RenderFailureTests
 		part.CornerRadius.ShouldBe(new CornerRadius(4f, 1f, 2f, 3f));
 		DrawListData drawn = null!;
 		Should.NotThrow(() => drawn = Draw(part));
+		((UIPrimKind)drawn.Commands.Span.ToArray().ShouldHaveSingleItem().Tag).ShouldBe(UIPrimKind.Vector);
+		var direct = Draw(new Border { Background = new SolidColorBrush(red), CornerRadius = new CornerRadius(4f, 1f, 2f, 3f) });
+		drawn.Vertices.ToArray().ShouldBe(direct.Vertices.ToArray());
 		var uniform = Draw(new Border { Background = new SolidColorBrush(red), CornerRadius = new CornerRadius(4f) });
-		drawn.Vertices.ToArray().ShouldBe(uniform.Vertices.ToArray());
+		drawn.Vertices.ToArray().ShouldNotBe(uniform.Vertices.ToArray());
 	}
 
 	// Whether any glyph the list draws is visible.

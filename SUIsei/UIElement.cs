@@ -560,7 +560,8 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	private RectContent? _rectContent;
 
 	/// <summary>This element's retained <see cref="RectContent"/>, updated to its layout size and the given paint.</summary>
-	private protected RectContent RetainedRect(CompositionBrush? fill, float cornerRadius = 0f, CompositionBrush? borderBrush = null, float borderThickness = 0f)
+	private protected RectContent RetainedRect(CompositionBrush? fill, CompositionCornerRadius cornerRadius = default, CompositionBrush? borderBrush = null,
+		float borderThickness = 0f)
 	{
 		var content = _rectContent ??= new RectContent();
 		content.Update(new Vector2(LayoutRect.Width, LayoutRect.Height), fill, cornerRadius, borderBrush, borderThickness);

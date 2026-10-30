@@ -6,8 +6,8 @@ namespace SUIsei.Controls;
 /// <summary>
 /// A single-child decorator with a background, a border, padding, and rounded corners:
 /// measure deflates by border + padding around the child; arrange insets the child by the same; the visual draws a
-/// (rounded) fill + border. <see cref="BorderThickness"/> is treated as uniform for the drawn stroke, and
-/// <see cref="CornerRadius"/> must be uniform.
+/// (rounded) fill + border. <see cref="BorderThickness"/> is treated as uniform for the drawn stroke; each corner of
+/// <see cref="CornerRadius"/> has its own radius.
 /// </summary>
 [ContentProperty(Name = nameof(Child))]
 public sealed class Border : FrameworkElement
@@ -27,21 +27,11 @@ public sealed class Border : FrameworkElement
 		DependencyProperty.Register(nameof(BorderBrush),
 			new PropertyMetadata<Border, Brush?> { PropertyChanged = static (b, old, @new) => b.OnBrushChanged(old, @new) });
 
-	/// <summary>The corner radius. SUIsei draws one radius for all four corners: radii that differ throw
-	/// <see cref="ArgumentException"/> when set, and are refused at build time in markup. Radii bound from a template are
-	/// not checked, and draw at the top-left corner's radius.</summary>
+	/// <summary>The radius of each corner. Radii too large for the border are scaled down together until the corners on
+	/// every side fit along it.</summary>
 	public static readonly DependencyProperty<Border, CornerRadius> CornerRadiusProperty =
 		DependencyProperty.Register(nameof(CornerRadius),
-			new PropertyMetadata<Border, CornerRadius>
-			{
-				// Checked before the value is stored, so a refused value leaves the border as it was.
-				Validate = static (_, value) =>
-				{
-					if (!value.IsUniform)
-						throw new ArgumentException($"Corner radii that differ ({value}) are not supported: SUIsei draws one radius for all four corners.", nameof(value));
-				},
-				PropertyChanged = static (b, _, _) => b.InvalidateContent(),
-			});
+			new PropertyMetadata<Border, CornerRadius> { PropertyChanged = static (b, _, _) => b.InvalidateContent() });
 
 	/// <summary>The width of the border on each side. SUIsei strokes all four sides at the left side's width.</summary>
 	public static readonly DependencyProperty<Border, Thickness> BorderThicknessProperty =
@@ -87,7 +77,7 @@ public sealed class Border : FrameworkElement
 	public Thickness BorderThickness { get => _borderThickness; set => SetValue(BorderThicknessProperty, value); }
 	public Thickness Padding { get => _padding; set => SetValue(PaddingProperty, value); }
 
-	/// <summary>The radius of the corners, uniform.</summary>
+	/// <summary>The radius of each corner.</summary>
 	public CornerRadius CornerRadius { get => GetValue(CornerRadiusProperty); set => SetValue(CornerRadiusProperty, value); }
 
 	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
@@ -128,8 +118,6 @@ public sealed class Border : FrameworkElement
 		var thickness = BorderThickness;
 		if (fill is null && (border is null || thickness.Horizontal + thickness.Vertical <= 0f))
 			return null;
-		// A value set here is uniform (checked where it is set); one bound from a template is not checked, and draws at the
-		// top-left corner's radius, as the stroke draws at the left side's width.
-		return RetainedRect(fill, CornerRadius.TopLeft, border, thickness.Left);
+		return RetainedRect(fill, CornerRadius.ToComposition(), border, thickness.Left);
 	}
 }

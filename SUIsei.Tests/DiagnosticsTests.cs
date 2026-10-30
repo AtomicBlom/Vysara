@@ -517,13 +517,15 @@ public sealed class DiagnosticsTests
 	}
 
 	/// <summary>The forms the generator converts that a tool may also need to type: radii, sizes, rectangles, path markup
-	/// and number lists, with the generator's own rules (one radius, or four equal ones).</summary>
+	/// and number lists, with the generator's own rules (one radius, or four).</summary>
 	[Test]
 	public void TryParseValue_reads_the_generators_other_value_forms()
 	{
 		Diagnostics.TryParseValue(typeof(CornerRadius), "4", out var radius).ShouldBeTrue();
 		radius.ShouldBe(new CornerRadius(4f));
-		Diagnostics.TryParseValue(typeof(CornerRadius), "1,2,3,4", out _).ShouldBeFalse();
+		Diagnostics.TryParseValue(typeof(CornerRadius), "1,2,3,4", out var radii).ShouldBeTrue();
+		radii.ShouldBe(new CornerRadius(1f, 2f, 3f, 4f));
+		Diagnostics.TryParseValue(typeof(CornerRadius), "1,2", out _).ShouldBeFalse();
 		Diagnostics.TryParseValue(typeof(Size), "10,20", out var size).ShouldBeTrue();
 		size.ShouldBe(new Size(10f, 20f));
 		Diagnostics.TryParseValue(typeof(Rect), "1,2,3,4", out var rect).ShouldBeTrue();

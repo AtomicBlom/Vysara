@@ -13,7 +13,7 @@ public static partial class Diagnostics
 	/// <c>true</c> or <c>false</c>, an enum member by name, a string, and the structured syntaxes — colours
 	/// (<c>#RRGGBB</c>, <c>#AARRGGBB</c> or a named colour), a <see cref="Brush"/> from a colour (a new
 	/// <see cref="SolidColorBrush"/> of it), <see cref="Thickness"/> (one, two or four numbers), <see cref="CornerRadius"/>
-	/// (one number, or four equal ones), <see cref="Point"/>, <see cref="Size"/>, <see cref="Vector2"/> and
+	/// (one or four numbers), <see cref="Point"/>, <see cref="Size"/>, <see cref="Vector2"/> and
 	/// <see cref="Vector3"/>, <see cref="Rect"/> (<c>x,y,width,height</c>), <see cref="Matrix3x2"/> (six numbers,
 	/// <c>M11,M12,M21,M22,OffsetX,OffsetY</c>), a <see cref="Geometry"/> from path markup, a <see cref="PointCollection"/>
 	/// (pairs of numbers) and a <see cref="DoubleCollection"/> (numbers), each empty for empty text, <see cref="GridLength"/>
@@ -71,11 +71,10 @@ public static partial class Diagnostics
 				[var l, var t, var r, var b] => new Thickness(l, t, r, b),
 				_ => null,
 			},
-			// One radius, or four equal ones: a Border draws one radius, as the generator refuses four that differ.
 			_ when target == typeof(CornerRadius) => XamlValueSyntax.ParseNumbers(s) switch
 			{
 				[var u] => new CornerRadius(u),
-				[var a, var b, var c, var d] when a == b && a == c && a == d => new CornerRadius(a),
+				[var tl, var tr, var br, var bl] => new CornerRadius(tl, tr, br, bl),
 				_ => null,
 			},
 			_ when target == typeof(Size) => XamlValueSyntax.ParseNumbers(s) is [var w, var h] && w >= 0 && h >= 0 ? new Size(w, h) : null,

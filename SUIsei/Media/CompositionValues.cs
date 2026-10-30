@@ -72,4 +72,10 @@ internal static class CompositionValues
 			_ => CompositionTextAlignment.Left,
 		};
 	}
+
+	extension(CornerRadius radius)
+	{
+		/// <summary>The radii as a composition rect takes them.</summary>
+		internal CompositionCornerRadius ToComposition() => new(radius.TopLeft, radius.TopRight, radius.BottomRight, radius.BottomLeft);
+	}
 }
