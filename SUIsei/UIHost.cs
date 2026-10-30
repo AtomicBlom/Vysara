@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Text;
 using SUIsei.Animation;
@@ -27,6 +28,8 @@ public sealed class UIHost
 	private readonly TextureResidency _textures;
 	private int _nextSurface;
 	private Size _framebufferSize = new(1f, 1f);
+	// Work a diagnostics tool posted to this host alone (Diagnostics.Post(UIHost, Action)); made on the first post.
+	internal ConcurrentQueue<Action>? DiagnosticsPosted;
 
 	public UIHost()
 	{
@@ -36,10 +39,6 @@ public sealed class UIHost
 		Input.OnPress = el => Focus.FocusFromPointer(el);
 		HotReload.TrackHost(this);
 		Diagnostics.ViewsChanged();
-
-		// The first host brings up the endpoint a diagnostics tool loads its tap through.
-		if (Diagnostics.Enabled)
-			Diagnostics.StartEndpoint();
 	}
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
@@ -148,7 +147,7 @@ public sealed class UIHost
 		// Run work a diagnostics tool posted from another thread, before layout so its edits lay out this frame and its
 		// reads see what was last drawn.
 		if (Diagnostics.Enabled)
-			Diagnostics.RunPosted();
+			Diagnostics.RunPosted(this);
 
 		// Advance animations FIRST: a clock write to a layout-affecting DP invalidates measure/arrange so the new
 		// value is reflected in this frame's LayoutPass; a visual-channel write (transform/opacity/brush) only marks

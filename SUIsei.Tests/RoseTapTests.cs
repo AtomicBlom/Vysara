@@ -1065,9 +1065,9 @@ public sealed class RoseTapTests
 	// --- The endpoint ---
 
 	[Test]
-	public void A_host_brings_up_the_endpoint_which_greets_as_the_contract_says()
+	public void Start_brings_up_the_endpoint_which_greets_as_the_contract_says()
 	{
-		_ = new UIHost();
+		DiagnosticsEndpoint.Start();
 		using var client = new NamedPipeClientStream(".", EndpointWire.PipeName("suisei-diag-{pid}", Environment.ProcessId), PipeDirection.InOut);
 		client.Connect(TimeSpan.FromSeconds(10));
 
@@ -1081,6 +1081,8 @@ public sealed class RoseTapTests
 	[Test]
 	public void The_endpoint_loads_the_tap_from_its_file_and_the_tap_serves_the_game()
 	{
+		DiagnosticsEndpoint.Start();
+
 		var (host, _) = Served();
 		using var fake = new FakeHost(host);
 		using var client = new NamedPipeClientStream(".", EndpointWire.PipeName("suisei-diag-{pid}", Environment.ProcessId), PipeDirection.InOut);

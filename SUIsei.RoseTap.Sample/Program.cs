@@ -5,7 +5,7 @@ using SUIsei;
 using SUIsei.RoseTap.Sample;
 
 // A headless game for RoseMCP to attach to: one view on one UIHost, ticked at about 60 Hz until the process is killed.
-// The runtime config turns SUIsei.Diagnostics on, so building the host brings up the endpoint a RoseMCP host loads
+// The runtime config turns SUIsei.Diagnostics on, and starting the endpoint brings up the pipe a RoseMCP host loads
 // SUIsei.RoseTap through.
 
 var view = new MainView();
@@ -13,12 +13,13 @@ view.InitializeComponent();
 
 var host = new UIHost();
 host.CreateRoot(UILayer.Default).Root.Content = view.Root;
+DiagnosticsEndpoint.Start();
 
 var pid = Environment.ProcessId;
 Console.WriteLine($"SUIsei.RoseTap.Sample pid {pid}");
 Console.WriteLine(SUIsei.Diagnostics.Enabled
 	? $"Diagnostics on; the endpoint listens on suisei-diag-{pid}. Ticking at 60 Hz until killed."
-	: "Diagnostics are off, so there is no endpoint: the runtime config did not turn SUIsei.Diagnostics.Enabled on.");
+	: "Diagnostics are off, so there is no endpoint: the runtime config did not turn SUIsei.Diagnostics.Enabled on, or this is a NativeAOT build.");
 
 var surface = new Vector2(800f, 600f);
 var clock = Stopwatch.StartNew();

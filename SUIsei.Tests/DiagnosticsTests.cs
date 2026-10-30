@@ -108,13 +108,31 @@ public sealed class DiagnosticsTests
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default);
 		Diagnostics.Post(() => { });
-		host.Tick(0.016, 0f, Surface); // the queue now exists, and is empty
-		Diagnostics.RunPosted();
+		Diagnostics.Post(host, () => { });
+		host.Tick(0.016, 0f, Surface); // both queues now exist, and are empty
+		Diagnostics.RunPosted(host);
 
 		var before = GC.GetAllocatedBytesForCurrentThread();
 		for (var i = 0; i < 100; i++)
-			Diagnostics.RunPosted();
+			Diagnostics.RunPosted(host);
 		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0L);
+	}
+
+	/// <summary>Work posted to one host waits for that host's tick: another host ticking never runs it.</summary>
+	[Test]
+	public void Work_posted_to_a_host_runs_only_at_that_hosts_tick()
+	{
+		var mine = new UIHost();
+		mine.CreateRoot(UILayer.Default);
+		var other = new UIHost();
+		other.CreateRoot(UILayer.Default);
+		var ran = false;
+		Diagnostics.Post(mine, () => ran = true);
+
+		other.Tick(0.016, 0f, Surface);
+		ran.ShouldBeFalse();
+		mine.Tick(0.016, 0f, Surface);
+		ran.ShouldBeTrue();
 	}
 
 	// --- The tree ---
