@@ -16,9 +16,9 @@ public sealed class StoryboardGeneratorTests
 		        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		        x:Class="T.StatesView" x:Name="Bg">
 		  <VisualStateManager.VisualStateGroups>
-		    <VisualStateGroup Name="CommonStates">
-		      <VisualState Name="Normal" />
-		      <VisualState Name="Highlighted">
+		    <VisualStateGroup x:Name="CommonStates">
+		      <VisualState x:Name="Normal" />
+		      <VisualState x:Name="Highlighted">
 		        <Storyboard>
 		          <ColorAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
 		                          To="#5060A0" Duration="0:0:0.12" FillBehavior="HoldEnd" />
@@ -41,8 +41,8 @@ public sealed class StoryboardGeneratorTests
 		  <TextBlock x:Name="Label" Text="Hi" />
 		  <ContentControl x:Name="Host">
 		    <VisualStateManager.VisualStateGroups>
-		      <VisualStateGroup Name="G">
-		        <VisualState Name="S">
+		      <VisualStateGroup x:Name="G">
+		        <VisualState x:Name="S">
 		          <Storyboard>
 		            {{animations}}
 		          </Storyboard>
@@ -325,8 +325,8 @@ public sealed class StoryboardGeneratorTests
 			      <SolidColorBrush x:Key="Accent" Color="#00FF00" />
 			    </ContentControl.Resources>
 			    <VisualStateManager.VisualStateGroups>
-			      <VisualStateGroup Name="G">
-			        <VisualState Name="S">
+			      <VisualStateGroup x:Name="G">
+			        <VisualState x:Name="S">
 			          <Storyboard>
 			            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background)">
 			              <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource Accent}" />

@@ -205,13 +205,35 @@ partial class XamlSourceGenerator
 		{
 			if (groupEl.Name.LocalName != "VisualStateGroup") { gen.Report(BadPropertyElement, groupEl, groupEl.Name.LocalName); continue; }
 			var groupVar = NewName(gen, "__vsgrp");
-			var groupName = StateName(groupEl);
+			var groupName = StateName(gen, groupEl);
 			scope.Emit($"var {groupVar} = new global::SUIsei.Animation.VisualStateGroup {{ Name = {Quote(groupName)} }};");
 			foreach (var stateEl in groupEl.Elements())
 			{
-				if (stateEl.Name.LocalName != "VisualState") { gen.Report(BadPropertyElement, stateEl, stateEl.Name.LocalName); continue; }
-				var stateName = StateName(stateEl);
-				var sbEl = stateEl.Elements().FirstOrDefault(e => e.Name.LocalName == "Storyboard");
+				if (IsIgnorable(stateEl, stateEl.Name.Namespace))
+					continue;
+				if (stateEl.Name.LocalName != "VisualState")
+				{
+					gen.Report(OutsideSubset, stateEl, $"<{stateEl.Name.LocalName}> in a VisualStateGroup", stateEl.Name.LocalName == "VisualStateGroup.Transitions"
+						? " (states change at once, or by their own storyboards' timing)" : " (a group holds VisualStates)");
+					continue;
+				}
+				var stateName = StateName(gen, stateEl);
+				// A state holds one Storyboard; WinUI's setters and triggers are reported rather than dropped.
+				XElement? sbEl = null;
+				foreach (var child in stateEl.Elements())
+				{
+					if (IsIgnorable(child, child.Name.Namespace))
+						continue;
+					if (child.Name.LocalName is "Storyboard" or "VisualState.Storyboard" && sbEl is null)
+						sbEl = child.Name.LocalName == "Storyboard" ? child : child.Elements().FirstOrDefault();
+					else
+						gen.Report(OutsideSubset, child, $"<{child.Name.LocalName}> in a VisualState", child.Name.LocalName switch
+						{
+							"VisualState.Setters" => " (write the values as animations in the state's Storyboard)",
+							"VisualState.StateTriggers" => " (go to the state from code with VisualStateManager.GoToState)",
+							_ => " (a state holds one Storyboard)",
+						});
+				}
 				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, scope, ownerVar, sbEl);
 				scope.Emit($"{groupVar}.States.Add(new global::SUIsei.Animation.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
 			}
@@ -220,8 +242,19 @@ partial class XamlSourceGenerator
 		scope.Emit($"global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
 	}
 
-	// A visual state's or group's name: x:Name, as WinUI markup writes it, or Name.
-	private static string StateName(XElement el) => el.Attribute(X + "Name")?.Value ?? el.Attribute("Name")?.Value ?? "";
+	// A visual state's or group's name: x:Name, as WinUI markup writes it. A bare Name is reported: WinUI's is read-only,
+	// set by x:Name alone. Every other attribute is reported too, since a state or group takes none.
+	private static string StateName(Gen gen, XElement el)
+	{
+		foreach (var attr in el.Attributes())
+		{
+			if (attr.IsNamespaceDeclaration || IsIgnorable(el, attr.Name.Namespace) || IsDirective(gen, el, attr))
+				continue;
+			gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a {el.Name.LocalName}",
+				attr.Name.LocalName == "Name" ? " (WinUI names a state or group with x:Name)" : "");
+		}
+		return el.Attribute(X + "Name")?.Value ?? "";
+	}
 
 	// --- Templates: ControlTemplate / DataTemplate / ItemsPanelTemplate factories ---
 
@@ -285,8 +318,11 @@ partial class XamlSourceGenerator
 	private static string? EmitTemplateFactory(Gen gen, XElement templateEl, bool isControlTemplate, string paramDecl, string? castLocal, string dataRootExpr, INamedTypeSymbol? dataRootType,
 		string returnType = "global::SUIsei.FrameworkElement")
 	{
-		var rootChild = templateEl.Elements().FirstOrDefault(e => !e.Name.LocalName.Contains('.'));
+		var roots = templateEl.Elements().Where(e => !e.Name.LocalName.Contains('.') && !IsIgnorable(e, e.Name.Namespace)).ToList();
+		var rootChild = roots.FirstOrDefault();
 		if (rootChild is null) { gen.Report(BadPropertyElement, templateEl, templateEl.Name.LocalName); return null; }
+		for (var i = 1; i < roots.Count; i++)
+			gen.Report(OutsideSubset, roots[i], $"A second root, {roots[i].Name.LocalName}, in a {templateEl.Name.LocalName}", " (a template builds one element; wrap them in a panel)");
 
 		var method = NewName(gen, "__Template");
 		var body = new StringBuilder();
@@ -555,9 +591,24 @@ partial class XamlSourceGenerator
 	private static void EmitGridDefinitions(Gen gen, Scope scope, string ownerVar, XElement propEl, string collection)
 	{
 		var gridLength = gen.Compilation.GetTypeByMetadataName("SUIsei.GridLength")!;
+		var definition = collection == "RowDefinitions" ? "RowDefinition" : "ColumnDefinition";
+		var sizeName = collection == "RowDefinitions" ? "Height" : "Width";
 		foreach (var def in propEl.Elements())
 		{
-			var size = def.Attribute("Width") ?? def.Attribute("Height");
+			if (IsIgnorable(def, def.Name.Namespace))
+				continue;
+			if (def.Name.LocalName != definition)
+			{
+				gen.Report(OutsideSubset, def, $"<{def.Name.LocalName}> in Grid.{collection}", $" (it holds {definition}s)");
+				continue;
+			}
+			foreach (var attr in def.Attributes())
+			{
+				if (attr.IsNamespaceDeclaration || IsIgnorable(def, attr.Name.Namespace) || IsDirective(gen, def, attr) || attr.Name.LocalName == sizeName)
+					continue;
+				gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a {definition}", $" (a {definition} takes its {sizeName} alone)");
+			}
+			var size = def.Attribute(sizeName);
 			var code = size is null ? "global::SUIsei.GridLength.Star" : ConvertOrReport(gen, size, gridLength, size.Value, size.Name.LocalName);
 			if (code is not null)
 				scope.Emit($"{ownerVar}.{collection}.Add({code});");

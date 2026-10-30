@@ -77,9 +77,9 @@
 			<TextBlock Text="Badge" />
 		</suisei:TestBadge.Content>
 		<VisualStateManager.VisualStateGroups>
-			<VisualStateGroup Name="Glow">
-				<VisualState Name="Off" />
-				<VisualState Name="On">
+			<VisualStateGroup x:Name="Glow">
+				<VisualState x:Name="Off" />
+				<VisualState x:Name="On">
 					<Storyboard>
 						<DoubleAnimation Storyboard.TargetName="Badge" Storyboard.TargetProperty="(suisei:TestGlow.Radius)"
 										 To="10" Duration="0:0:1" />

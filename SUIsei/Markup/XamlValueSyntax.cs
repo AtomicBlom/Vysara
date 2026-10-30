@@ -91,37 +91,41 @@ internal static class XamlValueSyntax
 		return true;
 	}
 
-	/// <summary>Parse a duration, <c>h:m:s</c>, <c>m:s</c> or <c>s</c>, where the seconds may carry a fraction, to
-	/// total seconds.</summary>
+	/// <summary>Parse a duration as WinUI's XAML reads a <c>TimeSpan</c>, to total seconds: <c>[d.]h:m[:s[.f]]</c>, or a
+	/// whole number of days. So <c>0:0:0.25</c> is a quarter of a second, <c>0:30</c> thirty minutes and <c>2</c> two days.
+	/// A negative duration is refused.</summary>
 	public static bool TryParseDuration(string text, out double seconds)
 	{
 		seconds = 0;
-		var parts = text.Trim().Split(':');
-		try
-		{
-			switch (parts.Length)
-			{
-				case 3:
-					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 3600
-						+ int.Parse(parts[1], CultureInfo.InvariantCulture) * 60
-						+ double.Parse(parts[2], CultureInfo.InvariantCulture);
-					return true;
-				case 2:
-					seconds = int.Parse(parts[0], CultureInfo.InvariantCulture) * 60
-						+ double.Parse(parts[1], CultureInfo.InvariantCulture);
-					return true;
-				case 1:
-					seconds = double.Parse(parts[0], CultureInfo.InvariantCulture);
-					return true;
-				default:
-					return false;
-			}
-		}
-		catch (Exception e) when (e is FormatException or OverflowException)
-		{
+		if (!TimeSpan.TryParse(text.Trim(), CultureInfo.InvariantCulture, out var span) || span < TimeSpan.Zero)
 			return false;
-		}
+		seconds = span.TotalSeconds;
+		return true;
 	}
+
+	/// <summary>Whether <paramref name="text"/> is a duration SUIsei once read as seconds and WinUI reads otherwise: a bare
+	/// number other than 0 (seconds once, days in WinUI) or <c>m:s</c> (minutes and seconds once, hours and minutes in
+	/// WinUI). The generator refuses these, so markup written for the old reading is found rather than run thousands of
+	/// times slower; <c>h:m:s</c> means the same in both.</summary>
+	public static bool IsAmbiguousDuration(string text)
+	{
+		var s = text.Trim();
+		var colons = 0;
+		foreach (var c in s)
+		{
+			if (c == ':')
+				colons++;
+		}
+		return colons == 1
+			|| (colons == 0 && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && number != 0);
+	}
+
+	/// <summary>Whether <paramref name="text"/> is <c>Auto</c> (any case) for a property that takes it: WinUI's
+	/// <c>FrameworkElement.Width</c> and <c>Height</c>, which its length converter reads as NaN. No other property takes
+	/// it.</summary>
+	public static bool IsAutoLength(string declaringType, string property, string text) =>
+		declaringType == "SUIsei.FrameworkElement" && property is "Width" or "Height"
+		&& string.Equals(text.Trim(), "Auto", StringComparison.OrdinalIgnoreCase);
 
 	/// <summary>Parse a repeat behaviour: <c>Forever</c> (any case), or a positive iteration count with an optional
 	/// <c>x</c>, as <c>3x</c> or <c>0.5x</c>.</summary>

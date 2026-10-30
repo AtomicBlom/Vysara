@@ -36,7 +36,7 @@ partial class XamlSourceGenerator
 		["System.Numerics.Vector2"] = (ConvertVector2, "two numbers, 'x,y'"),
 		["System.Numerics.Vector3"] = (ConvertVector3, "three numbers, 'x,y,z'"),
 		["SUIsei.GridLength"] = (ConvertGridLength, "Auto, *, N* or a number"),
-		["System.TimeSpan"] = (ConvertTimeSpan, "[[h:]m:]s"),
+		["System.TimeSpan"] = (ConvertTimeSpan, "WinUI's [d.]h:m:s[.f], such as 0:0:0.25 (in WinUI a bare number is days and m:s is hours and minutes, so write 0:0:2 or 0:0:30)"),
 		["SUIsei.Animation.RepeatBehavior"] = (ConvertRepeatBehavior, "Forever, or a count such as 3x"),
 	};
 
@@ -127,12 +127,12 @@ partial class XamlSourceGenerator
 		}
 	}
 
-	// "Auto" (any case) for FrameworkElement.Width or Height, which WinUI's parser reads as NaN through its LengthConverter;
-	// it takes no other property.
+	// "Auto" for FrameworkElement.Width or Height (XamlValueSyntax.IsAutoLength), by its CLR property or its
+	// dependency-property field.
 	private static bool IsAutoLength(ISymbol? member, string raw) =>
-		member is { Name: "Width" or "Height" or "WidthProperty" or "HeightProperty", ContainingType: { } owner }
-		&& owner.ToDisplayString() == "SUIsei.FrameworkElement"
-		&& string.Equals(raw.Trim(), "Auto", StringComparison.OrdinalIgnoreCase);
+		member is { ContainingType: { } owner }
+		&& XamlValueSyntax.IsAutoLength(owner.ToDisplayString(), member.Name.EndsWith("Property", StringComparison.Ordinal)
+			? member.Name.Substring(0, member.Name.Length - "Property".Length) : member.Name, raw);
 
 	private static bool ConvertColor(string raw, out string code)
 	{
@@ -286,7 +286,8 @@ partial class XamlSourceGenerator
 
 	private static bool ConvertTimeSpan(string raw, out string code)
 	{
-		code = XamlValueSyntax.TryParseDuration(raw, out var seconds) ? $"global::System.TimeSpan.FromSeconds({Fmt(seconds)})" : "";
+		code = !XamlValueSyntax.IsAmbiguousDuration(raw) && XamlValueSyntax.TryParseDuration(raw, out var seconds)
+			? $"global::System.TimeSpan.FromSeconds({Fmt(seconds)})" : "";
 		return code.Length > 0;
 	}
 

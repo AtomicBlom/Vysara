@@ -22,9 +22,9 @@
 			<SolidColorBrush x:Key="Mark" Color="#0000FF" />
 		</ContentControl.Resources>
 		<VisualStateManager.VisualStateGroups>
-			<VisualStateGroup Name="Showing">
-				<VisualState Name="Default" />
-				<VisualState Name="Hidden">
+			<VisualStateGroup x:Name="Showing">
+				<VisualState x:Name="Default" />
+				<VisualState x:Name="Hidden">
 					<Storyboard>
 						<DoubleAnimation Storyboard.TargetName="Panel" Storyboard.TargetProperty="(UIElement.Opacity)"
 										 To="0" Duration="0:0:0.25">
@@ -37,7 +37,7 @@
 						</ObjectAnimationUsingKeyFrames>
 					</Storyboard>
 				</VisualState>
-				<VisualState Name="Shown">
+				<VisualState x:Name="Shown">
 					<Storyboard>
 						<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Panel" Storyboard.TargetProperty="(UIElement.Visibility)">
 							<DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
@@ -51,9 +51,9 @@
 					</Storyboard>
 				</VisualState>
 			</VisualStateGroup>
-			<VisualStateGroup Name="Marking">
-				<VisualState Name="Unmarked" />
-				<VisualState Name="Marked">
+			<VisualStateGroup x:Name="Marking">
+				<VisualState x:Name="Unmarked" />
+				<VisualState x:Name="Marked">
 					<Storyboard>
 						<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Panel" Storyboard.TargetProperty="(Border.Background)">
 							<ObjectAnimationUsingKeyFrames.KeyFrames>
@@ -75,9 +75,9 @@
 	</ContentControl>
 	<ContentControl x:Name="Host">
 		<VisualStateManager.VisualStateGroups>
-			<VisualStateGroup Name="Motion">
-				<VisualState Name="Rest" />
-				<VisualState Name="Moved">
+			<VisualStateGroup x:Name="Motion">
+				<VisualState x:Name="Rest" />
+				<VisualState x:Name="Moved">
 					<Storyboard>
 						<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Left)"
 										 To="100" Duration="0:0:1" />

@@ -215,9 +215,9 @@ public sealed class TemplateGeneratorTests
 			    <ControlTemplate TargetType="ContentControl">
 			      <Border x:Name="Bg" CornerRadius="4" Background="#000000">
 			        <VisualStateManager.VisualStateGroups>
-			          <VisualStateGroup Name="CommonStates">
-			            <VisualState Name="Normal" />
-			            <VisualState Name="PointerOver">
+			          <VisualStateGroup x:Name="CommonStates">
+			            <VisualState x:Name="Normal" />
+			            <VisualState x:Name="PointerOver">
 			              <Storyboard>
 			                <ColorAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
 			                                To="#5060A0" Duration="0:0:0.12" />

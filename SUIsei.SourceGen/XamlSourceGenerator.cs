@@ -97,6 +97,38 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"'{0}' is not valid path markup for property '{1}', {2}", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor TemplateValueOnLocal = new("SUISEI027", "Template value set as the part's own",
 		"In a ControlTemplate, {0} is set through its setter as the part's local value, not as the template's: {1}", "SUIsei", DiagnosticSeverity.Warning, true);
+	private static readonly DiagnosticDescriptor OutsideSubset = new("SUISEI025", "Outside the XAML subset",
+		"{0} is outside the XAML subset{1}", "SUIsei", DiagnosticSeverity.Error, true);
+
+	// The x: directives SUIsei reads, and where: x:Name on any element (and on a visual state or group), x:Key on a
+	// resource, x:Class on the root and x:DataType on a DataTemplate. Every other directive (x:Uid, x:Load, x:Phase,
+	// x:DeferLoadStrategy, x:FieldModifier, …) is reported where it is written, not skipped, since skipping it changes
+	// what the view does: an x:Load="False" element would be loaded.
+	private static bool IsDirective(Gen gen, XElement el, XAttribute attr, bool isRoot = false)
+	{
+		if (attr.Name.Namespace != X)
+			return false;
+		var allowed = attr.Name.LocalName switch
+		{
+			"Name" or "Key" => true,
+			"Class" => isRoot,
+			"DataType" => el.Name.LocalName == "DataTemplate",
+			_ => false,
+		};
+		if (!allowed)
+		{
+			gen.Report(OutsideSubset, attr, $"The directive 'x:{attr.Name.LocalName}' on {el.Name.LocalName}", attr.Name.LocalName switch
+			{
+				"Uid" => " (SUIsei has no localization resources)",
+				"Load" or "DeferLoadStrategy" => " (every element is loaded)",
+				"Phase" => " (every element is built at once)",
+				"Class" => " (only the root element names the class)",
+				"DataType" => " (only a DataTemplate takes one)",
+				_ => "",
+			});
+		}
+		return true;
+	}
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -410,7 +442,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		foreach (var attr in el.Attributes())
 		{
 			var attrNs = attr.Name.Namespace;
-			if (attr.IsNamespaceDeclaration || attrNs == X || IsIgnorable(el, attrNs))
+			if (attr.IsNamespaceDeclaration || IsIgnorable(el, attrNs) || IsDirective(gen, el, attr, isRoot))
 				continue;
 			if (attrNs == ExtensionNs || attr.Name.LocalName.Contains('.'))
 			{
