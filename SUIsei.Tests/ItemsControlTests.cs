@@ -89,4 +89,26 @@ public sealed class ItemsControlTests
 		lv.SelectedIndex.ShouldBe(1);
 		container.IsSelected.ShouldBeTrue();
 	}
+
+	[Test]
+	public void Selection_changed_names_what_left_the_selection_and_what_joined_it()
+	{
+		var lv = new ListView { ItemsSource = new[] { "a", "b", "c" } };
+		var changes = new List<(object? Removed, object? Added)>();
+		lv.SelectionChanged += (sender, e) =>
+		{
+			sender.ShouldBeSameAs(lv);
+			changes.Add((e.RemovedItems.SingleOrDefault(), e.AddedItems.SingleOrDefault()));
+		};
+
+		lv.SelectIndex(1);
+		lv.SelectIndex(1); // already selected: no change
+		((ListViewItem)lv.ItemsHost!.Children[2]).RaiseEvent(UIElement.PointerPressedEvent, new RoutedEventArgs());
+		lv.SelectIndex(-1);
+		lv.SelectIndex(-1); // nothing to clear
+		lv.SelectIndex(0);
+		lv.ItemsSource = new[] { "x" }; // reloading clears the selection
+
+		changes.ShouldBe([(null, "b"), ("b", "c"), ("c", null), (null, "a"), ("a", null)]);
+	}
 }
