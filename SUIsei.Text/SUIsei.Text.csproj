@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SUIsei.Tests" />
+    <!-- The gallery writes its captures as PNGs with the atlas baker's encoder. -->
+    <InternalsVisibleTo Include="SUIsei.Gallery.Pages" />
   </ItemGroup>
 
 </Project>

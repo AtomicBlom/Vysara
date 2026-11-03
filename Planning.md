@@ -74,7 +74,8 @@ The **core `SUIsei` runtime depends on `StbImageSharp` alone** (to decode baked 
 | `SUIsei.Tests.DiagnosticsOff` | the configuration a game ships with: `SUIsei.Diagnostics.Enabled` unset, in a process of its own | yes |
 | `SUIsei.Text` | a **native managed MTSDF atlas generator** + OpenType reader (glyf + CFF) + atlas baker; bakes the committed default atlas | not run by the core's build (below) |
 | `SUIsei.Text.Tool` | bake tool (`loom-msdf`) driving `SUIsei.Text`; `build/SUIsei.Fonts.targets` runs it for an app that opts in | opt-in |
-| `SUIsei.Gallery` | demo application | standalone |
+| `SUIsei.Gallery.Pages` | the gallery: its shell, one XAML page per feature area, and the renderer that draws them through `SUIsei.Rasterizer`; each page and the shell are drawn headlessly and compared with their golden images (`SUIsei.Tests/Goldens/Gallery/`) | tested |
+| `SUIsei.Gallery` | the Win32 window that shows the gallery (`--page <key>`), and its headless captures (`--capture`, `--capture-pages <dir>`) and self-tests | standalone |
 
 ### Text: atlas generation and shaping
 Text is **glyph-id-keyed MTSDF**, generated natively and shaped behind a swappable seam — both halves chosen to stay cross-platform, dependency-light, and NativeAOT-clean.

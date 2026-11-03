@@ -22,21 +22,23 @@ internal sealed class GalleryRenderer
 {
 	private readonly UIHost _host = new();
 	private readonly UIView _view;
-	private readonly GalleryView _gallery = new();
-	private readonly FontAtlas _font = BuildShapedFont();
-	private readonly Vector4 _clear = GalleryView.PageBackground.ToPremultiplied().ToVector4();
+	private readonly IGalleryView _content;
+	// Baked once for the process: every renderer (the window's, a self-test's pair, each golden test's) shares it.
+	private static readonly Lazy<FontAtlas> SharedFont = new(BuildShapedFont);
+	private readonly Vector4 _clear = GalleryTheme.PageBackground.ToPremultiplied().ToVector4();
 	private SoftwareRasterizer? _rasterizer;
 	private double _lastSeconds;
 	private double _tickMs, _composeMs;
 
-	public GalleryRenderer(Action onQuit)
+	/// <summary>A renderer drawing <paramref name="content"/>: the shell, or one page on its own.</summary>
+	public GalleryRenderer(IGalleryView content)
 	{
-		_gallery.Quit = onQuit;
+		_content = content;
 		// Lay text out and draw it with the glyph-id atlas, so its HarfBuzz shaper drives every glyph run (ligatures
 		// included) and measuring and drawing agree.
 		_view = _host.CreateRoot(UILayer.Default, interactive: true);
-		_view.Root.Font = _font;
-		_view.Root.Content = _gallery.Root;
+		_view.Root.Font = SharedFont.Value;
+		_view.Root.Content = content.Root;
 	}
 
 	// Bake a glyph-id-keyed Cascadia atlas (printable ASCII + the GSUB-reachable ligature/contextual glyphs) from the
@@ -71,6 +73,14 @@ internal sealed class GalleryRenderer
 		set => _view.Root.LayoutScale = value;
 	}
 
+	/// <summary>How tall the content wants to be, in physical pixels, laid out <paramref name="pixelWidth"/> wide: the height
+	/// a capture of a whole page takes.</summary>
+	public int DesiredHeight(int pixelWidth)
+	{
+		_view.Root.LayoutPass(new Size(pixelWidth, 100_000f));
+		return Math.Max(1, (int)MathF.Ceiling(_content.Root.DesiredSize.Height * Scale));
+	}
+
 	/// <summary>Per-phase wall-clock cost of the last presented frame (for the <c>--bench</c> diagnostic).</summary>
 	public FrameTimings LastTimings { get; private set; }
 
@@ -90,7 +100,7 @@ internal sealed class GalleryRenderer
 		_lastSeconds = seconds;
 
 		var t0 = Stopwatch.GetTimestamp();
-		_gallery.Animate(seconds);
+		_content.Animate(seconds);
 		_host.Tick(dt, (float)seconds, new Vector2(width, height));
 		var t1 = Stopwatch.GetTimestamp();
 		_host.Render();

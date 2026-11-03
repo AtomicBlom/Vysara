@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Layout: a Grid's pixel and star columns, its rows, and a cell spanning two columns through the attached
+	Grid.ColumnSpan.
+-->
+<Border xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:SUIsei.Gallery"
+        x:Class="SUIsei.Gallery.Pages.LayoutPage"
+        Padding="28">
+	<StackPanel Orientation="Vertical">
+		<TextBlock Text="Layout" Style="{x:Static local:GalleryTheme.PageTitle}" />
+		<TextBlock Text="Panels measure, then arrange, in two passes that allocate nothing."
+		           Style="{x:Static local:GalleryTheme.PageSummary}" />
+
+		<TextBlock Text="Grid" Style="{x:Static local:GalleryTheme.SectionHeading}" />
+		<Border Style="{x:Static local:GalleryTheme.Card}">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="120" />
+					<ColumnDefinition Width="*" />
+					<ColumnDefinition Width="*" />
+				</Grid.ColumnDefinitions>
+				<Grid.RowDefinitions>
+					<RowDefinition Height="40" />
+					<RowDefinition Height="40" />
+					<RowDefinition Height="40" />
+				</Grid.RowDefinitions>
+				<Border Grid.Row="0" Grid.Column="0" Background="#3C3250" CornerRadius="4" Margin="3">
+					<TextBlock Text="Pixel(120)" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				</Border>
+				<Border Grid.Row="0" Grid.Column="1" Background="#324650" CornerRadius="4" Margin="3">
+					<TextBlock Text="Star" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				</Border>
+				<Border Grid.Row="0" Grid.Column="2" Background="#324650" CornerRadius="4" Margin="3">
+					<TextBlock Text="Star" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				</Border>
+				<Border Grid.Row="1" Grid.Column="0" Background="#463737" CornerRadius="4" Margin="3">
+					<TextBlock Text="Row 2" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				</Border>
+				<Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Background="#373C4B" CornerRadius="4" Margin="3">
+					<TextBlock Text="spans 2 cols" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				</Border>
+			</Grid>
+		</Border>
+	</StackPanel>
+</Border>
