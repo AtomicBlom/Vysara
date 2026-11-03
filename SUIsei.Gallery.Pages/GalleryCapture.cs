@@ -25,11 +25,13 @@ internal sealed record GalleryCapture(int Width, int Height, byte[] Rgba)
 	}
 
 	/// <summary>The whole gallery, its shell showing <paramref name="page"/> (or the first page), at a window's
-	/// size.</summary>
-	public static GalleryCapture Shell(string? page, int pixelWidth, int pixelHeight, float scale = 1f, int frames = 1)
+	/// size. <paramref name="then"/>, when given, acts on the shell after its first frame, laid out in its window, as
+	/// a user would: opening a menu, say.</summary>
+	public static GalleryCapture Shell(string? page, int pixelWidth, int pixelHeight, float scale = 1f, int frames = 1, Action<GalleryShell>? then = null)
 	{
-		var renderer = new GalleryRenderer(new GalleryShell(page)) { Scale = scale };
-		return new(pixelWidth, pixelHeight, Frames(renderer, pixelWidth, pixelHeight, frames));
+		var shell = new GalleryShell(page);
+		var renderer = new GalleryRenderer(shell) { Scale = scale };
+		return new(pixelWidth, pixelHeight, Frames(renderer, pixelWidth, pixelHeight, frames, then is null ? null : () => then(shell)));
 	}
 
 	/// <summary>Write the capture to <paramref name="path"/>: a PNG when it ends <c>.png</c>, else a BMP.</summary>
@@ -41,12 +43,17 @@ internal sealed record GalleryCapture(int Width, int Height, byte[] Rgba)
 			BmpWriter.Write(path, Width, Height, Rgba);
 	}
 
-	// Compose every frame but the last, which is also rasterized: only the last is kept.
-	private static byte[] Frames(GalleryRenderer renderer, int width, int height, int frames)
+	// Compose every frame but the last, which is also rasterized: only the last is kept. `afterFirst` runs once the
+	// first frame has laid the content out.
+	private static byte[] Frames(GalleryRenderer renderer, int width, int height, int frames, Action? afterFirst = null)
 	{
-		var last = Math.Max(1, frames) - 1;
+		var last = Math.Max(afterFirst is null ? 1 : 2, frames) - 1;
 		for (var i = 0; i < last; i++)
+		{
 			renderer.Compose(width, height, i / 60.0);
+			if (i == 0)
+				afterFirst?.Invoke();
+		}
 		return renderer.Render(width, height, last / 60.0);
 	}
 }

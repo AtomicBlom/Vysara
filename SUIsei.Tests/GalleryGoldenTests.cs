@@ -17,6 +17,7 @@ public sealed class GalleryGoldenTests
 {
 	private const string SkipReason = "The gallery shapes its text with HarfBuzz, whose native library ships for Windows only (SUIsei.HarfBuzz).";
 	private const string ShellGolden = "shell";
+	private const string MenuGolden = "shell-menu";
 	private const int Tolerance = 4;
 	private const double MostDiffering = 0.005;
 
@@ -37,6 +38,15 @@ public sealed class GalleryGoldenTests
 	{
 		Skip.Unless(OperatingSystem.IsWindows(), SkipReason);
 		MatchesGolden(ShellGolden, GalleryCapture.Shell(null, 960, 720, frames: GalleryCapture.SettleFrames));
+	}
+
+	/// <summary>The shell with its View menu open: a drop-down as big as its items, under the menu bar's View, over the
+	/// page.</summary>
+	[Test]
+	public void The_gallery_shell_draws_its_open_menu_as_its_golden()
+	{
+		Skip.Unless(OperatingSystem.IsWindows(), SkipReason);
+		MatchesGolden(MenuGolden, GalleryCapture.Shell(null, 960, 720, frames: GalleryCapture.SettleFrames, then: static shell => shell.ViewMenu.OpenMenu()));
 	}
 
 	/// <summary>A page draws nothing in its right margin. TextBlock doesn't wrap, so a line too long for the page area runs
@@ -66,7 +76,7 @@ public sealed class GalleryGoldenTests
 	[Test]
 	public void Every_gallery_golden_belongs_to_a_page()
 	{
-		var names = PageKeys().Append(ShellGolden).ToHashSet();
+		var names = PageKeys().Append(ShellGolden).Append(MenuGolden).ToHashSet();
 		var goldens = Directory.Exists(GoldensDirectory()) ? Directory.GetFiles(GoldensDirectory(), "*.png") : [];
 		goldens.Select(Path.GetFileNameWithoutExtension).Where(name => !names.Contains(name!)).ShouldBeEmpty();
 	}
