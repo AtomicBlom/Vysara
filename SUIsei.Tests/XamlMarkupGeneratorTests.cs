@@ -34,7 +34,13 @@ public sealed class XamlMarkupGeneratorTests
 		namespace SUIsei.Documents { public sealed class Page : SUIsei.Controls.ContentControl { } }
 		namespace Demo
 		{
-			public partial class V { public string? Caption { get; set; } }
+			public partial class V
+			{
+				public string? Caption { get; set; }
+				private void OnRouted(object sender, SUIsei.RoutedEvents.RoutedEventArgs e) { }
+				private void OnPlain(object sender, System.EventArgs e) { }
+				private void OnSelection(object sender, SUIsei.Controls.SelectionChangedEventArgs e) { }
+			}
 			public sealed class Caption : SUIsei.Controls.ContentControl { }
 			public struct Pair { public float A { get; set; } }
 			public sealed class Hidden : SUIsei.Controls.ContentControl { internal Hidden() { } }
@@ -105,6 +111,28 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<suisei:Badge />", "new SUIsei.Extensions.Badge()")]
 	public void Elements_resolve_in_their_XML_namespace(string body, string expected) =>
 		Generates(body).ShouldContain(expected);
+
+	// --- Events ---
+
+	/// <summary>A handler binds to an event as C# binds it to the event's delegate: a routed event's args, an
+	/// EventHandler's, and a narrower event's args taken by a handler of their base.</summary>
+	[Test]
+	[Arguments("<Button Click=\"OnRouted\" />", ".Click += this.OnRouted;")]
+	[Arguments("<Slider ValueChanged=\"OnPlain\" />", ".ValueChanged += this.OnPlain;")]
+	[Arguments("<ListView SelectionChanged=\"OnSelection\" />", ".SelectionChanged += this.OnSelection;")]
+	[Arguments("<ListView SelectionChanged=\"OnRouted\" />", ".SelectionChanged += this.OnRouted;")]
+	public void Event_handlers_bind_to_the_events_own_delegate(string body, string expected) =>
+		Generates(body).ShouldContain(expected);
+
+	[Test]
+	[Arguments("<Button Click=\"OnPlain\" />", "'OnPlain(object, RoutedEventArgs)' for event 'Click'")]
+	[Arguments("<ListView SelectionChanged=\"OnMissing\" />", "'OnMissing(object, SelectionChangedEventArgs)' for event 'SelectionChanged'")]
+	public void A_handler_the_event_cannot_bind_to_is_reported(string body, string message)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI010");
+		diagnostic.GetMessage().ShouldContain(message);
+	}
 
 	[Test]
 	[Arguments("<suisei:Nope />", "Nope")]

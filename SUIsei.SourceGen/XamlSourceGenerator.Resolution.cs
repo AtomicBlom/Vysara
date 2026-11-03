@@ -258,22 +258,40 @@ partial class XamlSourceGenerator
 		return null;
 	}
 
-	private static bool HandlerSignatureOk(Gen gen, string handler)
+	// Whether the page declares `handler` as a method the event's delegate binds to, as C# would bind it: returning void,
+	// with as many parameters, each of which takes the delegate's argument (so an (object, RoutedEventArgs) handler binds to
+	// an event whose args derive from RoutedEventArgs).
+	private static bool HandlerSignatureOk(Gen gen, string handler, IEventSymbol evt)
 	{
-		if (gen.PageType is null)
+		if (gen.PageType is null || (evt.Type as INamedTypeSymbol)?.DelegateInvokeMethod is not { } invoke)
 			return true;
 		for (INamedTypeSymbol? t = gen.PageType; t is not null; t = t.BaseType)
 		{
 			foreach (var m in t.GetMembers(handler).OfType<IMethodSymbol>())
 			{
-				if (m.ReturnsVoid && m.Parameters.Length == 2 &&
-					m.Parameters[0].Type.SpecialType == SpecialType.System_Object &&
-					m.Parameters[1].Type.Name == "RoutedEventArgs")
+				if (m.ReturnsVoid && m.Parameters.Length == invoke.Parameters.Length && Binds(m))
 					return true;
 			}
 		}
 		return false;
+
+		bool Binds(IMethodSymbol m)
+		{
+			for (var i = 0; i < m.Parameters.Length; i++)
+			{
+				var conversion = gen.Compilation.ClassifyCommonConversion(invoke.Parameters[i].Type, m.Parameters[i].Type);
+				if (!conversion.IsIdentity && !(conversion.IsImplicit && conversion.IsReference))
+					return false;
+			}
+			return true;
+		}
 	}
+
+	// The parameter types a handler for `evt` takes, as a reader writes them: "object, RoutedEventArgs".
+	private static string HandlerParameters(IEventSymbol evt) =>
+		(evt.Type as INamedTypeSymbol)?.DelegateInvokeMethod is { } invoke
+			? string.Join(", ", invoke.Parameters.Select(static p => p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)))
+			: "object, RoutedEventArgs";
 
 	// The CLR namespaces the default XAML namespace maps to, searched in order, as WinUI's maps Microsoft.UI.Xaml and its
 	// .Controls, .Media, .Shapes, .Documents and .Media.Animation namespaces.

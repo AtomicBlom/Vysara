@@ -66,7 +66,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor BindTypeMismatch = new("SUISEI009", "Incompatible x:Bind types",
 		"x:Bind source type '{0}' is not assignable to target property '{1}' of type '{2}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor EventHandlerSignature = new("SUISEI010", "Bad event handler",
-		"'{0}' has no handler '{1}(object, RoutedEventArgs)' for event '{2}'", "SUIsei", DiagnosticSeverity.Error, true);
+		"'{0}' has no handler '{1}({2})' for event '{3}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor InvalidName = new("SUISEI011", "Invalid x:Name",
 		"x:Name '{0}' is not usable as a field — it must be a unique, non-reserved C# identifier", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor InvalidLiteral = new("SUISEI012", "Invalid property value",
@@ -511,8 +511,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				var handler = ExtractEventHandler(gen, attr, value);
 				if (handler is null)
 					continue;
-				if (!HandlerSignatureOk(gen, handler))
-					gen.Report(EventHandlerSignature, attr, gen.PageType?.ToDisplayString() ?? "the page", handler, name);
+				if (!HandlerSignatureOk(gen, handler, evt))
+					gen.Report(EventHandlerSignature, attr, gen.PageType?.ToDisplayString() ?? "the page", handler, HandlerParameters(evt), name);
 				gen.EventWires.Add($"{var}.{name} += this.{handler};");
 				continue;
 			}
