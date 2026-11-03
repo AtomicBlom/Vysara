@@ -53,6 +53,8 @@
     <!-- The HarfBuzz shaper, to check OpenType features reach HarfBuzz. Its native library ships for Windows only, so
          those tests skip elsewhere. -->
     <ProjectReference Include="..\SUIsei.HarfBuzz\SUIsei.HarfBuzz.csproj" />
+    <!-- The gallery's pages, each drawn and compared with its golden image (GalleryGoldenTests). -->
+    <ProjectReference Include="..\SUIsei.Gallery.Pages\SUIsei.Gallery.Pages.csproj" />
   </ItemGroup>
 
   <ItemGroup>
