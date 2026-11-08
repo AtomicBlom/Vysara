@@ -393,6 +393,27 @@ public sealed class BrushTests
 	}
 
 	[Test]
+	public void One_radius_too_large_for_a_rect_draws_a_pill()
+	{
+		// WinUI's pill idiom: a radius far past half the height rounds each end into a half circle of half the height.
+		var pill = new Border { Width = 100f, Height = 32f, CornerRadius = new CornerRadius(999f), Background = new SolidColorBrush(Red) };
+		((UIPrimKind)Laid(pill, 100f, 32f).Render().Commands.Span.ToArray().ShouldHaveSingleItem().Tag).ShouldBe(UIPrimKind.RoundedRect);
+
+		var raster = new SoftwareRasterizer(100, 32);
+		raster.Clear(Vector4.Zero);
+		raster.Render(pill.AttachedRoot!.Render());
+		raster.ReadLinear(50, 16).W.ShouldBe(1f, 0.01f);
+		raster.ReadLinear(1, 16).W.ShouldBe(1f, 0.01f); // the ends reach the sides
+		raster.ReadLinear(98, 16).W.ShouldBe(1f, 0.01f);
+		raster.ReadLinear(1, 1).W.ShouldBe(0f); // and are round
+		raster.ReadLinear(98, 30).W.ShouldBe(0f);
+
+		// A radius that isn't a number draws square corners.
+		pill.CornerRadius = new CornerRadius(float.NaN);
+		((UIPrimKind)pill.AttachedRoot.Render().Commands.Span.ToArray().ShouldHaveSingleItem().Tag).ShouldBe(UIPrimKind.Fill);
+	}
+
+	[Test]
 	public void A_brush_transition_fades_between_solid_backgrounds_on_the_host_clock()
 	{
 		var border = new Border

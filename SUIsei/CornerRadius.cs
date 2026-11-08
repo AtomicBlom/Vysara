@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SUIsei;
 
 /// <summary>
@@ -9,5 +11,6 @@ public readonly record struct CornerRadius(float TopLeft, float TopRight, float 
 	/// <summary>The same radius at every corner.</summary>
 	public CornerRadius(float uniformRadius) : this(uniformRadius, uniformRadius, uniformRadius, uniformRadius) { }
 
-	public override string ToString() => $"({TopLeft:0.###},{TopRight:0.###},{BottomRight:0.###},{BottomLeft:0.###})";
+	public override string ToString() =>
+		string.Create(CultureInfo.InvariantCulture, $"({TopLeft:0.###},{TopRight:0.###},{BottomRight:0.###},{BottomLeft:0.###})");
 }

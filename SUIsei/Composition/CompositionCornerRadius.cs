@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 
 namespace SUIsei.Composition;
@@ -45,5 +46,6 @@ public readonly record struct CompositionCornerRadius(float TopLeft, float TopRi
 		static float Positive(float radius) => radius > 0f ? radius : 0f;
 	}
 
-	public override string ToString() => $"({TopLeft:0.###},{TopRight:0.###},{BottomRight:0.###},{BottomLeft:0.###})";
+	public override string ToString() =>
+		string.Create(CultureInfo.InvariantCulture, $"({TopLeft:0.###},{TopRight:0.###},{BottomRight:0.###},{BottomLeft:0.###})");
 }

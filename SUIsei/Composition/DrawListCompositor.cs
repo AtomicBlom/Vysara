@@ -171,7 +171,9 @@ public sealed class DrawListCompositor : IUICompositor, IDrawListSource
 							AddRectShape(list, shapes.Border, rc.BorderBrush!, rect, matrix, alpha, localClip);
 						break;
 					}
-					var radius = rc.CornerRadius.TopLeft;
+					// Fitted as the outlines are: a radius past half the shorter side draws the pill CSS draws, not a lozenge
+					// the prims' rounded-box distance would shrink away from the sides, and NaN draws square.
+					var radius = rc.CornerRadius.FitTo(rc.Size).TopLeft;
 					if (rc.Fill is { } fill)
 					{
 						var kind = radius > 0 ? UIPrimKind.RoundedRect : UIPrimKind.Fill;
