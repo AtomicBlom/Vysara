@@ -53,7 +53,7 @@ public sealed class MenuFlyoutItem : ButtonBase
 			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
-			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Dimmed(border) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Disabled(border, TemplateStates.DisabledSubtleBackground, presenter) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);
 			return border;
 		},

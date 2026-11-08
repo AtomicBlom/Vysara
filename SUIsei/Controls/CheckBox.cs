@@ -21,6 +21,8 @@ public sealed class CheckBox : ToggleButton
 	private static readonly SolidColorBrush BoxBackgroundPressed = Brush.Sealed(HdrColor.FromRgb(30, 30, 38));
 	private static readonly SolidColorBrush CheckFill = Brush.Sealed(HdrColor.FromRgb(80, 150, 240));
 	private static readonly SolidColorBrush IndeterminateFill = Brush.Sealed(HdrColor.FromRgb(120, 120, 130));
+	private static readonly SolidColorBrush BoxBackgroundDisabled = Brush.Sealed(HdrColor.FromRgb(36, 36, 42));
+	private static readonly SolidColorBrush BoxBorderDisabled = Brush.Sealed(HdrColor.FromRgb(90, 90, 98));
 
 	private Border? _box;
 	private Border? _checkGlyph;
@@ -78,7 +80,16 @@ public sealed class CheckBox : ToggleButton
 			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(box, BoxBackgroundHover) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(box, BoxBackgroundPressed) });
-			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Dimmed(row) });
+			// Disabled mutes the box, its mark and the label; the mark keeps its shape, so checked and indeterminate still read.
+			common.States.Add(new VisualState
+			{
+				Name = "Disabled",
+				Storyboard = TemplateStates.Hold(
+					(box, Border.BackgroundProperty, BoxBackgroundDisabled),
+					(box, Border.BorderBrushProperty, BoxBorderDisabled),
+					(glyph, Border.BackgroundProperty, TemplateStates.DisabledAccent),
+					(presenter, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground)),
+			});
 			VisualStateManager.SetVisualStateGroups(row, [common]);
 
 			// Reflect the initial checked state as soon as the parts exist.

@@ -28,6 +28,7 @@ public sealed class Slider : Control
 	private static readonly SolidColorBrush ThumbOver = Brush.Sealed(HdrColor.FromRgb(120, 175, 245));
 	private static readonly SolidColorBrush ThumbPressed = Brush.Sealed(HdrColor.FromRgb(150, 195, 255));
 	private static readonly SolidColorBrush ThumbDisabled = Brush.Sealed(HdrColor.FromRgb(95, 98, 108));
+	private static readonly SolidColorBrush RailDisabled = Brush.Sealed(HdrColor.FromRgb(56, 58, 66));
 
 	private SliderTrack? _track;
 	private bool _dragging;
@@ -266,7 +267,15 @@ public sealed class Slider : Control
 			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(thumb, ThumbOver) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(thumb, ThumbPressed) });
-			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Background(thumb, ThumbDisabled) });
+			// Disabled mutes the rail and takes the accent out of the fill and the thumb.
+			common.States.Add(new VisualState
+			{
+				Name = "Disabled",
+				Storyboard = TemplateStates.Hold(
+					(rail, Border.BackgroundProperty, RailDisabled),
+					(fill, Border.BackgroundProperty, TemplateStates.DisabledAccent),
+					(thumb, Border.BackgroundProperty, ThumbDisabled)),
+			});
 			VisualStateManager.SetVisualStateGroups(track, [common]);
 
 			return track;

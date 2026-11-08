@@ -186,12 +186,26 @@ public sealed class TextBox : Control
 	/// <summary>The caret's arranged rect within the field (test seam).</summary>
 	internal Rect CaretRect => _caretVisual.LayoutRect;
 
-	// An image brush can't paint glyphs, so the field's text draws nothing with one, as inherited text does.
-	private protected override void OnForegroundChanged(Brush? foreground) =>
-		_textBlock.Foreground = foreground is TileBrush ? NoText : foreground ?? TextForeground;
+	private protected override void OnForegroundChanged(Brush? foreground) => ShowTextForeground();
 
+	// The text is the box's Foreground, or the built-in look's where it is unset, and the disabled text brush while the box
+	// is disabled, whatever is set. An image brush can't paint glyphs, so the text draws nothing with one, as inherited
+	// text does.
+	private void ShowTextForeground() =>
+		_textBlock.Foreground = !CanHandleInput ? TemplateStates.DisabledForeground : Foreground is TileBrush ? NoText : Foreground ?? TextForeground;
+
+	private protected override void OnIsEnabledChanged(bool isEnabled)
+	{
+		ShowTextForeground();
+		InvalidateContent();
+	}
+
+	// Disabled shows the built-in looks' disabled fill and border over whatever is set, as WinUI's TextBox shows
+	// TextControlBackgroundDisabled; a disabled box has no focus, and its hover is not shown.
 	private protected override VisualContent? UpdateContent()
 	{
+		if (!CanHandleInput)
+			return RetainedRect(TemplateStates.DisabledBackground.CompositionBrush, 3f, TemplateStates.DisabledBorder.CompositionBrush, 1f);
 		var brush = _focused ? FocusBorder : _pointerOver ? HoverBorder : BorderBrush?.CompositionBrush ?? RestBorder;
 		var fill = _focused ? FocusBackground : Background?.CompositionBrush ?? RestBackground;
 		var thickness = _focused ? 1.5f : 1f;

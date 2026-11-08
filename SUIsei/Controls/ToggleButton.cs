@@ -146,7 +146,17 @@ public class ToggleButton : ButtonBase
 			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(baseBorder, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(baseBorder, PressedBackground) });
-			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Dimmed(root) });
+			// Disabled mutes the base and the label as a button's does, and the accent too, so a checked toggle still reads as
+			// checked but no longer in the accent colour.
+			common.States.Add(new VisualState
+			{
+				Name = "Disabled",
+				Storyboard = TemplateStates.Hold(
+					(baseBorder, Border.BackgroundProperty, TemplateStates.DisabledBackground),
+					(baseBorder, Border.BorderBrushProperty, TemplateStates.DisabledBorder),
+					(accent, Border.BackgroundProperty, TemplateStates.DisabledAccent),
+					(presenter, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground)),
+			});
 
 			var check = new VisualStateGroup { Name = "CheckStates" };
 			check.States.Add(new VisualState { Name = "Unchecked", Storyboard = OpacityTo(accent, 0f) });

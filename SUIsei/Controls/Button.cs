@@ -9,8 +9,8 @@ namespace SUIsei.Controls;
 /// button's <see cref="Control.Background"/>, <see cref="Control.BorderBrush"/> and <see cref="Control.BorderThickness"/>,
 /// and the presenter its <see cref="Control.Foreground"/>; where those are unset it shows the built-in look. A
 /// <c>CommonStates</c> <see cref="VisualStateManager"/> group shows the pointer-over and pressed backgrounds, faded in
-/// and out by the border's <see cref="BrushTransition"/>. Click synthesis, <see cref="ButtonBase.Click"/>, and
-/// <see cref="ButtonBase.Command"/> all come from the base.
+/// and out by the border's <see cref="BrushTransition"/>, and while disabled the disabled background, border and text.
+/// Click synthesis, <see cref="ButtonBase.Click"/>, and <see cref="ButtonBase.Command"/> all come from the base.
 /// </summary>
 public sealed class Button : ButtonBase
 {
@@ -51,7 +51,7 @@ public sealed class Button : ButtonBase
 			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
-			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Dimmed(border) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Disabled(border, TemplateStates.DisabledBackground, presenter) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);
 			return border;
 		},
