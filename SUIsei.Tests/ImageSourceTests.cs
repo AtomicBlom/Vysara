@@ -443,6 +443,7 @@ public sealed class ImageSourceTests
 
 	[Test]
 	[NotInParallel(TestIsolation.HotReload)]
+	[SkipWithoutDynamicCode]
 	public void A_hot_reload_rebuild_releases_what_the_old_tree_drew()
 	{
 		try

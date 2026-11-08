@@ -15,6 +15,8 @@ public sealed class FocusManager
 {
 	private readonly GettingFocusEventArgs _gettingArgs = new();
 	private readonly RoutedEventArgs _gotArgs = new();
+	// Elements focus was taken from as they left the live tree, whose LostFocus RaiseReleased has yet to raise.
+	private readonly List<UIElement> _released = [];
 
 	/// <summary>The element that currently holds keyboard focus, or null.</summary>
 	public UIElement? FocusedElement { get; private set; }
@@ -45,9 +47,10 @@ public sealed class FocusManager
 	}
 
 	/// <summary>
-	/// <paramref name="subtree"/> left the live tree. If the focused element is in it, focus is cleared and LostFocus raised
-	/// on that element, so keys no longer go to a detached element and it can stop what focus started (a caret's blink). An
-	/// element that is leaving can't cancel this, so no LosingFocus is raised.
+	/// <paramref name="subtree"/> left the live tree. If the focused element is in it, focus is cleared at once, so keys no
+	/// longer go to a detached element, and its LostFocus is queued for <see cref="RaiseReleased"/>, which the host calls
+	/// once layout is done: an element can leave in the middle of a layout pass (a virtualizing panel recycling a row), and
+	/// no app code runs there. An element that is leaving can't cancel this, so no LosingFocus is raised.
 	/// </summary>
 	internal void ReleaseWithin(UIElement subtree)
 	{
@@ -55,8 +58,25 @@ public sealed class FocusManager
 			return;
 		FocusedElement = null;
 		FocusState = FocusState.Unfocused;
-		_gotArgs.Reset(UIElement.LostFocusEvent, focused);
-		focused.RaiseEvent(UIElement.LostFocusEvent, _gotArgs);
+		_released.Add(focused);
+	}
+
+	/// <summary>
+	/// Raise LostFocus on each element focus was taken from as it left the live tree (<see cref="ReleaseWithin"/>), so it
+	/// can stop what focus started (a caret's blink); one focused again since is left alone. Called by the host outside
+	/// layout. A handler that makes another element leave queues it here, and it is raised in the same call.
+	/// </summary>
+	internal void RaiseReleased()
+	{
+		for (var i = 0; i < _released.Count; i++)
+		{
+			var element = _released[i];
+			if (ReferenceEquals(element, FocusedElement))
+				continue;
+			_gotArgs.Reset(UIElement.LostFocusEvent, element);
+			element.RaiseEvent(UIElement.LostFocusEvent, _gotArgs);
+		}
+		_released.Clear();
 	}
 
 	/// <summary>

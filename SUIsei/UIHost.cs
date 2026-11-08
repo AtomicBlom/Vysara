@@ -136,9 +136,10 @@ public sealed class UIHost
 	public void QueueText(ReadOnlySpan<char> utf16) => _textQueue.Enqueue(utf16.ToString());
 
 	/// <summary>
-	/// Once per frame: lay out each root, release focus from a control that has been disabled, drain pointer queue
-	/// (coalescing moves) → hit-test → route events, then drain keyboard queue → Tab intercepts focus → remaining keys
-	/// route to the focused element. Layout runs first so input hit-tests this frame's geometry.
+	/// Once per frame: lay out each root, raise the focus and pointer events of elements that have left a live tree, release
+	/// focus from a control that has been disabled, drain pointer queue (coalescing moves) → hit-test → route events, then
+	/// drain keyboard queue → Tab intercepts focus → remaining keys route to the focused element, and raise the events of
+	/// elements that input removed. Layout runs first so input hit-tests this frame's geometry.
 	/// </summary>
 	public void Tick(double deltaSeconds, float time, Vector2 framebufferSize)
 	{
@@ -159,13 +160,25 @@ public sealed class UIHost
 		_framebufferSize = new Size(framebufferSize.X, framebufferSize.Y);
 		foreach (var view in _views)
 			view.Root.LayoutPass(_framebufferSize);
+		RaiseReleased();
 		Focus.ReleaseDisabledFocus();
 		DrainPointers();
 		DrainKeyboard();
+		RaiseReleased();
 
 		// Resolve the coarse capture report after routing/focus settle, so it is O(1) reads of this frame's state.
 		WantsPointer = Input.WantsPointer || PointerHeld;
 		WantsKeyboard = Focus.WantsKeyboard;
+	}
+
+	// Raise LostFocus, PointerCaptureLost and PointerExited on the elements that left a live tree since the last call, with
+	// what the host held for them already let go. Elements leave in the middle of layout (a virtualizing panel recycling
+	// rows) and in input handlers, so this runs after the layout pass and again after input is routed: app code never runs
+	// inside layout, and what a click removed hears of it in the same frame.
+	private void RaiseReleased()
+	{
+		Focus.RaiseReleased();
+		Input.RaiseReleased();
 	}
 
 	/// <summary>

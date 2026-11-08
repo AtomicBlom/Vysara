@@ -18,22 +18,32 @@ public sealed class GeometryCollection : Collection<Geometry>, ISubPropertyListe
 	// notifying it would never end.
 	private void ThrowIfReachesThis(Geometry item)
 	{
-		if (Reaches(item, this))
+		if (item is GeometryGroup group && group.GetValue(GeometryGroup.ChildrenProperty) is { } children
+			&& Reaches(children, null, this, []))
 			throw new ArgumentException("A GeometryGroup can't hold itself, directly or through a group inside it.", nameof(item));
+	}
 
-		static bool Reaches(Geometry item, GeometryCollection collection)
-		{
-			if (item is not GeometryGroup group || group.GetValue(GeometryGroup.ChildrenProperty) is not { } children)
-				return false;
-			if (ReferenceEquals(children, collection))
-				return true;
-			foreach (var child in children)
-			{
-				if (Reaches(child, collection))
-					return true;
-			}
+	/// <summary>
+	/// Whether <paramref name="children"/>, or the children of a group inside it at any depth, holds
+	/// <paramref name="group"/> or is <paramref name="collection"/>. Each collection is walked once, in
+	/// <paramref name="visited"/>, so geometry shared down many branches costs no more than geometry used once.
+	/// </summary>
+	internal static bool Reaches(GeometryCollection children, GeometryGroup? group, GeometryCollection? collection,
+		HashSet<GeometryCollection> visited)
+	{
+		if (ReferenceEquals(children, collection))
+			return true;
+		if (!visited.Add(children))
 			return false;
+		foreach (var child in children)
+		{
+			if (ReferenceEquals(child, group))
+				return true;
+			if (child is GeometryGroup inner && inner.GetValue(GeometryGroup.ChildrenProperty) is { } innerChildren
+				&& Reaches(innerChildren, group, collection, visited))
+				return true;
 		}
+		return false;
 	}
 
 	protected override void InsertItem(int index, Geometry item)

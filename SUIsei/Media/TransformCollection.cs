@@ -43,21 +43,20 @@ public sealed class TransformCollection : IList<Transform>
 		_owner.ChildrenChanged();
 	}
 
-	// A group that held itself, directly or through a group inside it, would compose and notify itself without end.
+	// A group that held itself, directly or through a group inside it, would compose and notify itself without end. Each
+	// group is walked once, so transforms shared down many branches cost no more than transforms used once.
 	private void ThrowIfHoldsOwner(Transform item)
 	{
-		if (Holds(item, _owner))
+		if (ReferenceEquals(item, _owner) || item is TransformGroup group && Holds(group, _owner, []))
 			throw new ArgumentException("A TransformGroup can't hold itself, directly or through a group inside it.", nameof(item));
 
-		static bool Holds(Transform item, TransformGroup group)
+		static bool Holds(TransformGroup inner, TransformGroup group, HashSet<TransformGroup> visited)
 		{
-			if (ReferenceEquals(item, group))
-				return true;
-			if (item is not TransformGroup inner)
+			if (!visited.Add(inner))
 				return false;
 			foreach (var child in inner.Children.Items)
 			{
-				if (Holds(child, group))
+				if (ReferenceEquals(child, group) || child is TransformGroup next && Holds(next, group, visited))
 					return true;
 			}
 			return false;

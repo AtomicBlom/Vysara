@@ -61,7 +61,8 @@ public sealed class UIRoot
 	/// focus. Null for a root used standalone in tests.</summary>
 	internal FocusManager? FocusManager { get; set; }
 
-	// A subtree left this root: let go of the focus and pointer state held for any element in it.
+	// A subtree left this root: let go of the focus and pointer state held for any element in it. The events that tell those
+	// elements so are raised by the host once layout is done.
 	internal void ReleaseWithin(UIElement subtree)
 	{
 		FocusManager?.ReleaseWithin(subtree);
