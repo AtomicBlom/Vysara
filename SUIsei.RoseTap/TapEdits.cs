@@ -90,7 +90,7 @@ internal sealed class TapEdits(TapHandles handles)
 			old = Text(CurrentValue(target, dp));
 			if (!Diagnostics.CanParseValue(valueType))
 				return $"cannot set {command.Property}: SUIsei has no markup syntax for a {TapProperties.FriendlyName(valueType)}";
-			if (!Diagnostics.TryParseValue(valueType, command.Value, out var value))
+			if (!Diagnostics.TryParseValue(dp, command.Value, out var value))
 				return $"cannot set {command.Property}: '{command.Value}' is not a {TapProperties.FriendlyName(valueType)}";
 			Diagnostics.SetLocal(target, dp, value);
 			return "applied";

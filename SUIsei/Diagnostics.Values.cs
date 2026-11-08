@@ -14,9 +14,12 @@ public static partial class Diagnostics
 	/// (<c>#RRGGBB</c>, <c>#AARRGGBB</c> or a named colour), a <see cref="Brush"/> from a colour (a new
 	/// <see cref="SolidColorBrush"/> of it), <see cref="Thickness"/> (one, two or four numbers),
 	/// <see cref="Point"/>, <see cref="Vector2"/> and <see cref="Vector3"/>, <see cref="GridLength"/> (<c>Auto</c>,
-	/// <c>*</c>, <c>N*</c> or a number), <see cref="TimeSpan"/> (<c>[[h:]m:]s</c>) and <see cref="RepeatBehavior"/>.
+	/// <c>*</c>, <c>N*</c> or a number), <see cref="TimeSpan"/> (WinUI's grammar, as <c>0:0:0.25</c>, with the forms the
+	/// generator refuses refused here too) and <see cref="RepeatBehavior"/>.
 	/// A nullable type takes what its underlying type does, and <c>{x:Null}</c> where null is allowed. False, with
-	/// <paramref name="value"/> null, for text the type does not accept or a type outside these.
+	/// <paramref name="value"/> null, for text the type does not accept or a type outside these. Text one property alone
+	/// takes, such as <c>Auto</c> for a <see cref="FrameworkElement.Width"/>, needs the property:
+	/// <see cref="TryParseValue(DependencyProperty, string, out object?)"/>.
 	/// </summary>
 	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
 	public static bool TryParseValue(Type type, string text, out object? value)
@@ -85,7 +88,27 @@ public static partial class Diagnostics
 		return value is not null;
 	}
 
-	/// <summary>Whether <see cref="TryParseValue"/> has a syntax for <paramref name="type"/>, so a value of it can be set
+	/// <summary>
+	/// Convert attribute text to a value of <paramref name="property"/> as the XAML generator does for that property:
+	/// what <see cref="TryParseValue(Type, string, out object?)"/> reads for its value type, and <c>Auto</c> (any case)
+	/// for <see cref="FrameworkElement.Width"/> and <see cref="FrameworkElement.Height"/>, read as NaN, sized to content,
+	/// as WinUI's length converter reads it.
+	/// </summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static bool TryParseValue(DependencyProperty property, string text, out object? value)
+	{
+		ArgumentNullException.ThrowIfNull(property);
+		ArgumentNullException.ThrowIfNull(text);
+		RequireEnabled();
+		if (XamlValueSyntax.IsAutoLength(property.OwnerType.FullName ?? "", property.Name, text))
+		{
+			value = float.NaN;
+			return true;
+		}
+		return TryParseValue(property.ValueType, text, out value);
+	}
+
+	/// <summary>Whether <see cref="TryParseValue(Type, string, out object?)"/> has a syntax for <paramref name="type"/>, so a value of it can be set
 	/// from markup text.</summary>
 	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
 	public static bool CanParseValue(Type type)

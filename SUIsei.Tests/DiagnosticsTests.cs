@@ -537,10 +537,42 @@ public sealed class DiagnosticsTests
 	[Arguments(typeof(GridLength), "Fill")]
 	[Arguments(typeof(HdrColor), "#12345")]
 	[Arguments(typeof(Style), "Anything")]
+	[Arguments(typeof(TimeSpan), "2")]
+	[Arguments(typeof(TimeSpan), "0:30")]
+	[Arguments(typeof(TimeSpan), "1.5")]
+	[Arguments(typeof(TimeSpan), "1:02:03:04")]
+	[Arguments(typeof(TimeSpan), "-0:0:1")]
+	[Arguments(typeof(float), "Auto")]
 	public void TryParseValue_refuses_what_the_generator_refuses(Type type, string text)
 	{
 		Diagnostics.TryParseValue(type, text, out var value).ShouldBeFalse();
 		value.ShouldBeNull();
+	}
+
+	[Test]
+	public void TryParseValue_reads_durations_in_WinUIs_grammar()
+	{
+		Parse<TimeSpan>("0:0:0.25").ShouldBe(TimeSpan.FromSeconds(0.25));
+		Parse<TimeSpan>(" 01:02:03 ").ShouldBe(new TimeSpan(1, 2, 3));
+		Parse<TimeSpan>("1.02:03").ShouldBe(new TimeSpan(1, 2, 3, 0));
+		Parse<TimeSpan>("1.02:03:04.5").ShouldBe(new TimeSpan(1, 2, 3, 4, 500));
+		Parse<TimeSpan>("0").ShouldBe(TimeSpan.Zero);
+		Parse<TimeSpan>("0:00").ShouldBe(TimeSpan.Zero);
+	}
+
+	[Test]
+	public void TryParseValue_for_a_property_takes_Auto_where_the_generator_does()
+	{
+		Diagnostics.TryParseValue(FrameworkElement.WidthProperty, "Auto", out var width).ShouldBeTrue();
+		float.IsNaN(width.ShouldBeOfType<float>()).ShouldBeTrue();
+		Diagnostics.TryParseValue(FrameworkElement.HeightProperty, "auto", out var height).ShouldBeTrue();
+		float.IsNaN(height.ShouldBeOfType<float>()).ShouldBeTrue();
+		Diagnostics.TryParseValue(FrameworkElement.WidthProperty, "40", out var pixels).ShouldBeTrue();
+		pixels.ShouldBe(40f);
+
+		Diagnostics.TryParseValue(FrameworkElement.MinWidthProperty, "Auto", out var minWidth).ShouldBeFalse();
+		minWidth.ShouldBeNull();
+		Diagnostics.TryParseValue(UIElement.OpacityProperty, "Auto", out _).ShouldBeFalse();
 	}
 
 	private static T Parse<T>(string text)

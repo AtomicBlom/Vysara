@@ -36,7 +36,7 @@ partial class XamlSourceGenerator
 		["System.Numerics.Vector2"] = (ConvertVector2, "two numbers, 'x,y'"),
 		["System.Numerics.Vector3"] = (ConvertVector3, "three numbers, 'x,y,z'"),
 		["SUIsei.GridLength"] = (ConvertGridLength, "Auto, *, N* or a number"),
-		["System.TimeSpan"] = (ConvertTimeSpan, "WinUI's [d.]h:m:s[.f], such as 0:0:0.25 (in WinUI a bare number is days and m:s is hours and minutes, so write 0:0:2 or 0:0:30)"),
+		["System.TimeSpan"] = (ConvertTimeSpan, XamlValueSyntax.DurationSyntax),
 		["SUIsei.Animation.RepeatBehavior"] = (ConvertRepeatBehavior, "Forever, or a count such as 3x"),
 	};
 
@@ -46,8 +46,15 @@ partial class XamlSourceGenerator
 		var unwrapped = ConverterType(type);
 		if (Converters.TryGetValue(unwrapped.ToDisplayString(), out var converter))
 		{
-			expected = converter.Syntax;
-			return converter.Convert(raw, out code) ? LiteralStatus.Ok : LiteralStatus.BadValue;
+			if (converter.Convert(raw, out code))
+			{
+				expected = converter.Syntax;
+				return LiteralStatus.Ok;
+			}
+			// A duration WinUI reads as days or as hours and minutes gets a message saying how to write it.
+			expected = unwrapped.ToDisplayString() == "System.TimeSpan" && XamlValueSyntax.IsAmbiguousDuration(raw)
+				? XamlValueSyntax.AmbiguousDurationSyntax : converter.Syntax;
+			return LiteralStatus.BadValue;
 		}
 		expected = unwrapped.TypeKind == TypeKind.Enum
 			? $"a member of {unwrapped.Name}"
@@ -286,8 +293,7 @@ partial class XamlSourceGenerator
 
 	private static bool ConvertTimeSpan(string raw, out string code)
 	{
-		code = !XamlValueSyntax.IsAmbiguousDuration(raw) && XamlValueSyntax.TryParseDuration(raw, out var seconds)
-			? $"global::System.TimeSpan.FromSeconds({Fmt(seconds)})" : "";
+		code = XamlValueSyntax.TryParseDuration(raw, out var seconds) ? $"global::System.TimeSpan.FromSeconds({Fmt(seconds)})" : "";
 		return code.Length > 0;
 	}
 

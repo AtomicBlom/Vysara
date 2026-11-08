@@ -35,7 +35,7 @@ public static partial class Diagnostics
 	/// <param name="Name">The property's name, without its owner: <c>Opacity</c>, <c>Row</c>.</param>
 	/// <param name="OwnerType">The type that registered it: the declaring control, or for an attached property the
 	/// type that declares it (<c>Grid</c> for <c>Grid.Row</c>).</param>
-	/// <param name="ValueType">The type of its value, what <see cref="TryParseValue"/> converts text to for it.</param>
+	/// <param name="ValueType">The type of its value, what <see cref="TryParseValue(Type, string, out object?)"/> converts text to for it.</param>
 	/// <param name="Value">Its effective value, coerced.</param>
 	/// <param name="Level">The level <paramref name="Value"/> came from.</param>
 	/// <param name="Source">Where in markup the value was set, when that is known: the style setter for a

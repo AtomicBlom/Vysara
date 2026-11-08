@@ -91,33 +91,132 @@ internal static class XamlValueSyntax
 		return true;
 	}
 
-	/// <summary>Parse a duration as WinUI's XAML reads a <c>TimeSpan</c>, to total seconds: <c>[d.]h:m[:s[.f]]</c>, or a
-	/// whole number of days. So <c>0:0:0.25</c> is a quarter of a second, <c>0:30</c> thirty minutes and <c>2</c> two days.
-	/// A negative duration is refused.</summary>
+	/// <summary>
+	/// Parse a duration to total seconds, the one reading of a <c>TimeSpan</c> both the generator and the runtime use.
+	/// <para>
+	/// The grammar is WinUI's own XAML <c>TimeSpan</c> parser's: <c>[d.]h:m[:s[.f]]</c>, or a bare whole number of days
+	/// <c>d</c>, with whitespace allowed around it. Each part is up to seven digits, <c>h</c> under 24, <c>m</c> and
+	/// <c>s</c> under 60, and <c>f</c> up to nine digits of a second. So <c>0:0:0.25</c> is a quarter of a second,
+	/// <c>1.02:03</c> a day, two hours and three minutes, and <c>2</c> two days. No other form is read: not .NET's
+	/// <c>d:h:m:s</c>, nor a fraction on a bare number (<c>1.5</c>) or on minutes (<c>0:30.5</c>).
+	/// </para>
+	/// <para>
+	/// Of those, SUIsei refuses a negative duration and the forms <see cref="IsAmbiguousDuration"/> names, which read
+	/// differently if a bare number is taken as seconds: a bare number other than 0, and <c>h:m</c> with no day part
+	/// other than <c>0:0</c>. Write those out with seconds, as <c>0:0:2</c> or <c>0:0:30</c>.
+	/// </para>
+	/// </summary>
 	public static bool TryParseDuration(string text, out double seconds)
 	{
+		if (TryParseTimeSpan(text, out seconds, out var hasDays, out var colons) && seconds >= 0 && !IsAmbiguous(seconds, hasDays, colons))
+			return true;
 		seconds = 0;
-		if (!TimeSpan.TryParse(text.Trim(), CultureInfo.InvariantCulture, out var span) || span < TimeSpan.Zero)
+		return false;
+	}
+
+	/// <summary>Whether <paramref name="text"/> is a duration in WinUI's grammar whose meaning depends on reading a bare
+	/// number as seconds rather than days: a bare number other than 0 (two days in WinUI, two seconds read as seconds), or
+	/// <c>h:m</c> with no day part other than zero (thirty minutes in WinUI for <c>0:30</c>, thirty seconds read as
+	/// seconds). <see cref="TryParseDuration"/> refuses these, and a diagnostic says how to write them.</summary>
+	public static bool IsAmbiguousDuration(string text) =>
+		TryParseTimeSpan(text, out var seconds, out var hasDays, out var colons) && IsAmbiguous(seconds, hasDays, colons);
+
+	/// <summary>The durations <see cref="TryParseDuration"/> reads, as a diagnostic names them.</summary>
+	public const string DurationSyntax = "h:m:s[.f] or d.h:m[:s[.f]], WinUI's TimeSpan grammar, such as 0:0:0.25";
+
+	/// <summary>What a diagnostic says for a duration <see cref="IsAmbiguousDuration"/> names.</summary>
+	public const string AmbiguousDurationSyntax = DurationSyntax
+		+ " (WinUI reads a bare number as days and h:m as hours and minutes, so write 0:0:2 or 0:0:30)";
+
+	// A bare number, or h:m, with no day part and not zero.
+	private static bool IsAmbiguous(double seconds, bool hasDays, int colons) => !hasDays && colons <= 1 && seconds != 0;
+
+	// WinUI's TimeSpan parser (TimeSpanFromString in its xstring conversions), part for part and limit for limit, except
+	// that every part it reads needs a digit, where WinUI reads an empty part as 0. A negative duration parses, for the
+	// caller to refuse. `hasDays` is whether it has a "d." part, and `colons` how many colons it holds.
+	private static bool TryParseTimeSpan(string text, out double seconds, out bool hasDays, out int colons)
+	{
+		seconds = 0;
+		hasDays = false;
+		colons = 0;
+		var s = text.Trim();
+		var i = 0;
+		var sign = 1;
+		if (i < s.Length && s[i] == '-')
+		{
+			sign = -1;
+			i++;
+		}
+
+		// The first part is days, unless a colon follows it, when it is hours. WinUI bounds it as days either way.
+		if (!TryReadTimePart(s, ref i, int.MaxValue / 864000, out var first))
 			return false;
-		seconds = span.TotalSeconds;
+		int days = 0, hours, minutes, wholeSeconds = 0;
+		double fraction = 0;
+		if (i == s.Length)
+		{
+			seconds = sign * first * 86400.0;
+			return true;
+		}
+		if (s[i] == '.')
+		{
+			i++;
+			hasDays = true;
+			days = first;
+			if (!TryReadTimePart(s, ref i, int.MaxValue / 36000, out hours))
+				return false;
+		}
+		else
+			hours = first;
+
+		if (i == s.Length || s[i] != ':')
+			return false;
+		i++;
+		colons++;
+		if (!TryReadTimePart(s, ref i, int.MaxValue / 600, out minutes))
+			return false;
+		if (i < s.Length && s[i] == ':')
+		{
+			i++;
+			colons++;
+			if (!TryReadTimePart(s, ref i, int.MaxValue / 10, out wholeSeconds))
+				return false;
+			if (i < s.Length && s[i] == '.')
+			{
+				i++;
+				var start = i;
+				long numerator = 0, denominator = 1;
+				for (; i < s.Length && s[i] is >= '0' and <= '9'; i++)
+				{
+					if (denominator >= int.MaxValue / 10)
+						return false;
+					numerator = numerator * 10 + (s[i] - '0');
+					denominator *= 10;
+				}
+				if (i == start)
+					return false;
+				fraction = (double)numerator / denominator;
+			}
+		}
+		if (i != s.Length || hours >= 24 || minutes >= 60 || wholeSeconds >= 60)
+			return false;
+		seconds = sign * (days * 86400.0 + hours * 3600.0 + minutes * 60.0 + wholeSeconds + fraction);
 		return true;
 	}
 
-	/// <summary>Whether <paramref name="text"/> is a duration SUIsei once read as seconds and WinUI reads otherwise: a bare
-	/// number other than 0 (seconds once, days in WinUI) or <c>m:s</c> (minutes and seconds once, hours and minutes in
-	/// WinUI). The generator refuses these, so markup written for the old reading is found rather than run thousands of
-	/// times slower; <c>h:m:s</c> means the same in both.</summary>
-	public static bool IsAmbiguousDuration(string text)
+	// One part of a TimeSpan: one to seven digits, refused once the value reaches `limit` with another digit to come, as
+	// WinUI bounds each part against overflow.
+	private static bool TryReadTimePart(string s, ref int i, int limit, out int value)
 	{
-		var s = text.Trim();
-		var colons = 0;
-		foreach (var c in s)
+		value = 0;
+		var start = i;
+		for (; i < s.Length && s[i] is >= '0' and <= '9'; i++)
 		{
-			if (c == ':')
-				colons++;
+			if (value >= limit || i - start == 7)
+				return false;
+			value = value * 10 + (s[i] - '0');
 		}
-		return colons == 1
-			|| (colons == 0 && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && number != 0);
+		return i > start;
 	}
 
 	/// <summary>Whether <paramref name="text"/> is <c>Auto</c> (any case) for a property that takes it: WinUI's

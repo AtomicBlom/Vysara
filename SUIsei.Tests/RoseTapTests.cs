@@ -389,6 +389,30 @@ public sealed class RoseTapTests
 	}
 
 	[Test]
+	public void Apply_takes_Auto_for_a_width_as_markup_does()
+	{
+		var (host, view) = Served();
+		using var fake = Connected(host);
+		try
+		{
+			fake.Rows("tree");
+			var width = Command(TapCommands.SetProperty, "#Title", "Width", "120");
+			var auto = Command(TapCommands.SetProperty, "#Title", "Width", "Auto");
+
+			fake.Rows(Apply(width, auto)).ShouldBe(
+			[
+				TapRows.ApplyResult(width, "applied", 2, "NaN"),
+				TapRows.ApplyResult(auto, "applied", 2, "120"),
+			]);
+			float.IsNaN(view.Title.Width).ShouldBeTrue();
+		}
+		finally
+		{
+			Tap.Stop();
+		}
+	}
+
+	[Test]
 	public void Apply_refuses_a_property_it_cannot_set_saying_why()
 	{
 		var (host, view) = Served();
