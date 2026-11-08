@@ -36,6 +36,16 @@ public sealed class XamlMarkupGeneratorTests
 		{
 			public partial class V { public string? Caption { get; set; } }
 			public sealed class Caption : SUIsei.Controls.ContentControl { }
+			public struct Pair { public float A { get; set; } }
+			public sealed class Hidden : SUIsei.Controls.ContentControl { internal Hidden() { } }
+			public sealed class Closed : SUIsei.Controls.ContentControl { private Closed() { } }
+			public sealed class Gate : SUIsei.Controls.ContentControl
+			{
+				public float Shut { get; private set; }
+				public float Built { get; init; }
+				public float Inside { get; internal set; }
+			}
+			public class Level : SUIsei.Controls.ContentControl { public float Depth { get; protected set; } }
 			public static class Palette
 			{
 				public const string Title = "Title";
@@ -405,6 +415,83 @@ public sealed class XamlMarkupGeneratorTests
 		var diagnostic = Fails(body);
 		diagnostic.Id.ShouldBe(id);
 		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	// --- Construction and setters ---
+
+	[Test]
+	public void A_struct_and_a_constructor_the_generated_class_reaches_are_built()
+	{
+		var code = Generates("""<StackPanel.Resources><local:Pair x:Key="P" A="1" /></StackPanel.Resources><local:Hidden />""");
+		code.ShouldContain("new Demo.Pair();");
+		code.ShouldContain(".A = 1f;");
+		code.ShouldContain("new Demo.Hidden();");
+	}
+
+	[Test]
+	public void A_named_struct_is_kept_in_a_field_that_starts_at_its_default()
+	{
+		var xaml = View("""<StackPanel.Resources><local:Pair x:Name="Named" x:Key="P" A="2" /></StackPanel.Resources>""");
+		XamlGeneratorHarness.Run(xaml, CodeBehind).AllGeneratedText().ShouldContain("internal Demo.Pair Named = default;");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_element_whose_constructor_the_generated_class_cannot_reach_is_SUISEI025() =>
+		Fails("<local:Closed />").Id.ShouldBe("SUISEI025");
+
+	[Test]
+	public void A_setter_the_generated_class_reaches_is_set_as_an_attribute_and_as_a_property_element()
+	{
+		var code = Generates("""<local:Gate Inside="1" /><local:Gate><local:Gate.Inside>2</local:Gate.Inside></local:Gate>""");
+		code.ShouldContain(".Inside = 1f;");
+		code.ShouldContain(".Inside = 2f;");
+	}
+
+	[Test]
+	[Arguments("<local:Gate Shut=\"1\" />", "private setter")]
+	[Arguments("<local:Gate><local:Gate.Shut>1</local:Gate.Shut></local:Gate>", "private setter")]
+	[Arguments("<local:Gate Built=\"1\" />", "init-only")]
+	[Arguments("<local:Gate><local:Gate.Built>1</local:Gate.Built></local:Gate>", "init-only")]
+	[Arguments("<local:Level Depth=\"1\" />", "protected setter")]
+	public void A_setter_the_generated_class_cannot_call_is_SUISEI025_at_its_line(string body, string reason)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI025");
+		diagnostic.GetMessage().ShouldContain(reason);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
+	public void A_protected_setter_is_set_on_an_unsealed_root_which_the_generated_class_derives_from()
+	{
+		const string xaml = """
+			<local:Level xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			             xmlns:local="using:Demo"
+			             x:Class="Demo.W" Depth="2">
+			  <local:Level.Depth>3</local:Level.Depth>
+			</local:Level>
+			""";
+		var codeBehind = CodeBehind.Replace("public partial class V", "public partial class W { } public partial class V");
+		var result = XamlGeneratorHarness.Run(xaml, codeBehind);
+		result.Diagnostics.ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain("this.Depth = 2f;");
+		XamlGeneratorHarness.CompileErrors(xaml, codeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_internal_setter_is_set_where_the_library_gives_the_view_access_to_its_internals()
+	{
+		var library = XamlGeneratorHarness.Library("Lib", $$"""
+			[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("{{XamlGeneratorHarness.AssemblyName}}")]
+			namespace Lib { public sealed class Dial : SUIsei.Controls.ContentControl { public float Turn { get; internal set; } } }
+			""");
+		var xaml = View("""<lib:Dial xmlns:lib="using:Lib" Turn="3" />""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind, libraries: [library]);
+		result.Diagnostics.ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain(".Turn = 3f;");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind, libraries: [library]).ShouldBeEmpty();
 	}
 
 	// --- Ignorable markup and extra children in the forms that take one ---

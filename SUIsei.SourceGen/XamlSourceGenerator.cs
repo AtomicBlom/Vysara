@@ -427,11 +427,11 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			gen.Report(ns == ExtensionNs ? UnknownExtensionMember : UnknownElement, el, el.Name.LocalName);
 			return null;
 		}
-		if (!isRoot && !IsConstructible(type))
+		if (!isRoot && !IsConstructible(gen, type))
 		{
 			gen.Report(OutsideSubset, el, $"An element of {type.Name}", type.IsAbstract
 				? $" ({type.Name} is abstract; write one of the types derived from it)"
-				: $" (markup builds an object through a public parameterless constructor, which {type.Name} doesn't have; make it in code)");
+				: $" (markup builds an object through a parameterless constructor the generated class can reach, which {type.Name} doesn't have; make it in code)");
 			return null;
 		}
 
@@ -519,9 +519,9 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 
 			var prop = FindProperty(type, name);
 			if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
-			if (!HasAccessibleSetter(prop, gen.Compilation))
+			if (UnassignableReason(gen, prop, type, var == "this") is { } unassignable)
 			{
-				gen.Report(OutsideSubset, attr, $"Setting {type.Name}.{name}", " (it has no public setter)");
+				gen.Report(OutsideSubset, attr, $"Setting {type.Name}.{name}", unassignable);
 				continue;
 			}
 

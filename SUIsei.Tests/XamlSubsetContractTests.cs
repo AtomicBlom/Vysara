@@ -31,6 +31,13 @@ public sealed class XamlSubsetContractTests
 				public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 			}
 			public sealed class Item { public string Title { get; set; } = ""; }
+			public sealed class Plate : SUIsei.Controls.ContentControl
+			{
+				public float Locked { get; private set; }
+				public float Depth { get; init; }
+			}
+			public struct Pair { public float A { get; set; } }
+			public sealed class Made : SUIsei.Controls.ContentControl { internal Made() { } }
 			public static class Palette { public const string Title = "Title"; }
 		}
 		namespace SUIsei.Extensions
@@ -76,6 +83,7 @@ public sealed class XamlSubsetContractTests
 		("elements and attributes", """<Border Width="10" Background="#FF0000" HorizontalAlignment="Left" />"""),
 		("x:Class and x:Name", """<TextBlock x:Name="Named" Text="hi" />"""),
 		("x:FieldModifier", """<TextBlock x:Name="Shown" x:FieldModifier="Public" /><TextBlock x:Name="Kept" x:FieldModifier="private" Text="{x:Bind ViewModel.Caption, Mode=OneWay}" />"""),
+		("a struct, and a constructor the view's assembly reaches", """<StackPanel.Resources><local:Pair x:Key="P" A="1" /></StackPanel.Resources><local:Made />"""),
 		("x:Key", """<StackPanel.Resources><Style x:Key="K" TargetType="Border" /></StackPanel.Resources>"""),
 		("x:DataType", """<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:DataType="local:Item"><TextBlock Text="{x:Bind Title}" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>"""),
 		("property element: value", """<Border><Border.Padding>1,2</Border.Padding></Border>"""),
@@ -173,8 +181,10 @@ public sealed class XamlSubsetContractTests
 		("a negative duration", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="-0:0:1" />"""), "SUISEI012"),
 		("a child its parent's content can't take", """<StackPanel><SolidColorBrush Color="Red" /></StackPanel>""", "SUISEI026"),
 		("an element of an abstract type", """<Border><Border.Background><Brush /></Border.Background></Border>""", "SUISEI025"),
-		("an element with no public parameterless constructor", """<Image><Image.Source><suisei:HostImageSource /></Image.Source></Image>""", "SUISEI025"),
+		("an element with no parameterless constructor the generated class reaches", """<Image><Image.Source><suisei:HostImageSource /></Image.Source></Image>""", "SUISEI025"),
 		("a property with no public setter", """<ListView SelectedIndex="2" />""", "SUISEI004"),
+		("a property whose setter the generated class can't reach", """<local:Plate Locked="1" />""", "SUISEI025"),
+		("a property with an init-only setter", """<local:Plate><local:Plate.Depth>1</local:Plate.Depth></local:Plate>""", "SUISEI025"),
 	];
 
 	// WinUI forms that build with one warning, since ignoring them changes nothing the view shows.

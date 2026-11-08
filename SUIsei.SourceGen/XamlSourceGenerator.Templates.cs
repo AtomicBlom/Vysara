@@ -53,7 +53,7 @@ partial class XamlSourceGenerator
 		var ownsMember = ResolveType(gen.Compilation, ns, owner) is { } named && IsAssignableTo(ownerType, named);
 		if (ownsMember && FindAnyProperty(ownerType, prop) is { } member)
 		{
-			EmitMemberPropertyElement(gen, scope, ownerVar, member, propEl);
+			EmitMemberPropertyElement(gen, scope, ownerVar, ownerType, member, propEl);
 			return;
 		}
 
@@ -126,14 +126,18 @@ partial class XamlSourceGenerator
 
 	// <Owner.Prop> for a property of the element: text is converted for the property's type, one object is assigned, and
 	// for a collection (a type with a one-argument Add) each object is added — the only form a get-only collection takes.
-	private static void EmitMemberPropertyElement(Gen gen, Scope scope, string ownerVar, IPropertySymbol member, XElement propEl)
+	// Assigning needs a setter the generated class can reach, as an attribute does.
+	private static void EmitMemberPropertyElement(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, IPropertySymbol member, XElement propEl)
 	{
 		var children = ObjectChildren(propEl);
 		var text = TextContent(propEl);
+		var unassignable = member.SetMethod is null ? null : UnassignableReason(gen, member, ownerType, ownerVar == "this");
 		if (children.Count == 0)
 		{
 			if (text is null || member.SetMethod is null)
 				gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (needs a value, or objects for a collection)");
+			else if (unassignable is not null)
+				gen.Report(OutsideSubset, propEl, $"Setting {ownerType.Name}.{member.Name}", unassignable);
 			else if (ConvertOrReport(gen, propEl, member.Type, text, member.Name, member) is { } code)
 				EmitSet(gen, scope, propEl, member.ContainingType, ownerVar, member, code);
 			return;
@@ -146,7 +150,9 @@ partial class XamlSourceGenerator
 
 		if (children.Count == 1 && member.SetMethod is not null && ChildFits(gen, children[0], member.Type))
 		{
-			if (EmitElement(gen, scope, children[0]) is { } childVar)
+			if (unassignable is not null)
+				gen.Report(OutsideSubset, propEl, $"Setting {ownerType.Name}.{member.Name}", unassignable);
+			else if (EmitElement(gen, scope, children[0]) is { } childVar)
 				EmitSet(gen, scope, propEl, member.ContainingType, ownerVar, member, childVar);
 			return;
 		}

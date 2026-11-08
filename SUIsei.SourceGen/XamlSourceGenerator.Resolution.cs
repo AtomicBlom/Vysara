@@ -411,17 +411,43 @@ partial class XamlSourceGenerator
 		return null;
 	}
 
-	// Whether markup can build an element of `type`: a class that isn't abstract, with a public parameterless constructor.
-	private static bool IsConstructible(INamedTypeSymbol type) =>
-		type is { IsAbstract: false, IsStatic: false, TypeKind: TypeKind.Class }
-		&& type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
+	// Whether markup can build an element of `type`: a class that isn't abstract or a struct, with a parameterless
+	// constructor the generated class can call (a struct has one unless it declares its own).
+	private static bool IsConstructible(Gen gen, INamedTypeSymbol type)
+	{
+		if (type is not { IsAbstract: false, IsStatic: false, TypeKind: TypeKind.Class or TypeKind.Struct })
+			return false;
+		return type.InstanceConstructors.FirstOrDefault(c => c.Parameters.Length == 0) is { } constructor
+			? gen.Compilation.IsSymbolAccessibleWithin(constructor, GeneratedClass(gen))
+			: type.TypeKind == TypeKind.Struct;
+	}
 
-	// Whether generated code may assign `prop`: its setter is public (or internal, for a type in the view's own assembly,
-	// which generated code is compiled into).
-	private static bool HasAccessibleSetter(IPropertySymbol prop, Compilation compilation) =>
-		prop.SetMethod is { } set && (set.DeclaredAccessibility == Accessibility.Public
-			|| (set.DeclaredAccessibility is Accessibility.Internal or Accessibility.ProtectedOrInternal
-				&& SymbolEqualityComparer.Default.Equals(prop.ContainingAssembly, compilation.Assembly)));
+	// Why generated code can't assign `prop` on an element of `receiverType`, or null when it can: its setter must be
+	// accessible from the generated class, as Compilation.IsSymbolAccessibleWithin judges it, and not init-only. `onThis`
+	// is an unsealed root, which the generated class derives from and assigns through `this`, so a protected setter is
+	// reached too. The compilation the generator reads holds only the code-behind's half of the class, which needn't name
+	// the root type as its base, so a protected setter on `this` is allowed by its accessibility when that half doesn't.
+	private static string? UnassignableReason(Gen gen, IPropertySymbol prop, INamedTypeSymbol receiverType, bool onThis)
+	{
+		if (prop.SetMethod is not { } set)
+			return " (it has no setter)";
+		if (set.IsInitOnly)
+			return " (its setter is init-only, which runs only while an object is constructed)";
+		if (gen.Compilation.IsSymbolAccessibleWithin(set, GeneratedClass(gen), onThis ? gen.PageType : receiverType))
+			return null;
+		if (onThis && set.DeclaredAccessibility switch
+		{
+			Accessibility.Protected or Accessibility.ProtectedOrInternal => true,
+			Accessibility.ProtectedAndInternal => set.ContainingAssembly.GivesAccessTo(gen.Compilation.Assembly),
+			_ => false,
+		})
+			return null;
+		return $" (its {set.DeclaredAccessibility.ToString().ToLowerInvariant()} setter isn't accessible from the generated class)";
+	}
+
+	// What generated code is compiled within, for accessibility: the view's class where the code-behind declares it, else
+	// the view's assembly.
+	private static ISymbol GeneratedClass(Gen gen) => (ISymbol?)gen.PageType ?? gen.Compilation.Assembly;
 
 	// An attached property set as an attribute — `Grid.Row="0"`, or `suisei:Owner.Prop="…"` from the extension namespace:
 	// a call to the owner type's static Set<Prop>(element, value), the value converted for the setter's parameter type or
