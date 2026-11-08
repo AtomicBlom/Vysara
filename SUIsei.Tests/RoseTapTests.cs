@@ -1067,7 +1067,7 @@ public sealed class RoseTapTests
 	[Test]
 	public void Start_brings_up_the_endpoint_which_greets_as_the_contract_says()
 	{
-		DiagnosticsEndpoint.Start();
+		StartEndpoint();
 		using var client = new NamedPipeClientStream(".", EndpointWire.PipeName("suisei-diag-{pid}", Environment.ProcessId), PipeDirection.InOut);
 		client.Connect(TimeSpan.FromSeconds(10));
 
@@ -1081,7 +1081,7 @@ public sealed class RoseTapTests
 	[Test]
 	public void The_endpoint_loads_the_tap_from_its_file_and_the_tap_serves_the_game()
 	{
-		DiagnosticsEndpoint.Start();
+		StartEndpoint();
 
 		var (host, _) = Served();
 		using var fake = new FakeHost(host);
@@ -1096,5 +1096,70 @@ public sealed class RoseTapTests
 		fake.Greeting().ShouldStartWith($"RoseTap/5/{fake.Key}");
 		fake.Rows("tree").Length.ShouldBe(14);
 		fake.Ask("detach").ShouldBe("released");
+	}
+
+	[Test]
+	public void The_endpoint_refuses_a_tap_outside_the_folders_taps_load_from()
+	{
+		StartEndpoint();
+		var elsewhere = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"suisei-tap-elsewhere-{Guid.NewGuid():N}")).FullName;
+		var copy = Path.Combine(elsewhere, Path.GetFileName(typeof(Tap).Assembly.Location));
+		System.IO.File.Copy(typeof(Tap).Assembly.Location, copy);
+
+		using var client = new NamedPipeClientStream(".", EndpointWire.PipeName("suisei-diag-{pid}", Environment.ProcessId), PipeDirection.InOut);
+		client.Connect(TimeSpan.FromSeconds(10));
+		TapWire.ReadMessage(client).ShouldNotBeNull().ShouldStartWith(EndpointWire.GreetingPrefix);
+
+		TapWire.WriteMessage(client, EndpointWire.LoadRequest(copy, "SUIsei.RoseTap.Tap", ""));
+		var (loaded, detail) = EndpointWire.ReadReply(TapWire.ReadMessage(client).ShouldNotBeNull());
+
+		loaded.ShouldBeFalse();
+		detail.ShouldContain("is not in a folder this endpoint loads taps from");
+	}
+
+	[Test]
+	public void Given_no_folders_taps_load_from_RoseMCPs_taps_folder()
+	{
+		var localAppData = Path.Combine(Path.GetTempPath(), "local");
+
+		DiagnosticsEndpoint.DefaultTapDirectories(_ => null, localAppData)
+			.ShouldBe([Path.Combine(localAppData, "BinaryVibrance", "RoseMCP", "taps")]);
+	}
+
+	[Test]
+	public void A_deploy_root_takes_the_place_of_RoseMCPs_install_root()
+	{
+		var root = Path.Combine(Path.GetTempPath(), "rose");
+		var environment = new Dictionary<string, string?> { [DiagnosticsEndpoint.DeployRootVariable] = root };
+
+		DiagnosticsEndpoint.DefaultTapDirectories(environment.GetValueOrDefault, Path.Combine(Path.GetTempPath(), "local"))
+			.ShouldBe([Path.Combine(root, "taps")]);
+	}
+
+	[Test]
+	public void The_taps_variable_adds_each_full_path_it_names_once()
+	{
+		var localAppData = Path.Combine(Path.GetTempPath(), "local");
+		var taps = Path.Combine(localAppData, "BinaryVibrance", "RoseMCP", "taps");
+		var first = Path.Combine(Path.GetTempPath(), "first");
+		var second = Path.Combine(Path.GetTempPath(), "second");
+		var named = string.Join(Path.PathSeparator, first, "", " relative/taps ", second, first, taps);
+		var environment = new Dictionary<string, string?> { [DiagnosticsEndpoint.TapsVariable] = named };
+
+		DiagnosticsEndpoint.DefaultTapDirectories(environment.GetValueOrDefault, localAppData).ShouldBe([taps, first, second]);
+	}
+
+	[Test]
+	public void With_no_local_application_data_and_nothing_named_no_folder_lets_a_tap_in()
+	{
+		DiagnosticsEndpoint.DefaultTapDirectories(_ => null, "").ShouldBeEmpty();
+	}
+
+	// Starts the endpoint, once per process, with the folder this test run's tap is built to among the folders RoseMCP
+	// finds taps in, so the endpoint's own default lets that tap in and nothing from elsewhere.
+	private static void StartEndpoint()
+	{
+		Environment.SetEnvironmentVariable(DiagnosticsEndpoint.TapsVariable, Path.GetDirectoryName(typeof(Tap).Assembly.Location));
+		DiagnosticsEndpoint.Start();
 	}
 }

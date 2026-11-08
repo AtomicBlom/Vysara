@@ -38,6 +38,11 @@
     <InternalsVisibleTo Include="SUIsei.Tests" />
   </ItemGroup>
 
+  <!-- The RoseMcp.Tap code compiled in below is under its own licence, whose notice ships with this package. -->
+  <ItemGroup>
+    <None Include="..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="THIRD-PARTY-NOTICES.md" />
+  </ItemGroup>
+
   <PropertyGroup>
     <RoseMcpTapDir>$(MSBuildThisFileDirectory)..\external\RoseMcp.Tap\</RoseMcpTapDir>
   </PropertyGroup>

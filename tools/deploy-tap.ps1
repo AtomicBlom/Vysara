@@ -14,8 +14,9 @@
     only confuse whoever reads the folder.
 
     A game opens that endpoint only when its runtime config turns SUIsei.Diagnostics.Enabled on (see
-    SUIsei.RoseTap/README.md). A game that has loaded the tap holds the file open, so close it before
-    deploying again.
+    SUIsei.RoseTap/README.md), and by default loads a tap only from this taps folder and the folders
+    $env:ROSEMCP_TAPS names, reading $env:ROSEMCP_DEPLOY_ROOT as this script does. A game that has loaded
+    the tap holds the file open, so close it before deploying again.
 
     Paths use forward slashes throughout; PowerShell accepts them on Windows.
 
