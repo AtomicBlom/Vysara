@@ -238,4 +238,156 @@ public sealed class RenderFailureTests
 		// (which would differ everywhere), is nothing.
 		host.DrawLists[0].Data.Damage.IsEmpty.ShouldBeTrue();
 	}
+
+	// Make the border's composite throw; returns the paint to put back.
+	private static CompositionBrush? Break(Border border)
+	{
+		var content = border.Visual.Content.ShouldBeOfType<RectContent>();
+		var paint = content.Fill;
+		content.Fill = new UnpaintableBrush();
+		border.Visual.MarkDirty();
+		return paint;
+	}
+
+	private static void Mend(Border border, CompositionBrush? paint)
+	{
+		((RectContent)border.Visual.Content!).Fill = paint;
+		border.Visual.MarkDirty();
+	}
+
+	private static Border Box(HdrColor color) => new() { Width = 50f, Height = 50f, Background = new SolidColorBrush(color) };
+
+	/// <summary>A failed composite hands out the last good list again, which changes nothing: its damage is empty, frame
+	/// after frame while the composite keeps failing.</summary>
+	[Test]
+	public void A_failed_composite_shows_the_last_good_list_again_with_no_damage()
+	{
+		var (host, border) = Hosted(new SolidColorBrush(new HdrColor(1f, 0f, 0f, 1f)));
+		host.Render();
+		var good = host.DrawLists[0].Data;
+		var revision = good.Revision;
+
+		Break(border);
+		Should.Throw<NotSupportedException>(host.Render);
+		var shown = host.DrawLists[0].Data;
+		shown.ShouldBeSameAs(good);
+		shown.Revision.ShouldBe(revision);
+		shown.Damage.IsEmpty.ShouldBeTrue();
+
+		Should.Throw<NotSupportedException>(host.Render);
+		host.DrawLists[0].Data.Revision.ShouldBe(revision);
+		host.DrawLists[0].Data.Damage.IsEmpty.ShouldBeTrue();
+	}
+
+	/// <summary>A surface whose first composite throws has no good list to show: it hands out
+	/// <see cref="DrawListData.Empty"/>, shared by every surface, and leaves it as it is. Its first good list repaints
+	/// everything.</summary>
+	[Test]
+	public void A_first_composite_that_throws_hands_out_the_empty_list_untouched()
+	{
+		var host = new UIHost();
+		var border = Box(new HdrColor(1f, 0f, 0f, 1f));
+		host.CreateRoot(UILayer.Default).Root.Content = border;
+		var other = Box(new HdrColor(0f, 1f, 0f, 1f));
+		host.CreateRoot(UILayer.Default).Root.Content = other;
+		host.Tick(0.016, 0f, Surface);
+		var paint = Break(border);
+
+		Should.Throw<NotSupportedException>(host.Render);
+		host.DrawLists[0].Data.ShouldBeSameAs(DrawListData.Empty);
+		Should.Throw<NotSupportedException>(host.Render);
+		host.DrawLists[0].Data.ShouldBeSameAs(DrawListData.Empty);
+		DrawListData.Empty.Revision.ShouldBe(0u);
+		DrawListData.Empty.TextureRevision.ShouldBe(0u);
+		DrawListData.Empty.Damage.IsEmpty.ShouldBeTrue();
+
+		Mend(border, paint);
+		host.Render();
+		host.DrawLists[0].Data.Damage.ShouldBe(new Rect(0f, 0f, Surface.X, Surface.Y));
+	}
+
+	/// <summary>
+	/// A host may draw nothing from a render that throws, so what the other views' lists changed that frame is still to
+	/// be drawn: their next lists carry that damage although nothing changed since, for as long as renders keep throwing,
+	/// and the frame after the first render that returns has none.
+	/// </summary>
+	[Test]
+	public void The_damage_of_a_render_that_threw_is_carried_into_the_next_render()
+	{
+		var host = new UIHost();
+		var drawn = Box(new HdrColor(0f, 1f, 0f, 1f));
+		host.CreateRoot(UILayer.Default).Root.Content = drawn;
+		var failing = Box(new HdrColor(1f, 0f, 0f, 1f));
+		host.CreateRoot(UILayer.Default).Root.Content = failing;
+		host.Tick(0.016, 0f, Surface);
+		host.Render();
+
+		((SolidColorBrush)drawn.Background!).Color = new HdrColor(0f, 0f, 1f, 1f);
+		var paint = Break(failing);
+		host.Tick(0.016, 0f, Surface);
+		Should.Throw<NotSupportedException>(host.Render);
+		var recoloured = host.DrawLists[0].Data;
+		var changed = new Rect(75f, 75f, 50f, 50f);
+		recoloured.Damage.ShouldBe(changed);
+		var revision = recoloured.Revision;
+
+		host.Tick(0.016, 0f, Surface);
+		Should.Throw<NotSupportedException>(host.Render); // still failing, and the recolour still undrawn
+		host.DrawLists[0].Data.Revision.ShouldBe(revision);
+		host.DrawLists[0].Data.Damage.ShouldBe(changed);
+
+		Mend(failing, paint);
+		host.Tick(0.016, 0f, Surface);
+		host.Render(); // returns: a host draws this one
+		host.DrawLists[0].Data.Revision.ShouldBe(revision);
+		host.DrawLists[0].Data.Damage.ShouldBe(changed);
+
+		host.Tick(0.016, 0f, Surface);
+		host.Render();
+		host.DrawLists[0].Data.Damage.IsEmpty.ShouldBeTrue();
+	}
+
+	/// <summary>
+	/// Texels rewritten under a surface whose composite keeps failing reach the host at once, as they would on a clean
+	/// frame: the last good list shown again moves its texture revision and damages what the image covers, rather than
+	/// showing the old texels until the composite stops failing.
+	/// </summary>
+	[Test]
+	public void Texels_rewritten_while_a_composite_keeps_failing_damage_the_last_good_list()
+	{
+		var host = new UIHost();
+		var bitmap = new WriteableBitmap(2, 2);
+		var border = Box(new HdrColor(1f, 0f, 0f, 1f));
+		var grid = new Grid();
+		grid.Children.Add(border);
+		grid.Children.Add(new Image { Source = bitmap, Width = 20f, Height = 20f, Stretch = Stretch.Fill });
+		host.CreateRoot(UILayer.Default).Root.Content = grid;
+		host.Tick(0.016, 0f, Surface);
+		host.Render();
+		var good = host.DrawLists[0].Data;
+		var (revision, textureRevision) = (good.Revision, good.TextureRevision);
+
+		var paint = Break(border);
+		bitmap.Invalidate();
+		Should.Throw<NotSupportedException>(host.Render);
+		var shown = host.DrawLists[0].Data;
+		shown.Revision.ShouldBe(revision);
+		shown.TextureRevision.ShouldBe(textureRevision + 1);
+		shown.Damage.ShouldBe(new Rect(90f, 90f, 20f, 20f));
+
+		Should.Throw<NotSupportedException>(host.Render); // the damage carried, as that render threw too
+		host.DrawLists[0].Data.TextureRevision.ShouldBe(textureRevision + 1);
+		host.DrawLists[0].Data.Damage.ShouldBe(new Rect(90f, 90f, 20f, 20f));
+
+		// The same paint again recomposites to what the last good list drew, and the texels were reported already: what
+		// this render says changed is only the damage the renders that threw carried.
+		Mend(border, paint);
+		host.Render();
+		host.DrawLists[0].Data.Revision.ShouldNotBe(revision);
+		host.DrawLists[0].Data.TextureRevision.ShouldBe(textureRevision + 1);
+		host.DrawLists[0].Data.Damage.ShouldBe(new Rect(90f, 90f, 20f, 20f));
+
+		host.Render();
+		host.DrawLists[0].Data.Damage.IsEmpty.ShouldBeTrue();
+	}
 }

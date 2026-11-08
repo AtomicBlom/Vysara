@@ -189,7 +189,8 @@ public sealed class UIHost
 	/// Composite each view's visual tree → <see cref="DrawLists"/>, and report the texture sources no list samples any
 	/// more → <see cref="ReleasedTextures"/>. A view whose composite throws keeps its last good list and is composited
 	/// whole again next frame; the other views still draw, the texture report is still made, and then the first such
-	/// exception is rethrown.
+	/// exception is rethrown. A host may leave the lists of a render that throws undrawn, so the next render's lists
+	/// carry their <see cref="DrawListData.Damage"/> too.
 	/// </summary>
 	public void Render()
 	{
@@ -210,6 +211,12 @@ public sealed class UIHost
 					failure ??= ExceptionDispatchInfo.Capture(exception);
 					list = view.Root.LastDraw();
 				}
+				if (!view.UndrawnDamage.IsEmpty)
+				{
+					// A copy, so the list its compositor keeps handing out says only what that compositor stamped.
+					list = list.WithDamage(list.Damage.Union(view.UndrawnDamage));
+					view.UndrawnDamage = Rect.Zero;
+				}
 				_drawLists.Add((view.Surface, list));
 				view.Textures.Track(list, _textures);
 			}
@@ -218,7 +225,11 @@ public sealed class UIHost
 		{
 			_textures.EndRender();
 		}
-		failure?.Throw();
+		if (failure is null)
+			return;
+		for (var i = 0; i < _drawLists.Count; i++)
+			_views[i].UndrawnDamage = _drawLists[i].Data.Damage;
+		failure.Throw();
 	}
 
 	/// <summary>Focus / capture / over-chains for input + focus tests.</summary>

@@ -111,16 +111,18 @@ internal sealed class UIDrawList
 	}
 
 	/// <summary>Give up a composite that failed part way, before its <see cref="End"/>: the list handed out last stays
-	/// current and its buffers untouched, and the next <see cref="Begin"/> refills the set this one was filling. Handed
-	/// out again, that list has changed nothing, so its damage is nothing.</summary>
+	/// current and its buffers untouched, and the next <see cref="Begin"/> refills the set this one was filling. That list
+	/// is handed out again as <see cref="Resubmit"/> hands it out: its geometry has changed nothing, but a source it samples
+	/// may have changed its texels since, and a surface that keeps failing would otherwise keep showing the old ones.
+	/// Before the first <see cref="End"/> there is no list but <see cref="DrawListData.Empty"/>, which is left alone.</summary>
 	public void Abandon()
 	{
 		Revision--;
 		_set = _sets[Revision & 1];
+		_surfaceSize = Last.CoordinateSize;
 		_open = false;
 		_layers.Clear();
-		if (Revision > 0)
-			Last.StampDamage(Rect.Zero);
+		Resubmit();
 	}
 
 	/// <summary>

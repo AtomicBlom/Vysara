@@ -33,4 +33,8 @@ public sealed class UIView
 
 	/// <summary>The texture sources this view's current draw list holds on its host.</summary>
 	internal SurfaceTextures Textures { get; } = new();
+
+	/// <summary>The damage of the list a render that threw handed out for this view, which the host may not have drawn: the
+	/// next render's list carries it as well as its own.</summary>
+	internal Rect UndrawnDamage { get; set; }
 }
