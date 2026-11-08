@@ -105,6 +105,32 @@ public sealed class SpatialFocusTests
 	}
 
 	[Test]
+	public void The_dpad_moves_down_a_stacked_column_of_content_controls()
+	{
+		// A menu's shape: a bordered panel holding a column of lines, each a content control round a border
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		var lines = new StackPanel();
+		var items = new ContentControl[3];
+		for (int i = 0; i < 3; i++)
+		{
+			items[i] = new ContentControl { Content = new Border { Height = 30f, Child = new TextBlock { Text = $"line {i}" } } };
+			lines.Children.Add(items[i]);
+		}
+		var column = new StackPanel();
+		column.Children.Add(new TextBlock { Text = "Title" });
+		column.Children.Add(lines);
+		view.Root.Content = new Border { Width = 300f, HorizontalAlignment = HorizontalAlignment.Left, Child = column };
+		host.Tick(0.016, 0f, Surface);
+
+		host.Focus.TrySetFocus(items[0], FocusState.Keyboard);
+		Press(host, VirtualKey.GamepadDPadDown);
+		host.Focus.FocusedElement.ShouldBe(items[1]);
+		Press(host, VirtualKey.GamepadDPadDown);
+		host.Focus.FocusedElement.ShouldBe(items[2]);
+	}
+
+	[Test]
 	public void A_presses_the_focused_button()
 	{
 		var (host, b) = Grid3(out _);
