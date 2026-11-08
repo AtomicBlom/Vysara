@@ -1,3 +1,4 @@
+using SUIsei.Composition;
 using SUIsei.Media;
 
 namespace SUIsei.Tests;

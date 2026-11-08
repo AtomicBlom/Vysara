@@ -66,7 +66,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor BindTypeMismatch = new("SUISEI009", "Incompatible x:Bind types",
 		"x:Bind source type '{0}' is not assignable to target property '{1}' of type '{2}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor EventHandlerSignature = new("SUISEI010", "Bad event handler",
-		"'{0}' has no handler '{1}(object, RoutedEventArgs)' for event '{2}'", "SUIsei", DiagnosticSeverity.Error, true);
+		"'{0}' has no handler '{1}({2})' for event '{3}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor InvalidName = new("SUISEI011", "Invalid x:Name",
 		"x:Name '{0}' is not usable as a field — it must be a unique, non-reserved C# identifier", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor InvalidLiteral = new("SUISEI012", "Invalid property value",
@@ -95,6 +95,77 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"'{0}' is not a member of the SUIsei extension namespace (SUIsei.Extensions)", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor InvalidPathMarkup = new("SUISEI024", "Invalid path markup",
 		"'{0}' is not valid path markup for property '{1}', {2}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor TemplateValueOnLocal = new("SUISEI027", "Template value set as the part's own",
+		"In a ControlTemplate, {0} is set through its setter as the part's local value, not as the template's: {1}", "SUIsei", DiagnosticSeverity.Warning, true);
+	private static readonly DiagnosticDescriptor OutsideSubset = new("SUISEI025", "Outside the XAML subset",
+		"{0} is outside the XAML subset{1}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor WrongChildType = new("SUISEI026", "Child of the wrong type",
+		"'{0}' cannot hold a {1}: its {2} takes a {3}", "SUIsei", DiagnosticSeverity.Error, true);
+
+	// The x: directives SUIsei reads, and where: x:Name on any element (and on a visual state or group), x:FieldModifier
+	// beside it, x:Key on a resource, x:Class on the root and x:DataType on a DataTemplate. x:Uid is ignored with a
+	// warning, since with no localization resources the text the markup writes is the text WinUI would show without a
+	// resource for it. Every other directive (x:Load, x:Phase, x:DeferLoadStrategy, x:DefaultBindMode, …) is reported
+	// where it is written, not skipped, since skipping it changes what the view does: an x:Load="False" element would be
+	// loaded.
+	private static bool IsDirective(Gen gen, XElement el, XAttribute attr, bool isRoot = false)
+	{
+		if (attr.Name.Namespace != X)
+			return false;
+		switch (attr.Name.LocalName)
+		{
+			case "Uid":
+				gen.Report(IgnoredContent, attr, $"x:Uid '{attr.Value}' on {el.Name.LocalName}, so its text is what the markup writes");
+				return true;
+			case "FieldModifier":
+				if (!TryFieldModifier(attr.Value, out _))
+					gen.Report(BadLiteralValue, attr, attr.Value, "x:FieldModifier (public, internal, protected, private, or Friend for internal, in any case)");
+				return true;
+		}
+		var allowed = attr.Name.LocalName switch
+		{
+			"Name" or "Key" => true,
+			"Class" => isRoot,
+			"DataType" => el.Name.LocalName == "DataTemplate",
+			_ => false,
+		};
+		if (!allowed)
+		{
+			gen.Report(OutsideSubset, attr, $"The directive 'x:{attr.Name.LocalName}' on {el.Name.LocalName}", attr.Name.LocalName switch
+			{
+				"Load" or "DeferLoadStrategy" => " (every element is loaded)",
+				"Phase" => " (every element is built at once)",
+				"DefaultBindMode" => " (write the Mode on each {x:Bind})",
+				"Class" => " (only the root element names the class)",
+				"DataType" => " (only a DataTemplate takes one)",
+				_ => "",
+			});
+		}
+		return true;
+	}
+
+	// An x:FieldModifier as WinUI's XAML compiler takes one: public, private, protected, internal, or Friend (Visual Basic's
+	// internal), in any case. `modifier` is the C# modifier for it.
+	private static bool TryFieldModifier(string text, out string modifier)
+	{
+		modifier = text.Trim().ToLowerInvariant() switch
+		{
+			"public" => "public",
+			"private" => "private",
+			"protected" => "protected",
+			"internal" or "friend" => "internal",
+			_ => "",
+		};
+		return modifier.Length > 0;
+	}
+
+	// The field a named element (or a sealed root) is kept in: its x:FieldModifier, internal where it has none, and a value
+	// type's default where a class starts null.
+	private static string FieldDeclaration(XElement el, ITypeSymbol type, string name)
+	{
+		var modifier = el.Attribute(X + "FieldModifier") is { } attr && TryFieldModifier(attr.Value, out var given) ? given : "internal";
+		return $"{modifier} {type.ToDisplayString()} {name} = {(type.IsValueType ? "default" : "null!")};";
+	}
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -356,6 +427,13 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			gen.Report(ns == ExtensionNs ? UnknownExtensionMember : UnknownElement, el, el.Name.LocalName);
 			return null;
 		}
+		if (!isRoot && !IsConstructible(gen, type))
+		{
+			gen.Report(OutsideSubset, el, $"An element of {type.Name}", type.IsAbstract
+				? $" ({type.Name} is abstract; write one of the types derived from it)"
+				: $" (markup builds an object through a parameterless constructor the generated class can reach, which {type.Name} doesn't have; make it in code)");
+			return null;
+		}
 
 		var typeName = type.ToDisplayString();
 		var nameAttr = el.Attribute(X + "Name");
@@ -376,19 +454,19 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		else if (isRoot) // sealed root: use composition (Root field or named field)
 		{
 			var = hasName ? nameAttr!.Value : "Root";
-			gen.Fields.Add($"internal {typeName} {var} = null!;");
+			gen.Fields.Add(FieldDeclaration(el, type, var));
 			scope.Emit($"{var} = new {typeName}();");
 		}
 		else if (hasName)
 		{
 			var = nameAttr!.Value;
-			gen.Fields.Add($"internal {typeName} {var} = null!;");
+			gen.Fields.Add(FieldDeclaration(el, type, var));
 			scope.Emit($"{var} = new {typeName}();");
 		}
 		else if (NeedsField(type, el))
 		{
 			var = NewName(gen, "__b");
-			gen.Fields.Add($"internal {typeName} {var} = null!;");
+			gen.Fields.Add($"internal {typeName} {var} = {(type.IsValueType ? "default" : "null!")};");
 			scope.Emit($"{var} = new {typeName}();");
 		}
 		else
@@ -408,7 +486,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		foreach (var attr in el.Attributes())
 		{
 			var attrNs = attr.Name.Namespace;
-			if (attr.IsNamespaceDeclaration || attrNs == X || IsIgnorable(el, attrNs))
+			if (attr.IsNamespaceDeclaration || IsIgnorable(el, attrNs) || IsDirective(gen, el, attr, isRoot))
 				continue;
 			if (attrNs == ExtensionNs || attr.Name.LocalName.Contains('.'))
 			{
@@ -433,20 +511,25 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 				var handler = ExtractEventHandler(gen, attr, value);
 				if (handler is null)
 					continue;
-				if (!HandlerSignatureOk(gen, handler))
-					gen.Report(EventHandlerSignature, attr, gen.PageType?.ToDisplayString() ?? "the page", handler, name);
+				if (!HandlerSignatureOk(gen, handler, evt))
+					gen.Report(EventHandlerSignature, attr, gen.PageType?.ToDisplayString() ?? "the page", handler, HandlerParameters(evt), name);
 				gen.EventWires.Add($"{var}.{name} += this.{handler};");
 				continue;
 			}
 
 			var prop = FindProperty(type, name);
 			if (prop is null) { gen.Report(UnknownProperty, attr, typeName, name); continue; }
+			if (UnassignableReason(gen, prop, type, var == "this") is { } unassignable)
+			{
+				gen.Report(OutsideSubset, attr, $"Setting {type.Name}.{name}", unassignable);
+				continue;
+			}
 
 			if (!IsMarkup(value, out var inner))
 			{
 				// Plain text, converted for the property's type.
 				if (ConvertOrReport(gen, attr, prop.Type, value, name, prop) is { } code)
-					scope.Emit($"{var}.{prop.Name} = {code};");
+					EmitSet(gen, scope, attr, type, var, prop, code);
 				continue;
 			}
 
@@ -493,7 +576,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (TryMarkupValue(gen, scope, attr, var, inner, prop.Type, name, out var markupCode))
 			{
 				if (markupCode is not null)
-					scope.Emit($"{var}.{prop.Name} = {markupCode};");
+					EmitSet(gen, scope, attr, type, var, prop, markupCode);
 				continue;
 			}
 
@@ -518,6 +601,14 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (childEl.Name.LocalName.Contains('.'))
 			{
 				HandlePropertyElement(gen, scope, var, type, childEl);
+				continue;
+			}
+			// A child the content property can't take is reported here, not left to a C# error in generated code.
+			if (content is { } expected && ContentItemType(type, expected) is { } itemType
+				&& ResolveType(gen.Compilation, childEl.Name.Namespace == XNamespace.None ? Ui : childEl.Name.Namespace, childEl.Name.LocalName) is { } childType
+				&& !gen.Compilation.ClassifyConversion(childType, itemType).IsImplicit)
+			{
+				gen.Report(WrongChildType, childEl, type.Name, childType.Name, expected.Name, itemType.Name);
 				continue;
 			}
 			var childVar = EmitElement(gen, scope, childEl);

@@ -49,14 +49,80 @@ public sealed class TemplateGeneratorTests
 	}
 
 	[Test]
-	public void Template_binding_content_wires_initial_value_and_the_changed_event()
+	public void Template_binding_content_wires_the_control_s_content_template_binding()
 	{
 		var code = XamlGeneratorHarness.Run(ControlTemplateXaml, Vm).AllGeneratedText();
 
-		// {TemplateBinding Content}: ContentControl.Content is a CLR property with a ContentChanged event, so the
-		// presenter is seeded and then kept live through that event (not a dependency-property push).
-		code.ShouldContain(".Content = ((global::SUIsei.Controls.ContentControl)__tc).Content;");
-		code.ShouldContain("((global::SUIsei.Controls.ContentControl)__tc).ContentChanged += (_, _) =>");
+		// {TemplateBinding Content}: ContentControl.Content is a CLR property, so the presenter is wired through the
+		// control's content template binding, which seeds it and keeps it live until the template is replaced.
+		code.ShouldContain("((global::SUIsei.Controls.ContentControl)__tc).RegisterContentTemplateBinding(__v =>");
+		code.ShouldNotContain("ContentChanged");
+	}
+
+	private const string TemplateValueTypes = """
+		namespace Demo
+		{
+			public partial class V { }
+
+			public static class Marker
+			{
+				public static void SetTag(global::SUIsei.UIElement element, string value) { }
+			}
+
+			public sealed class Gauge : global::SUIsei.Controls.Control
+			{
+				public static readonly global::SUIsei.DependencyProperty<Gauge, float> LevelProperty =
+					global::SUIsei.DependencyProperty.Register(nameof(Level), new global::SUIsei.PropertyMetadata<Gauge, float>());
+				public static readonly global::SUIsei.DependencyProperty<Gauge, int> StepsProperty =
+					global::SUIsei.DependencyProperty.Register(nameof(Steps), new global::SUIsei.PropertyMetadata<Gauge, int>());
+
+				public int Level { get => (int)GetValue(LevelProperty); set => SetValue(LevelProperty, value); }
+				public double Steps { get => GetValue(StepsProperty); set => SetValue(StepsProperty, (int)value); }
+			}
+		}
+		""";
+
+	/// <summary>
+	/// In a ControlTemplate an attached property with a dependency property, and a property whose CLR type converts
+	/// implicitly to its dependency property's, take the template's value on the part's Template rung, as every other value
+	/// a template gives its parts. One the generator can only set through a setter (an attached property with no dependency
+	/// property, or a CLR type that does not convert) is reported, as it lands on the part's local value.
+	/// </summary>
+	[Test]
+	public void Template_values_of_attached_and_converted_properties_sit_on_the_template_rung_or_are_reported()
+	{
+		const string xaml = """
+			<ContentControl xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			                xmlns:demo="using:Demo"
+			                x:Class="Demo.V">
+			  <ContentControl.Template>
+			    <ControlTemplate TargetType="ContentControl">
+			      <Grid>
+			        <Border Grid.Row="1" demo:Marker.Tag="x" />
+			        <Canvas>
+			          <Border>
+			            <Canvas.Left>5</Canvas.Left>
+			          </Border>
+			        </Canvas>
+			        <demo:Gauge Level="3" Steps="2" />
+			      </Grid>
+			    </ControlTemplate>
+			  </ContentControl.Template>
+			</ContentControl>
+			""";
+		var result = XamlGeneratorHarness.Run(xaml, TemplateValueTypes);
+		var code = result.AllGeneratedText();
+
+		code.ShouldContain("global::SUIsei.Controls.Grid.RowProperty, ");
+		code.ShouldContain("global::SUIsei.Controls.Canvas.LeftProperty, ");
+		code.ShouldContain("global::Demo.Gauge.LevelProperty, (float)(");
+		code.ShouldNotContain("Grid.SetRow(");
+		code.ShouldNotContain("Canvas.SetLeft(");
+		code.ShouldContain("global::Demo.Marker.SetTag(");
+		code.ShouldContain(".Steps = ");
+		result.DiagnosticIds().ShouldBe(["SUISEI027", "SUISEI027"]);
+		XamlGeneratorHarness.CompileErrors(xaml, TemplateValueTypes).ShouldBeEmpty();
 	}
 
 	private const string DependencyTemplateBindingXaml = """
@@ -149,9 +215,9 @@ public sealed class TemplateGeneratorTests
 			    <ControlTemplate TargetType="ContentControl">
 			      <Border x:Name="Bg" CornerRadius="4" Background="#000000">
 			        <VisualStateManager.VisualStateGroups>
-			          <VisualStateGroup Name="CommonStates">
-			            <VisualState Name="Normal" />
-			            <VisualState Name="PointerOver">
+			          <VisualStateGroup x:Name="CommonStates">
+			            <VisualState x:Name="Normal" />
+			            <VisualState x:Name="PointerOver">
 			              <Storyboard>
 			                <ColorAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
 			                                To="#5060A0" Duration="0:0:0.12" />

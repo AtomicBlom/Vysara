@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Media;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace SUIsei.Media;
 /// <see cref="LinearGradientBrush"/> or an <see cref="ImageBrush"/>.
 /// <para>
 /// A brush is shareable, as in WinUI: put one in a <c>ResourceDictionary</c> and give it to many elements. Each brush
-/// keeps one retained <see cref="SUIsei.CompositionBrush"/>, which every element showing it paints with, and a change to
+/// keeps one retained <see cref="SUIsei.Composition.CompositionBrush"/>, which every element showing it paints with, and a change to
 /// the brush updates that paint in place and marks those elements' visuals dirty, with no layout and no allocation.
 /// An element registers with a brush while it is in a live tree and unregisters when it leaves, so a long-lived brush
 /// does not keep removed elements, or the trees a hot-reload rebuild replaced, alive.

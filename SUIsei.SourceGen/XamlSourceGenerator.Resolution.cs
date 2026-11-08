@@ -258,22 +258,48 @@ partial class XamlSourceGenerator
 		return null;
 	}
 
-	private static bool HandlerSignatureOk(Gen gen, string handler)
+	// Whether the page declares `handler` as a method the event's delegate binds to, as C# binds `this.handler` to it: an
+	// instance method the page can reach, with as many parameters, each passed the same way (by value, ref, out or in) and
+	// taking the delegate's argument (so an (object, RoutedEventArgs) handler binds to an event whose args derive from
+	// RoutedEventArgs), and returning what the delegate returns. A generic handler is left to C#'s inference.
+	private static bool HandlerSignatureOk(Gen gen, string handler, IEventSymbol evt)
 	{
-		if (gen.PageType is null)
+		if (gen.PageType is null || (evt.Type as INamedTypeSymbol)?.DelegateInvokeMethod is not { } invoke)
 			return true;
 		for (INamedTypeSymbol? t = gen.PageType; t is not null; t = t.BaseType)
 		{
 			foreach (var m in t.GetMembers(handler).OfType<IMethodSymbol>())
 			{
-				if (m.ReturnsVoid && m.Parameters.Length == 2 &&
-					m.Parameters[0].Type.SpecialType == SpecialType.System_Object &&
-					m.Parameters[1].Type.Name == "RoutedEventArgs")
+				if (!m.IsStatic && m.Parameters.Length == invoke.Parameters.Length
+					&& gen.Compilation.IsSymbolAccessibleWithin(m, gen.PageType) && (m.IsGenericMethod || Binds(m)))
 					return true;
 			}
 		}
 		return false;
+
+		bool Binds(IMethodSymbol m)
+		{
+			for (var i = 0; i < m.Parameters.Length; i++)
+			{
+				var (from, to) = (invoke.Parameters[i], m.Parameters[i]);
+				if (from.RefKind != to.RefKind || !Converts(from.Type, to.Type, exactly: from.RefKind != RefKind.None))
+					return false;
+			}
+			return invoke.ReturnsVoid ? m.ReturnsVoid : !m.ReturnsVoid && Converts(m.ReturnType, invoke.ReturnType, exactly: false);
+		}
+
+		bool Converts(ITypeSymbol from, ITypeSymbol to, bool exactly)
+		{
+			var conversion = gen.Compilation.ClassifyCommonConversion(from, to);
+			return conversion.IsIdentity || (!exactly && conversion.IsImplicit && conversion.IsReference);
+		}
 	}
+
+	// The parameter types a handler for `evt` takes, as a reader writes them: "object, RoutedEventArgs".
+	private static string HandlerParameters(IEventSymbol evt) =>
+		(evt.Type as INamedTypeSymbol)?.DelegateInvokeMethod is { } invoke
+			? string.Join(", ", invoke.Parameters.Select(static p => p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)))
+			: "object, RoutedEventArgs";
 
 	// The CLR namespaces the default XAML namespace maps to, searched in order, as WinUI's maps Microsoft.UI.Xaml and its
 	// .Controls, .Media, .Shapes, .Documents and .Media.Animation namespaces.
@@ -391,6 +417,64 @@ partial class XamlSourceGenerator
 			t.GetMembers("Add").OfType<IMethodSymbol>().Any(m => m is { MethodKind: MethodKind.Ordinary, Parameters.Length: 1 });
 	}
 
+	// The type a child element must be to go into `target` on `owner`: what a collection's one-argument Add takes, or the
+	// property's own type. Null where it can't be told, which the C# compiler then checks.
+	private static ITypeSymbol? ContentItemType(INamedTypeSymbol owner, ContentTarget target)
+	{
+		for (INamedTypeSymbol? t = owner; t is not null; t = t.BaseType)
+		{
+			if (t.GetMembers(target.Name).OfType<IPropertySymbol>().FirstOrDefault() is not { } prop)
+				continue;
+			if (!target.IsCollection)
+				return prop.Type;
+			foreach (var holder in new[] { prop.Type }.Concat(prop.Type.AllInterfaces))
+			{
+				if (holder.GetMembers("Add").OfType<IMethodSymbol>().FirstOrDefault(m => m is { MethodKind: MethodKind.Ordinary, Parameters.Length: 1 }) is { } add)
+					return add.Parameters[0].Type;
+			}
+			return null;
+		}
+		return null;
+	}
+
+	// Whether markup can build an element of `type`: a class that isn't abstract or a struct, with a parameterless
+	// constructor the generated class can call (a struct has one unless it declares its own).
+	private static bool IsConstructible(Gen gen, INamedTypeSymbol type)
+	{
+		if (type is not { IsAbstract: false, IsStatic: false, TypeKind: TypeKind.Class or TypeKind.Struct })
+			return false;
+		return type.InstanceConstructors.FirstOrDefault(c => c.Parameters.Length == 0) is { } constructor
+			? gen.Compilation.IsSymbolAccessibleWithin(constructor, GeneratedClass(gen))
+			: type.TypeKind == TypeKind.Struct;
+	}
+
+	// Why generated code can't assign `prop` on an element of `receiverType`, or null when it can: its setter must be
+	// accessible from the generated class, as Compilation.IsSymbolAccessibleWithin judges it, and not init-only. `onThis`
+	// is an unsealed root, which the generated class derives from and assigns through `this`, so a protected setter is
+	// reached too. The compilation the generator reads holds only the code-behind's half of the class, which needn't name
+	// the root type as its base, so a protected setter on `this` is allowed by its accessibility when that half doesn't.
+	private static string? UnassignableReason(Gen gen, IPropertySymbol prop, INamedTypeSymbol receiverType, bool onThis)
+	{
+		if (prop.SetMethod is not { } set)
+			return " (it has no setter)";
+		if (set.IsInitOnly)
+			return " (its setter is init-only, which runs only while an object is constructed)";
+		if (gen.Compilation.IsSymbolAccessibleWithin(set, GeneratedClass(gen), onThis ? gen.PageType : receiverType))
+			return null;
+		if (onThis && set.DeclaredAccessibility switch
+		{
+			Accessibility.Protected or Accessibility.ProtectedOrInternal => true,
+			Accessibility.ProtectedAndInternal => set.ContainingAssembly.GivesAccessTo(gen.Compilation.Assembly),
+			_ => false,
+		})
+			return null;
+		return $" (its {set.DeclaredAccessibility.ToString().ToLowerInvariant()} setter isn't accessible from the generated class)";
+	}
+
+	// What generated code is compiled within, for accessibility: the view's class where the code-behind declares it, else
+	// the view's assembly.
+	private static ISymbol GeneratedClass(Gen gen) => (ISymbol?)gen.PageType ?? gen.Compilation.Assembly;
+
 	// An attached property set as an attribute — `Grid.Row="0"`, or `suisei:Owner.Prop="…"` from the extension namespace:
 	// a call to the owner type's static Set<Prop>(element, value), the value converted for the setter's parameter type or
 	// produced by a value markup extension. Anything that does not resolve is reported as an error.
@@ -427,7 +511,7 @@ partial class XamlSourceGenerator
 			return;
 		}
 		if (code is not null)
-			scope.Emit($"{Fq(owner!)}.{setter.Name}({targetVar}, {code});");
+			EmitAttachedSet(gen, scope, attr, owner!, setter, targetVar, code);
 	}
 
 	// Whether an attached property set through `setter` can be set on an object of `target`: the setter's first

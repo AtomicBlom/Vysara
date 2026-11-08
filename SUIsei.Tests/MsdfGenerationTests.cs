@@ -1,4 +1,5 @@
 using System.Text;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Rasterizer;

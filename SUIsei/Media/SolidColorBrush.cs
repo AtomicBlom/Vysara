@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Media;
 
 /// <summary>Paints one colour, as WinUI's <c>SolidColorBrush</c>. In XAML a colour string (<c>Background="#22252E"</c>,

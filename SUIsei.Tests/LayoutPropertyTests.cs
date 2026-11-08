@@ -464,8 +464,8 @@ public sealed class LayoutPropertyTests
 			<Border x:Name="Box" Width="10" Height="10" />
 			<ContentControl x:Name="Host">
 			  <VisualStateManager.VisualStateGroups>
-			    <VisualStateGroup Name="G">
-			      <VisualState Name="S">
+			    <VisualStateGroup x:Name="G">
+			      <VisualState x:Name="S">
 			        <Storyboard>
 			          <DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="{{path}}" From="10" To="20" Duration="0:0:1" EnableDependentAnimation="True" />
 			        </Storyboard>
@@ -483,8 +483,8 @@ public sealed class LayoutPropertyTests
 			<Border x:Name="Box" />
 			<ContentControl>
 			  <VisualStateManager.VisualStateGroups>
-			    <VisualStateGroup Name="G">
-			      <VisualState Name="S">
+			    <VisualStateGroup x:Name="G">
+			      <VisualState x:Name="S">
 			        <Storyboard>
 			          <DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Margin" To="20" />
 			        </Storyboard>

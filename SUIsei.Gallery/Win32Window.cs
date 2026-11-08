@@ -36,7 +36,8 @@ internal sealed unsafe class Win32Window
 	private bool _forcePresent = true;     // set when the OS invalidates the window (paint/resize/first frame)
 	private Vector2 _lastMousePos;         // last WM_MOUSEMOVE in client pixels — where a wheel event hit-tests
 
-	public Win32Window() => _renderer = new GalleryRenderer(Quit);
+	/// <summary>A window showing the gallery's shell, opened at <paramref name="page"/> (by its key), or at its first page.</summary>
+	public Win32Window(string? page) => _renderer = new GalleryRenderer(new GalleryShell(page) { Quit = Quit });
 
 	/// <summary>Register the window class, create the window sized for its monitor's DPI, and show it.
 	/// <paramref name="width"/> and <paramref name="height"/> are the desired client size in DIPs.</summary>

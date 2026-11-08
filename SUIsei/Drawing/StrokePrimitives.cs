@@ -1,5 +1,5 @@
 using System.Numerics;
-using SUIsei.Media;
+using SUIsei.Composition;
 
 namespace SUIsei.Drawing;
 
@@ -100,13 +100,13 @@ internal static class StrokePrimitives
 	/// <paramref name="outward"/> (<c>-t</c> at a start, <c>t</c> at an end). Flat and square caps are drawn as body
 	/// clips and extensions by the caller; this draws round and triangle caps, which stand alone past the end line.
 	/// </summary>
-	public static void Cap(RetainedBuffer<VectorVertex> target, PenLineCap cap, Vector2 point, Vector2 t, Vector2 outward, float h, float margin,
+	public static void Cap(RetainedBuffer<VectorVertex> target, CompositionStrokeCap cap, Vector2 point, Vector2 t, Vector2 outward, float h, float margin,
 		float tolerance, float arc)
 	{
 		var n = Normal(t);
 		switch (cap)
 		{
-			case PenLineCap.Round:
+			case CompositionStrokeCap.Round:
 				{
 					// Half a circle from one side, round the outward direction, to the other.
 					var from = MathF.Atan2(n.Y, n.X);
@@ -114,7 +114,7 @@ internal static class StrokePrimitives
 					Fan(target, point, from, sweep, h, margin, tolerance, arc);
 					break;
 				}
-			case PenLineCap.Triangle:
+			case CompositionStrokeCap.Triangle:
 				{
 					// Two halves split on the axis, each antialiasing its slanted edge, which runs from the side at half a
 					// thickness to the apex half a thickness out.
@@ -140,7 +140,7 @@ internal static class StrokePrimitives
 	/// <paramref name="t2"/>. The inner side needs nothing: the two segments' bodies overlap there. A straight
 	/// continuation draws nothing.
 	/// </summary>
-	public static void Join(RetainedBuffer<VectorVertex> target, PenLineJoin join, Vector2 point, Vector2 t1, Vector2 t2, float h, float margin,
+	public static void Join(RetainedBuffer<VectorVertex> target, CompositionStrokeLineJoin join, Vector2 point, Vector2 t1, Vector2 t2, float h, float margin,
 		float miterLimit, float tolerance, float arc)
 	{
 		var cross = t1.X * t2.Y - t1.Y * t2.X;
@@ -159,14 +159,14 @@ internal static class StrokePrimitives
 
 		switch (join)
 		{
-			case PenLineJoin.Round:
+			case CompositionStrokeLineJoin.Round:
 				{
 					var from = MathF.Atan2(o1.Y, o1.X);
 					var sweep = MathF.Acos(Math.Clamp(Vector2.Dot(o1, o2), -1f, 1f)) * (cross > 0 ? 1f : -1f);
 					Fan(target, point, from, sweep, h, margin, tolerance, arc);
 					break;
 				}
-			case PenLineJoin.Bevel:
+			case CompositionStrokeLineJoin.Bevel:
 				{
 					// The bevel line is at h·cos(θ/2) from the corner along the bisector; each half antialiases it.
 					var lineAt = h * cosHalf;

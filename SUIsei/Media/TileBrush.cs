@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Media;
 
 /// <summary>A brush that paints content scaled into the area painted, as WinUI's <c>TileBrush</c>: the base of
@@ -11,7 +13,7 @@ public abstract class TileBrush : Brush
 				DefaultValue = Stretch.Fill,
 				PropertyChanged = static (b, _, value) =>
 				{
-					b.Surface.Stretch = value;
+					b.Surface.Stretch = value.ToComposition();
 					b.Changed();
 				},
 			});

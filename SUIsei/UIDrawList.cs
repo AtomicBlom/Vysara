@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 
 namespace SUIsei;
@@ -109,20 +110,40 @@ internal sealed class UIDrawList
 		return view;
 	}
 
-	/// <summary>
-	/// For a frame that reuses the current list unchanged: move its texture revision if a source it samples has
-	/// changed its texels since the list recorded them, so the host re-uploads it although the geometry is the same, and
-	/// make the list's damage the pixels drawn with those sources: the whole surface when the list has group layers, whose
-	/// composite (an effect's blur, say) can carry a change past what was drawn, as a recomposite's damage does.
-	/// Allocation-free; one version comparison per slot.
-	/// </summary>
-	public void RefreshTextureRevision()
+	/// <summary>Give up a composite that failed part way, before its <see cref="End"/>: the list handed out last stays
+	/// current and its buffers untouched, and the next <see cref="Begin"/> refills the set this one was filling. That list
+	/// is handed out again as <see cref="Resubmit"/> hands it out: its geometry has changed nothing, but a source it samples
+	/// may have changed its texels since, and a surface that keeps failing would otherwise keep showing the old ones.
+	/// Before the first <see cref="End"/> there is no list but <see cref="DrawListData.Empty"/>, which is left alone.</summary>
+	public void Abandon()
 	{
-		if (Revision == 0 || !_set.RefreshVersions())
+		Revision--;
+		_set = _sets[Revision & 1];
+		_surfaceSize = Last.CoordinateSize;
+		_open = false;
+		_layers.Clear();
+		Resubmit();
+	}
+
+	/// <summary>
+	/// For a frame that reuses the current list unchanged: its damage is nothing, unless a source it samples has changed
+	/// its texels since the list recorded them. Then its texture revision moves, so the host re-uploads it although the
+	/// geometry is the same, and its damage is the pixels drawn with those sources: the whole surface when the list has
+	/// group layers, whose composite (an effect's blur, say) can carry a change past what was drawn, as a recomposite's
+	/// damage does. Allocation-free; one version comparison per slot.
+	/// </summary>
+	public void Resubmit()
+	{
+		if (Revision == 0)
 			return;
+		if (!_set.RefreshVersions())
+		{
+			Last.StampDamage(Rect.Zero);
+			return;
+		}
 		_textureRevision++;
 		Last.StampTextureRevision(_textureRevision);
-		Last.Damage = _set.HasLayers() ? new Rect(0f, 0f, _surfaceSize.X, _surfaceSize.Y) : _set.TexelDamage();
+		Last.StampDamage(_set.HasLayers() ? new Rect(0f, 0f, _surfaceSize.X, _surfaceSize.Y) : _set.TexelDamage());
 	}
 
 	// The slot `source` holds in the list being built, assigning it the next one on first use, so slots are dense and
@@ -256,7 +277,9 @@ internal sealed class UIDrawList
 		switch (layer)
 		{
 			case GlyphLayer.Outline:
-				bias = MathF.Min(run.OutlineThickness / font.DistanceRangeEm, 0.5f - 0.5f / screenPxRange);
+				var wanted = run.OutlineThickness / font.DistanceRangeEm;
+				bias = MathF.Min(wanted, 0.5f - 0.5f / screenPxRange);
+				run.OutlineDrawnClamped = bias < wanted;
 				if (!(bias > 0f))
 					return; // no outline, or text so small the field cannot hold one past the ramp
 				break;

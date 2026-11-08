@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using SUIsei.Composition;
 
 namespace SUIsei.Media;
 
@@ -43,7 +44,7 @@ public sealed class ArcSegment : PathSegment
 	public SweepDirection SweepDirection { get => GetValue(SweepDirectionProperty); set => SetValue(SweepDirectionProperty, value); }
 
 	internal override void AppendTo(CompositionPath path) =>
-		path.ArcTo(new Vector2(Size.Width, Size.Height), RotationAngle, IsLargeArc, SweepDirection, Point.ToVector2());
+		path.ArcTo(new Vector2(Size.Width, Size.Height), RotationAngle, IsLargeArc, SweepDirection.ToComposition(), Point.ToVector2());
 
 	internal override void AppendMarkup(StringBuilder sb)
 	{

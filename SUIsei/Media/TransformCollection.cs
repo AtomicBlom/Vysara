@@ -24,6 +24,7 @@ public sealed class TransformCollection : IList<Transform>
 			var old = _items[index];
 			if (ReferenceEquals(old, value))
 				return;
+			ThrowIfHoldsOwner(value);
 			old.RemoveListener(_owner);
 			_items[index] = value;
 			value.AddListener(_owner);
@@ -36,9 +37,30 @@ public sealed class TransformCollection : IList<Transform>
 	public void Insert(int index, Transform item)
 	{
 		ArgumentNullException.ThrowIfNull(item);
+		ThrowIfHoldsOwner(item);
 		_items.Insert(index, item);
 		item.AddListener(_owner);
 		_owner.ChildrenChanged();
+	}
+
+	// A group that held itself, directly or through a group inside it, would compose and notify itself without end. Each
+	// group is walked once, so transforms shared down many branches cost no more than transforms used once.
+	private void ThrowIfHoldsOwner(Transform item)
+	{
+		if (ReferenceEquals(item, _owner) || item is TransformGroup group && Holds(group, _owner, []))
+			throw new ArgumentException("A TransformGroup can't hold itself, directly or through a group inside it.", nameof(item));
+
+		static bool Holds(TransformGroup inner, TransformGroup group, HashSet<TransformGroup> visited)
+		{
+			if (!visited.Add(inner))
+				return false;
+			foreach (var child in inner.Children.Items)
+			{
+				if (ReferenceEquals(child, group) || child is TransformGroup next && Holds(next, group, visited))
+					return true;
+			}
+			return false;
+		}
 	}
 
 	public bool Remove(Transform item)

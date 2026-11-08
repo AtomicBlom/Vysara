@@ -35,17 +35,30 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 
 	internal override void EnsureResolved()
 	{
-		if (_binding is not null || Target is null || TargetProperty is null)
+		if (Target is null || TargetProperty is null)
 			return;
+		// Walked again on every begin, so a replaced object along the path is the one animated; bound again only when the
+		// walk reaches a different one (AnimationTimeline<T>.EnsureResolved).
 		var (owner, target) = TargetProperty.Resolve(Target, interpolates: false);
+		if (_binding is not null && ReferenceEquals(owner, BoundOwner) && ReferenceEquals(target, BoundProperty))
+			return;
+		_bindingMoved ??= _binding;
 		_binding = target.BindObjects(owner);
 		(BoundOwner, BoundProperty) = (owner, target);
 	}
 
-	internal override void CaptureStart()
+	// Its keys are checked, not where it starts: before the first key the property holds whatever it showed as the run began.
+	internal override void CheckStart(bool released)
 	{
+		if (!_checking)
+		{
+			_beforeCheck = (_binding, _bindingMoved, BoundOwner, BoundProperty);
+			_checking = true;
+		}
+		EnsureResolved();
 		if (_binding is not { } binding)
 			return;
+		ThrowIfSealed();
 		for (var i = 0; i < KeyFrames.Count; i++)
 		{
 			var value = KeyFrames[i].Value;
@@ -55,8 +68,35 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 					$"to {(value is null ? "null" : "a " + value.GetType().Name)} (its key at {KeyFrames[i].KeyTime}).");
 			binding.Validate(value);
 		}
-		binding.CaptureStart();
 	}
+
+	// The binding the animation had before the pending begin's first check, put back if that begin is given up.
+	private (ObjectBinding? Binding, ObjectBinding? Moved, DependencyObject? Owner, IAnimationTarget? Property) _beforeCheck;
+
+	private bool _checking;
+
+	internal override void AbandonStart()
+	{
+		if (!_checking)
+			return;
+		(_binding, _bindingMoved, BoundOwner, BoundProperty) = _beforeCheck;
+		_beforeCheck = default;
+		_checking = false;
+	}
+
+	internal override void CaptureStart()
+	{
+		_beforeCheck = default;
+		_checking = false;
+		_bindingMoved = null;
+		_binding?.CaptureStart();
+	}
+
+	// The binding an earlier begin made, kept while a begin whose walk reached a different object is under way, so what the
+	// earlier run set is released there (AnimationTimeline.BindingMoved).
+	private ObjectBinding? _bindingMoved;
+
+	internal override bool BindingMoved => _bindingMoved is not null;
 
 	internal override void ApplyAt(double progress)
 	{
@@ -68,7 +108,7 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 			binding.WriteStart();
 	}
 
-	internal override void ReleaseTarget() => _binding?.Release();
+	internal override void ReleaseTarget() => (_bindingMoved ?? _binding)?.Release();
 
 	// The key showing at normalized `progress`: of those reached, the one with the latest KeyTime (the last listed of
 	// equal ones). Null before the first.

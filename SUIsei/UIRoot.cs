@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 
 namespace SUIsei;
@@ -43,8 +44,6 @@ public sealed class UIRoot
 		set
 		{
 			if (ReferenceEquals(field, value)) return;
-			if (value is not null)
-				Extensions.TextEffects.ValidateTree(value, Font);
 			field?.SetAttachedRoot(null);
 			field = value;
 			field?.SetAttachedRoot(this);
@@ -58,6 +57,18 @@ public sealed class UIRoot
 	/// <summary>The host's <see cref="AnimationClock"/>, set by <see cref="UIHost"/> so controls can begin/stop
 	/// storyboards (e.g. <see cref="VisualStateManager"/>). Null for a root used standalone in tests.</summary>
 	internal AnimationClock? Clock { get; set; }
+
+	/// <summary>The host's <see cref="FocusManager"/>, set by <see cref="UIHost"/>, so a subtree leaving the root gives up
+	/// focus. Null for a root used standalone in tests.</summary>
+	internal FocusManager? FocusManager { get; set; }
+
+	// A subtree left this root: let go of the focus and pointer state held for any element in it. The events that tell those
+	// elements so are raised by the host once layout is done.
+	internal void ReleaseWithin(UIElement subtree)
+	{
+		FocusManager?.ReleaseWithin(subtree);
+		InputManager?.ReleaseWithin(subtree);
+	}
 
 	/// <summary>The composition tree this root renders.</summary>
 	public RootVisual Visual { get; } = new();
@@ -73,9 +84,8 @@ public sealed class UIRoot
 	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
 	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
 	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
-	/// everything under the root. It is the whole surface's font until elements choose their own. The text effects under
-	/// the root are checked against a new font first (<see cref="Extensions.TextEffects"/>): one its distance field cannot
-	/// hold throws, and the root keeps its font.
+	/// everything under the root. It is the whole surface's font until elements choose their own. A text effect the new
+	/// font's distance field cannot hold is drawn clamped to it (<see cref="Extensions.TextEffects"/>).
 	/// </summary>
 	public FontAtlas Font
 	{
@@ -85,10 +95,6 @@ public sealed class UIRoot
 			ArgumentNullException.ThrowIfNull(value);
 			if (ReferenceEquals(field, value))
 				return;
-			if (Content is { } content)
-				Extensions.TextEffects.ValidateTree(content, value);
-			foreach (var (element, _, _) in _overlays)
-				Extensions.TextEffects.ValidateTree(element, value);
 			field = value;
 			Content?.InvalidateMeasureTree();
 			foreach (var (element, _, _) in _overlays)
@@ -101,8 +107,6 @@ public sealed class UIRoot
 	/// stays top-most. Marks the tree dirty so the next composite shows it.</summary>
 	internal void AddOverlay(UIElement element, Vector2 position, bool fullSurface = false)
 	{
-		Extensions.TextEffects.ValidateTree(element, Font);
-
 		element.SetAttachedRoot(this);
 		_overlays.Insert(_overlays.Count - _diagnosticOverlays, (element, position, fullSurface));
 		Visual.MarkDirty();
@@ -239,13 +243,18 @@ public sealed class UIRoot
 		Visual.MarkDirty();
 	}
 
-	/// <summary>Composite the current visual tree to a neutral <see cref="DrawListData"/> (default-path convenience —
-	/// returns <see cref="DrawListData.Empty"/> when a foreign compositor is in use).</summary>
+	/// <summary>Composite the current visual tree and return the list it produced: the compositor's
+	/// <see cref="IDrawListSource.LastDraw"/>, or <see cref="DrawListData.Empty"/> when the compositor is not an
+	/// <see cref="IDrawListSource"/>.</summary>
 	public DrawListData Render()
 	{
 		_compositor.Composite(Visual, Surface);
-		return _compositor is DrawListCompositor d ? d.LastDraw(Surface) : DrawListData.Empty;
+		return LastDraw();
 	}
+
+	// The list the last successful composite produced: what a surface keeps showing when its composite fails. A compositor
+	// that produces no draw lists hands out the empty one.
+	internal DrawListData LastDraw() => _compositor is IDrawListSource source ? source.LastDraw(Surface) : DrawListData.Empty;
 
 	/// <summary>The element tree annotated with <c>DesiredSize</c>/<c>LayoutRect</c> after a layout pass — the
 	/// layout-test snapshot.</summary>

@@ -1,3 +1,4 @@
+using SUIsei.Composition;
 using SUIsei.Media;
 
 namespace SUIsei.Controls;
@@ -29,7 +30,11 @@ public class ContentPresenter : FrameworkElement
 	/// Null leaves that text the brush from above.</summary>
 	public static readonly DependencyProperty<ContentPresenter, Brush?> ForegroundProperty =
 		DependencyProperty.Register(nameof(Foreground),
-			new PropertyMetadata<ContentPresenter, Brush?> { Inherits = InheritedText.Foreground });
+			new PropertyMetadata<ContentPresenter, Brush?>
+			{
+				Inherits = InheritedText.Foreground,
+				Validate = static (_, brush) => InheritedText.ValidateForeground(brush),
+			});
 
 	/// <summary>The size of the text the presenter shows, in DIPs, inherited as <see cref="Foreground"/> is.</summary>
 	public static readonly DependencyProperty<ContentPresenter, float> FontSizeProperty =

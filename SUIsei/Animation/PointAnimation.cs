@@ -12,6 +12,10 @@ public sealed class PointAnimation : AnimationTimeline<Point>
 	/// <summary>The optional easing applied to the linear progress.</summary>
 	public IEasingFunction? EasingFunction { get; set; }
 
+	/// <summary>WinUI's opt-in for an animation of a property that relayouts; SUIsei runs every animation and reads nothing
+	/// here (<see cref="DoubleAnimation.EnableDependentAnimation"/>).</summary>
+	public bool EnableDependentAnimation { get; set; }
+
 	public override Point ValueAt(double progress)
 	{
 		var from = From ?? StartValue;
@@ -19,6 +23,8 @@ public sealed class PointAnimation : AnimationTimeline<Point>
 		var t = (float)(EasingFunction?.Ease(progress) ?? progress);
 		return Lerps.Point(from, to, t);
 	}
+
+	private protected override bool StartsFromTarget => From is null;
 
 	private protected override bool TryBind(DependencyObject owner, IAnimationTarget target) => BindDirect(owner, target);
 }

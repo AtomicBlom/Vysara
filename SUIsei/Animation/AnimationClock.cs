@@ -49,20 +49,26 @@ public sealed class AnimationClock
 
 	/// <summary>Start (or restart) <paramref name="storyboard"/> from time zero. Each animation with no <c>From</c>
 	/// starts at the value its target shows now, so a storyboard that takes over a property mid-animation continues
-	/// from where the other left it. Restarting one that is still running releases its targets first; one that has
-	/// finished starts from the end values it holds. As in WinUI, an animation takes its property over from any other
-	/// storyboard's that is animating or holding it, which then leaves the property to it: it stops writing it and does
-	/// not release it when stopped. The clock compares animations bound through <c>Target</c> and <c>TargetProperty</c>;
-	/// one whose delegates were set in code takes nothing over and is never taken over.</summary>
+	/// from where the other left it. Restarting one that is still running releases its targets first, so its animations start,
+	/// and are checked, at the values those show once released; one that has finished starts from the end values it holds. As
+	/// in WinUI, an animation takes its property over from any other storyboard's that is animating or holding it, which then
+	/// leaves the property to it: it stops writing it and does not release it when stopped. The clock compares animations bound
+	/// through <c>Target</c> and <c>TargetProperty</c>; one whose delegates were set in code takes nothing over and is never
+	/// taken over. A storyboard that can't begin (an animation's target can't be bound, is sealed, or refuses a value it names)
+	/// throws before anything changes.</summary>
 	public void Begin(Storyboard storyboard) => _active.Add(Start(storyboard));
 
 	/// <summary>Stop <paramref name="storyboard"/> and release every target it animates, whether it is still running or
 	/// has finished and holds its values (<see cref="FillBehavior.HoldEnd"/>), as WinUI's <c>Storyboard.Stop</c> does. A
 	/// property another storyboard has since taken over (<see cref="Begin"/>) is left to it.</summary>
-	public void Stop(Storyboard storyboard)
+	public void Stop(Storyboard storyboard) => StopExcept(storyboard, keep: null);
+
+	/// <summary>As <see cref="Stop(Storyboard)"/>, leaving alone each property <paramref name="keep"/> animates: for a visual
+	/// state left for one that began on another clock, or with none, which has taken nothing over here.</summary>
+	internal void StopExcept(Storyboard storyboard, Storyboard? keep)
 	{
-		Remove(_active, storyboard, release: true);
-		Remove(_holding, storyboard, release: true);
+		Remove(_active, storyboard, release: true, keep);
+		Remove(_holding, storyboard, release: true, keep);
 	}
 
 	/// <summary>Begin <paramref name="storyboard"/> at its end, much as WinUI's <c>Storyboard.SkipToFill</c> does: each
@@ -83,23 +89,23 @@ public sealed class AnimationClock
 		Settle(entry);
 	}
 
-	// Begin's work up to listing the entry. A running storyboard is stopped first, releasing its targets, while a finished
-	// one is let go with its values held, so a restart starts from them as from any value its targets show.
+	// Begin's work up to listing the entry. Every animation is checked first (its target bound, the values it names
+	// validated), so one that can't begin throws before anything changes: the storyboard is not stopped, nothing is taken
+	// over, and what was running or holding still is. A running storyboard's animations are checked against the values its
+	// targets show once that run is released. Then a running storyboard is stopped, releasing its targets, while a finished
+	// one is let go with its values held, so a restart starts from them as from any value its targets show. Children are
+	// walked by index: a foreach over the IList would box an enumerator.
 	private Entry Start(Storyboard storyboard)
 	{
+		CheckStart(storyboard, Running(storyboard));
+
 		Remove(_active, storyboard, release: true);
 		Remove(_holding, storyboard, release: false);
-
-		// Resolve any declarative Target/TargetProperty (from generated XAML) into the typed apply now, then record
-		// where each run starts. Children are walked by index: a foreach over the IList would box an enumerator.
 		var children = storyboard.Children;
 		for (var i = 0; i < children.Count; i++)
 		{
 			if (children[i] is AnimationTimeline anim)
-			{
-				anim.EnsureResolved();
 				anim.CaptureStart();
-			}
 		}
 
 		var entry = _freeEntries.Count > 0 ? _freeEntries.Pop() : new Entry();
@@ -114,9 +120,52 @@ public sealed class AnimationClock
 		return entry;
 	}
 
+	// The entry `storyboard` runs in, when it is running.
+	private Entry? Running(Storyboard storyboard)
+	{
+		for (var i = 0; i < _active.Count; i++)
+		{
+			if (ReferenceEquals(_active[i].Storyboard, storyboard))
+				return _active[i];
+		}
+		return null;
+	}
+
+	/// <summary>Check every animation of <paramref name="storyboard"/> as one (<see cref="AnimationTimeline.CheckStart"/>):
+	/// when one can't begin, each animation checked is put back as it was (<see cref="AnimationTimeline.AbandonStart"/>)
+	/// before the exception goes on, so a storyboard that can't begin changes nothing.</summary>
+	internal static void CheckStart(Storyboard storyboard) => CheckStart(storyboard, null);
+
+	// As CheckStart(Storyboard), where `running` is the entry of the storyboard's run when it is running: each animation of
+	// it still driving its property is released before the new run starts, so is checked against the value beneath.
+	private static void CheckStart(Storyboard storyboard, Entry? running)
+	{
+		var children = storyboard.Children;
+		var i = 0;
+		try
+		{
+			for (; i < children.Count; i++)
+			{
+				if (children[i] is AnimationTimeline anim)
+					anim.CheckStart(released: running is not null && i < running.Count && running.Runs[i] is Run.Running or Run.Holding);
+			}
+		}
+		catch
+		{
+			for (var c = 0; c <= i && c < children.Count; c++)
+			{
+				if (children[c] is AnimationTimeline anim)
+					anim.AbandonStart();
+			}
+			throw;
+		}
+	}
+
 	// Drop the entries of `list` that run or hold `storyboard`, releasing its targets first when `release` is set, and
-	// with them any holding entry whose storyboard has been collected.
-	private void Remove(List<Entry> list, Storyboard storyboard, bool release)
+	// with them any holding entry whose storyboard has been collected. Kept values are released anyway where the
+	// animation's binding has moved to another object, since nothing of this storyboard drives the old one any more. A
+	// property `keep` animates is not released.
+	private void Remove(List<Entry> list, Storyboard storyboard, bool release, Storyboard? keep = null)
 	{
 		for (var i = list.Count - 1; i >= 0; i--)
 		{
@@ -124,8 +173,8 @@ public sealed class AnimationClock
 			var listed = entry.Storyboard ?? Held(entry);
 			if (listed is not null && !ReferenceEquals(listed, storyboard))
 				continue;
-			if (listed is not null && release)
-				Release(entry, listed);
+			if (listed is not null)
+				Release(entry, listed, movedOnly: !release, keep);
 			list.RemoveAt(i);
 			Recycle(entry);
 		}
@@ -196,15 +245,30 @@ public sealed class AnimationClock
 	}
 
 	// Release each target the entry's storyboard still drives: not one released as it finished (FillBehavior.Stop), nor
-	// one a later animation has taken over.
-	private static void Release(Entry entry, Storyboard storyboard)
+	// one a later animation has taken over, nor one `keep` animates. With `movedOnly`, only those whose binding has moved to
+	// another object.
+	private static void Release(Entry entry, Storyboard storyboard, bool movedOnly = false, Storyboard? keep = null)
 	{
 		var children = storyboard.Children;
 		for (var c = 0; c < entry.Count; c++)
 		{
-			if (entry.Runs[c] is Run.Running or Run.Holding && children[c] is AnimationTimeline anim)
+			if (entry.Runs[c] is Run.Running or Run.Holding && children[c] is AnimationTimeline anim && (!movedOnly || anim.BindingMoved)
+				&& (keep is null || !Animates(keep, anim)))
 				anim.ReleaseTarget();
 		}
+	}
+
+	/// <summary>Whether one of <paramref name="storyboard"/>'s animations drives the property <paramref name="anim"/>
+	/// drives.</summary>
+	internal static bool Animates(Storyboard storyboard, AnimationTimeline anim)
+	{
+		var children = storyboard.Children;
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline other && other.DrivesSamePropertyAs(anim))
+				return true;
+		}
+		return false;
 	}
 
 	private static bool Holds(Entry entry) => Array.IndexOf(entry.Runs, Run.Holding, 0, entry.Count) >= 0;
@@ -257,9 +321,16 @@ public sealed class AnimationClock
 		for (var i = _tweens.Count - 1; i >= 0; i--)
 		{
 			var tween = _tweens[i];
+			if (tween.Cut)
+			{
+				_tweens.RemoveAt(i);
+				tween.Recycle();
+				continue;
+			}
 			if (!tween.Advance(deltaSeconds))
 				continue;
 			_tweens.RemoveAt(i);
+			tween.Complete();
 			tween.Recycle();
 		}
 	}
@@ -290,8 +361,15 @@ public sealed class AnimationClock
 	}
 
 	/// <summary>
-	/// Animate a dependency property from its value now to <paramref name="to"/>, writing its local value every frame as
-	/// code setting it would; otherwise as the delegate-based
+	/// Animate a dependency property from the value on screen to <paramref name="to"/>, as a WinUI property transition
+	/// (<c>OpacityTransition</c>, <c>BrushTransition</c>) animates a property that is set. <paramref name="to"/> is checked
+	/// and becomes the property's local value at once, so <see cref="DependencyObject.GetValue{TOwner, TValue}"/> reads it
+	/// from the start: like any local value it replaces the one set before and outranks a style's. Only what is shown
+	/// moves toward it, on a transition value just above the local one and below a storyboard's, which is never checked
+	/// frame by frame, so an easing that overshoots the property's valid range never throws mid-tween; a storyboard holding
+	/// the property outranks the tween as it outranks a local value, and the tween ending never disturbs it. A local
+	/// change to the property while it tweens ends the tween and shows at once; another tween of it takes over from the
+	/// value on screen. Otherwise as the delegate-based
 	/// <see cref="Tween{TTarget, T}(TTarget, Func{TTarget, T}, Action{TTarget, T}, T, TimeSpan, IEasingFunction, Lerp{T})"/>.
 	/// The property must be animatable.
 	/// </summary>
@@ -300,18 +378,23 @@ public sealed class AnimationClock
 		where TOwner : DependencyObject
 	{
 		var lerp = property.Lerp ?? throw new ArgumentException($"{property.Name} is not animatable; its type has no interpolation.", nameof(property));
-		var from = target.GetValue(property);
+		var from = target.GetTransitionStart(property);
 		ThrowIfNoStart(from, property); // before a running tween is taken over or a new one listed
-		PropertyTween<TOwner, T>? tween = null;
-		for (var i = 0; tween is null && i < _tweens.Count; i++)
-			if (_tweens[i] is PropertyTween<TOwner, T> running && running.Matches(target, property))
-				tween = running;
-		if (tween is null)
-			_tweens.Add(tween = PropertyTween<TOwner, T>.Rent());
-		tween.Start(target, property, lerp, from, to, duration, easing);
+		if (property.Metadata.Validate is { } validate && target is TOwner owner)
+			validate(owner, to); // the start is what is on screen, and is not checked
+		PropertyTween<TOwner, T>? running = null;
+		for (var i = 0; running is null && i < _tweens.Count; i++)
+			if (_tweens[i] is PropertyTween<TOwner, T> tween && tween.Matches(target, property))
+				running = tween;
+		var started = running ?? PropertyTween<TOwner, T>.Rent();
+		started.Start(target, property, lerp, from, to, duration, easing);
+		if (running is null)
+			_tweens.Add(started);
 	}
 
-	/// <summary>Stop every tween running on <paramref name="target"/>, leaving its properties where they are.</summary>
+	/// <summary>Stop every tween running on <paramref name="target"/>. A delegate-based tween leaves its property where it
+	/// is; a dependency property shows the local value its tween set, as a WinUI transition cut short lands on the value
+	/// that was set.</summary>
 	public void StopTweens(object target)
 	{
 		for (var i = _tweens.Count - 1; i >= 0; i--)
@@ -320,6 +403,7 @@ public sealed class AnimationClock
 			if (!tween.Targets(target))
 				continue;
 			_tweens.RemoveAt(i);
+			tween.Stop();
 			tween.Recycle();
 		}
 	}
@@ -345,6 +429,9 @@ public sealed class AnimationClock
 
 		public abstract bool Targets(object target);
 
+		// True once something other than the clock has ended the tween; it is then dropped without writing again.
+		public virtual bool Cut => false;
+
 		// Step by deltaSeconds and write the value; true once the end value has been written.
 		public bool Advance(double deltaSeconds)
 		{
@@ -359,6 +446,15 @@ public sealed class AnimationClock
 		{
 			_easing = null;
 			ReturnToPool();
+		}
+
+		// Called once the end value has been written, before Recycle; and in its place when the tween is stopped part way.
+		public virtual void Complete()
+		{
+		}
+
+		public virtual void Stop()
+		{
 		}
 
 		protected void Restart(TimeSpan duration, IEasingFunction? easing)
@@ -419,15 +515,27 @@ public sealed class AnimationClock
 		public bool Matches(DependencyObject target, DependencyProperty<TOwner, T> property) =>
 			ReferenceEquals(_target, target) && ReferenceEquals(_property, property);
 
+		// The end value becomes the local value at once, checked as any set is; the transition rung above it shows the value
+		// on screen until the first frame moves it.
 		public void Start(DependencyObject target, DependencyProperty<TOwner, T> property, Lerp<T> lerp, T from, T to, TimeSpan duration, IEasingFunction? easing)
 		{
+			target.BeginTransition(property, from, to);
 			(_target, _property, _lerp, _from, _to) = (target, property, lerp, from, to);
 			Restart(duration, easing);
 		}
 
 		public override bool Targets(object target) => ReferenceEquals(_target, target);
 
-		protected override void Write(float progress) => _target!.SetValue(_property!, _lerp!(_from, _to, progress));
+		// A local change to the property clears the transition rung, which ends the tween.
+		public override bool Cut => !_target!.HasTransitionValue(_property!);
+
+		protected override void Write(float progress) => _target!.SetTransitionValue(_property!, _lerp!(_from, _to, progress));
+
+		// The end value is the local value already: the transition rung is cleared, and the property shows it.
+		public override void Complete() => _target!.ClearTransitionValue(_property!);
+
+		// Cut short, the property lands on the value it was set to, as a WinUI transition cut short does.
+		public override void Stop() => _target!.ClearTransitionValue(_property!);
 
 		protected override void ReturnToPool()
 		{

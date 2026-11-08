@@ -23,6 +23,10 @@ internal interface IAnimationTarget<T> : IAnimationTarget
 	/// <summary>The value the object shows now, including any animation holding it: where a new animation starts.</summary>
 	T Read(DependencyObject target);
 
+	/// <summary>The value the object shows once no animation drives it: what <see cref="Read"/> gives after
+	/// <see cref="Release"/>.</summary>
+	T ReadUnanimated(DependencyObject target);
+
 	/// <summary>Write an animated value. It outranks the object's own value until <see cref="Release"/>.</summary>
 	void Write(DependencyObject target, T value);
 

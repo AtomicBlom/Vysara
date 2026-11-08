@@ -1,12 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- SUIsei's RoseMCP tap: one AnyCPU assembly a RoseMCP host drops into its taps folder and loads into a running game
-       through the diagnostics endpoint SUIsei hosts, where it answers RoseMCP's live UI tools over the host's pipe. It
-       reaches SUIsei only through the public SUIsei.Diagnostics API and runs only inside the game, never in RoseMCP.
+       through the diagnostics endpoint (SUIsei.Diagnostics.Endpoint, which the game starts), where it answers RoseMCP's
+       live UI tools over the host's pipe. It reaches SUIsei only through the public SUIsei.Diagnostics API and runs only
+       inside the game, never in RoseMCP.
 
        SUIsei is referenced and not copied beside the tap: the endpoint hands the tap the game's own SUIsei, so a copy in
        the drop-in folder would never be used. The tap compiles its own internal copy of the contract's protocol, which
-       never clashes with the copy compiled into SUIsei. -->
+       never clashes with the copy compiled into the endpoint. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -23,6 +24,10 @@
   <ItemGroup>
     <Compile Include="..\external\RoseMcp.Tap\Protocol\*.cs" Link="RoseMcp.Tap\Protocol\%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <Target Name="RequireRoseMcpTap" BeforeTargets="BeforeBuild" Condition="!Exists('$(MSBuildThisFileDirectory)..\external\RoseMcp.Tap\Protocol\TapWire.cs')">
+    <Error Text="SUIsei.RoseTap compiles the RoseMCP tap contract from the external/RoseMcp.Tap submodule, which is not checked out. Run: git submodule update --init external/RoseMcp.Tap" />
+  </Target>
 
   <!-- The magnifier reads the UI's pixels with SUIsei.Rasterizer's CPU copy of the UI shader, compiled in so the tap stays
        one file; internal, so it never clashes with a game's own reference to SUIsei.Rasterizer. -->

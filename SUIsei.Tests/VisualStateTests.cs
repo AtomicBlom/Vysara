@@ -244,6 +244,191 @@ public sealed class VisualStateTests
 		control.Opacity.ShouldBe(1f); // and left as any state is
 	}
 
+	/// <summary>
+	/// A state whose storyboard can't begin throws before anything changes: the state being left still holds its values,
+	/// nothing it animates is taken over, and the group is still in it. So going to the broken state again throws again,
+	/// rather than finding it current and doing nothing.
+	/// </summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_that_cannot_begin_changes_nothing_and_throws_again_when_retried(bool useTransitions)
+	{
+		var (host, control) = ControlWithStates();
+		VisualStateManager.GoToState(control, "A", useTransitions: true);
+		host.Tick(0.3, 0f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+		var group = VisualStateManager.GetVisualStateGroups(control)[0];
+		// Its opacity animation is fine; its MaxWidth one has no From, and MaxWidth is infinite by default.
+		group.States.Add(new VisualState
+		{
+			Name = "Broken",
+			Storyboard = new Storyboard
+			{
+				Children =
+					{
+						new DoubleAnimation { To = 0.9, Duration = TimeSpan.FromSeconds(0.2), Target = control, TargetProperty = UIElement.OpacityProperty },
+						new DoubleAnimation { To = 50, Duration = TimeSpan.FromSeconds(0.2), Target = control, TargetProperty = FrameworkElement.MaxWidthProperty },
+					},
+			},
+		});
+
+		Should.Throw<InvalidOperationException>(() => VisualStateManager.GoToState(control, "Broken", useTransitions));
+
+		group.CurrentState!.Name.ShouldBe("A");
+		host.Tick(0.1, 0.3f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f); // A still holds it, untaken
+		Should.Throw<InvalidOperationException>(() => VisualStateManager.GoToState(control, "Broken", useTransitions));
+		VisualStateManager.GoToState(control, "B", useTransitions: true);
+		control.Opacity.ShouldBe(1f); // and A is released when left
+	}
+
+	// A control left Auto wide whose one group has Fixed (Width from 10 to 50, held), Wider (Width to 80 from wherever it
+	// is), Plain (no storyboard) and Broken (Width to 80 too, and MaxWidth to 50 from its infinite default, which can't
+	// begin); on a host's root unless `attach` is false.
+	private static (UIHost Host, ContentControl Control, VisualStateGroup Group) ControlWithWidths(bool attach)
+	{
+		var host = new UIHost();
+		var control = new ContentControl { Height = 20 };
+		var group = new VisualStateGroup { Name = "Widths" };
+		group.States.Add(new VisualState { Name = "Fixed", Storyboard = new Storyboard { Children = { WidthTo(control, 50, from: 10) } } });
+		group.States.Add(new VisualState { Name = "Wider", Storyboard = new Storyboard { Children = { WidthTo(control, 80) } } });
+		group.States.Add(new VisualState { Name = "Plain" });
+		group.States.Add(new VisualState
+		{
+			Name = "Broken",
+			Storyboard = new Storyboard
+			{
+				Children =
+				{
+					WidthTo(control, 80),
+					new DoubleAnimation { To = 50, Duration = TimeSpan.FromSeconds(0.2), Target = control, TargetProperty = FrameworkElement.MaxWidthProperty },
+				},
+			},
+		});
+		VisualStateManager.GetVisualStateGroups(control).Add(group);
+		if (attach)
+			host.CreateRoot(UILayer.Default).Root.Content = control;
+		return (host, control, group);
+
+		static DoubleAnimation WidthTo(UIElement element, double to, double? from = null) =>
+			new() { From = from, To = to, Duration = TimeSpan.FromSeconds(0.2), Target = element, TargetProperty = FrameworkElement.WidthProperty };
+	}
+
+	/// <summary>
+	/// Without a transition, as with one, the state entered begins before the state left is released (WPF's "start new, then
+	/// stop old"): an animation with no From starts from the value the state being left shows, rather than from the value
+	/// beneath it, which may be one it can't start from (a width left Auto).
+	/// </summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_entered_without_a_transition_starts_from_the_value_the_state_left_shows(bool attach)
+	{
+		var (_, control, group) = ControlWithWidths(attach);
+		VisualStateManager.GoToState(control, "Fixed", useTransitions: false).ShouldBeTrue();
+		control.Width.ShouldBe(50f);
+
+		VisualStateManager.GoToState(control, "Wider", useTransitions: false).ShouldBeTrue();
+
+		group.CurrentState!.Name.ShouldBe("Wider");
+		control.Width.ShouldBe(80f);
+		VisualStateManager.GoToState(control, "Fixed", useTransitions: false).ShouldBeTrue();
+		control.Width.ShouldBe(50f); // gone back to, rather than found current and left alone
+		VisualStateManager.GoToState(control, "Plain", useTransitions: false).ShouldBeTrue();
+		float.IsNaN(control.Width).ShouldBeTrue(); // Auto again once nothing holds it
+	}
+
+	/// <summary>A state that can't begin, entered without a transition, leaves the state being left current and still
+	/// applied, attached or not.</summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_that_cannot_begin_without_a_transition_leaves_the_state_it_would_leave_applied(bool attach)
+	{
+		var (_, control, group) = ControlWithWidths(attach);
+		VisualStateManager.GoToState(control, "Fixed", useTransitions: false).ShouldBeTrue();
+
+		Should.Throw<InvalidOperationException>(() => VisualStateManager.GoToState(control, "Broken", useTransitions: false));
+
+		group.CurrentState!.Name.ShouldBe("Fixed");
+		control.Width.ShouldBe(50f);
+		VisualStateManager.GoToState(control, "Plain", useTransitions: false).ShouldBeTrue();
+		float.IsNaN(control.Width).ShouldBeTrue(); // and released when left
+	}
+
+	/// <summary>A control whose own groups carry its states, with no template, as a ListViewItem's built-in selection does,
+	/// leaves them when it is given a template, whose groups take over.</summary>
+	[Test]
+	public void Giving_a_template_to_a_control_showing_its_own_states_leaves_them()
+	{
+		var host = new UIHost();
+		var item = new ListViewItem { Content = "Row", Width = 20, Height = 20 };
+		host.CreateRoot(UILayer.Default).Root.Content = item;
+		item.SetSelected(true);
+		host.Tick(0.5, 0f, Surface);
+		item.Background.ShouldNotBeNull(); // the selection brush, held by the item's own Selected state
+
+		item.Template = HoldingTemplate(out _);
+		host.Tick(0.016, 0.5f, Surface);
+
+		item.Background.ShouldBeNull();
+	}
+
+	/// <summary>
+	/// A template with a group whose "Held" state fades the control's own opacity to 0.3 and holds it, and whose border
+	/// part takes the control's background through a template binding.
+	/// </summary>
+	private static ControlTemplate HoldingTemplate(out Func<Border> part) => HoldingTemplate(out part, 0.3f);
+
+	private static ControlTemplate HoldingTemplate(out Func<Border> part, float held)
+	{
+		Border? built = null;
+		part = () => built!;
+		return new ControlTemplate
+		{
+			Factory = control =>
+			{
+				var border = new Border();
+				built = border;
+				control.RegisterTemplateBinding(Control.BackgroundProperty, border, Border.BackgroundProperty);
+				var group = new VisualStateGroup { Name = "Common" };
+				group.States.Add(new VisualState { Name = "Normal" });
+				group.States.Add(Fading("Held", control, held, bound: true));
+				VisualStateManager.GetVisualStateGroups(border).Add(group);
+				return border;
+			},
+		};
+	}
+
+	/// <summary>
+	/// Replacing a template leaves its states, so one holding a property of the control itself lets go of it, and drops
+	/// its template bindings, so the old parts hear nothing more from the control.
+	/// </summary>
+	[Test]
+	public void Replacing_a_template_leaves_its_states_and_drops_its_template_bindings()
+	{
+		var host = new UIHost();
+		var control = new ContentControl { Width = 20, Height = 20, Template = HoldingTemplate(out var oldPart) };
+		host.CreateRoot(UILayer.Default).Root.Content = control;
+		host.Tick(0.016, 0f, Surface);
+		VisualStateManager.GoToState(control, "Held", useTransitions: true);
+		host.Tick(0.3, 0.016f, Surface);
+		control.Opacity.ShouldBe(0.3f, 0.001f);
+		var first = oldPart();
+
+		control.Template = HoldingTemplate(out var newPart, 0.6f);
+		host.Tick(0.016, 0.32f, Surface);
+
+		control.Opacity.ShouldBe(1f); // the old template's held state let go
+		var red = new SolidColorBrush(new HdrColor(1f, 0f, 0f, 1f));
+		control.Background = red;
+		newPart().Background.ShouldBeSameAs(red);
+		first.Background.ShouldBeNull(); // the old part is no longer pushed to
+		VisualStateManager.GoToState(control, "Held", useTransitions: false).ShouldBeTrue(); // the new template's states
+		control.Opacity.ShouldBe(0.6f, 0.001f);
+	}
+
 	[Test]
 	public void Changing_state_and_running_frames_allocates_nothing_once_warm()
 	{

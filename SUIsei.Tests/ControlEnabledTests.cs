@@ -239,14 +239,35 @@ public sealed class ControlEnabledTests
 		common.CurrentState!.Name.ShouldBe("Disabled");
 	}
 
+	/// <summary>The built-in looks show Disabled, a Button's swapping its background, border and text for the disabled
+	/// brushes and leaving Disabled handing back the ones it showed; a template with no Disabled state shows Normal while
+	/// disabled, so a hover state is never left showing on a control that can no longer leave it.</summary>
 	[Test]
-	public void The_Slider_shows_Disabled_and_a_template_without_one_falls_back_to_Normal()
+	public void Built_in_looks_show_Disabled_and_a_template_without_one_falls_back_to_Normal()
 	{
 		var slider = new Slider { Width = 100f };
-		var button = new Button { Width = 40f, Height = 20f };
+		var button = new Button { Width = 40f, Height = 20f, Content = "OK" };
+		var custom = new Button
+		{
+			Width = 40f,
+			Height = 20f,
+			Template = new ControlTemplate
+			{
+				Factory = _ =>
+				{
+					var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(10, 10, 10)) };
+					var common = new VisualStateGroup { Name = "CommonStates" };
+					common.States.Add(new VisualState { Name = "Normal" });
+					common.States.Add(new VisualState { Name = "PointerOver" });
+					VisualStateManager.SetVisualStateGroups(border, [common]);
+					return border;
+				},
+			},
+		};
 		var panel = new StackPanel();
 		panel.Children.Add(slider);
 		panel.Children.Add(button);
+		panel.Children.Add(custom);
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default).Root.Content = panel;
 		host.Tick(0.016, 0f, new Vector2(200f, 200f));
@@ -254,20 +275,156 @@ public sealed class ControlEnabledTests
 		slider.IsEnabled = false;
 		CommonState(slider).ShouldBe("Disabled");
 
-		// Hover the button so it shows PointerOver; its template has no Disabled state.
-		var buttonCentre = new Vector2(button.LayoutRect.X + 20f, button.LayoutRect.Y + 10f);
-		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, buttonCentre,
+		var chrome = (Border)button.GetTemplateRoot()!;
+		var presenter = (ContentPresenter)chrome.Child!;
+		var normalBackground = chrome.Background;
+		var normalForeground = presenter.Foreground;
+		button.IsEnabled = false;
+		CommonState(button).ShouldBe("Disabled");
+		host.Tick(0.016, 0f, new Vector2(200f, 200f));
+		chrome.Background.ShouldBeSameAs(TemplateStates.DisabledBackground);
+		chrome.BorderBrush.ShouldBeSameAs(TemplateStates.DisabledBorder);
+		presenter.Foreground.ShouldBeSameAs(TemplateStates.DisabledForeground);
+		chrome.Opacity.ShouldBe(1f);
+
+		button.IsEnabled = true;
+		host.Tick(0.016, 0f, new Vector2(200f, 200f));
+		chrome.Background.ShouldBeSameAs(normalBackground); // released as Disabled is left
+		chrome.BorderBrush.ShouldBeNull();
+		presenter.Foreground.ShouldBeSameAs(normalForeground);
+
+		// Hover the custom button so it shows PointerOver; its template has no Disabled state.
+		var centre = new Vector2(custom.LayoutRect.X + 20f, custom.LayoutRect.Y + 10f);
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, centre,
 			PointerUpdateKind.None, PointerButtons.None, 0f, Vector2.Zero, 0));
 		host.Tick(0.016, 0f, new Vector2(200f, 200f));
-		CommonState(button).ShouldBe("PointerOver");
+		CommonState(custom).ShouldBe("PointerOver");
 
-		button.IsEnabled = false;
-		CommonState(button).ShouldBe("Normal");
+		custom.IsEnabled = false;
+		CommonState(custom).ShouldBe("Normal");
 	}
 
 	private static string? CommonState(Control control) =>
 		VisualStateManager.GetVisualStateGroups(control.GetTemplateRoot()!)
 			.Single(g => g.Name == "CommonStates").CurrentState?.Name;
+
+	private static readonly Vector2 Viewport = new(200f, 200f);
+
+	private static UIHost Hosting(UIElement content)
+	{
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = content;
+		host.Tick(0.016, 0f, Viewport);
+		return host;
+	}
+
+	/// <summary>A disabled look is brushes, not a fade: a disabled button composes no offscreen layer.</summary>
+	[Test]
+	public void A_disabled_button_composes_no_layer()
+	{
+		var button = new Button { Width = 60f, Height = 24f, Content = "OK" };
+		var host = Hosting(button);
+
+		button.IsEnabled = false;
+		host.Tick(0.016, 0f, Viewport);
+		host.Render();
+
+		var commands = host.DrawLists.SelectMany(list => list.Data.Commands.ToArray()).ToArray();
+		commands.ShouldNotBeEmpty();
+		commands.ShouldNotContain(c => c.Tag == (uint)UIPrimKind.BeginLayer);
+	}
+
+	// A check box's parts: the box, its mark and the label's presenter.
+	private static (Border Box, Border Mark, ContentPresenter Label) Parts(CheckBox checkBox)
+	{
+		var row = (StackPanel)checkBox.GetTemplateRoot()!;
+		var box = (Border)row.Children[0];
+		return (box, (Border)box.Child!, (ContentPresenter)row.Children[1]);
+	}
+
+	/// <summary>Disabled brushes don't compound: a check box in a disabled button shows the same disabled brushes as one
+	/// disabled on its own, where a fade would have dimmed it twice.</summary>
+	[Test]
+	public void A_check_box_in_a_disabled_button_looks_as_one_disabled_on_its_own()
+	{
+		var inner = new CheckBox { Content = "Inner", IsChecked = true };
+		var alone = new CheckBox { Content = "Alone", IsChecked = true };
+		var button = new Button { Content = inner };
+		var panel = new StackPanel();
+		panel.Children.Add(button);
+		panel.Children.Add(alone);
+		var host = Hosting(panel);
+
+		button.IsEnabled = false;
+		alone.IsEnabled = false;
+		host.Tick(0.016, 0f, Viewport);
+
+		CommonState(inner).ShouldBe("Disabled");
+		var (innerBox, innerMark, innerLabel) = Parts(inner);
+		var (aloneBox, aloneMark, aloneLabel) = Parts(alone);
+		innerBox.Background.ShouldBeSameAs(aloneBox.Background);
+		innerBox.BorderBrush.ShouldBeSameAs(aloneBox.BorderBrush);
+		innerMark.Background.ShouldBeSameAs(TemplateStates.DisabledAccent);
+		aloneMark.Background.ShouldBeSameAs(TemplateStates.DisabledAccent);
+		innerLabel.Foreground.ShouldBeSameAs(TemplateStates.DisabledForeground);
+		aloneLabel.Foreground.ShouldBeSameAs(TemplateStates.DisabledForeground);
+		inner.GetTemplateRoot()!.Opacity.ShouldBe(1f);
+		button.GetTemplateRoot()!.Opacity.ShouldBe(1f);
+
+		button.IsEnabled = true;
+		host.Tick(0.016, 0f, Viewport);
+		innerMark.Background.ShouldNotBeSameAs(TemplateStates.DisabledAccent);
+		innerLabel.Foreground.ShouldNotBeSameAs(TemplateStates.DisabledForeground);
+	}
+
+	/// <summary>A list item's text takes the disabled brush while it is disabled, and a selected one shows a highlight
+	/// without the accent; enabling it again shows the selection as it was.</summary>
+	[Test]
+	public void A_disabled_list_item_shows_its_Disabled_look()
+	{
+		var item = new ListViewItem { Content = "Item" };
+		var host = Hosting(item);
+		item.SetSelected(true);
+		host.Tick(0.016, 0f, Viewport);
+		var selected = item.Background;
+		selected.ShouldNotBeNull();
+
+		item.IsEnabled = false;
+		host.Tick(0.016, 0f, Viewport);
+		item.Foreground.ShouldBeSameAs(TemplateStates.DisabledForeground);
+		item.Background.ShouldBeSameAs(TemplateStates.DisabledAccent);
+
+		item.IsEnabled = true;
+		host.Tick(0.016, 0f, Viewport);
+		item.Foreground.ShouldBeNull();
+		item.Background.ShouldBeSameAs(selected);
+
+		item.SetSelected(false);
+		item.IsEnabled = false;
+		host.Tick(0.016, 0f, Viewport);
+		item.Background.ShouldBeNull(); // unselected, a disabled item paints its own background
+	}
+
+	/// <summary>A disabled text box draws the disabled fill and border over its own, and its text in the disabled brush;
+	/// enabling it again shows its own text brush.</summary>
+	[Test]
+	public void A_disabled_text_box_shows_its_Disabled_look()
+	{
+		var box = new TextBox { Width = 120f, Text = "Hello" };
+		var host = Hosting(box);
+		var text = (TextBlock)box.VisualChildren[1];
+		var foreground = text.Foreground;
+
+		box.IsEnabled = false;
+		host.Tick(0.016, 0f, Viewport);
+		host.Render();
+		text.Foreground.ShouldBeSameAs(TemplateStates.DisabledForeground);
+		var colours = host.DrawLists.SelectMany(list => list.Data.Vertices.ToArray()).Select(v => v.Color).ToArray();
+		colours.ShouldContain(TemplateStates.DisabledBackground.Color.ToPremultiplied());
+
+		box.IsEnabled = true;
+		text.Foreground.ShouldBeSameAs(foreground);
+	}
 
 	[Test]
 	public void IsEnabled_is_a_control_property_in_markup()

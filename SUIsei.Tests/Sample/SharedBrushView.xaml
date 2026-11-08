@@ -24,8 +24,8 @@
 	<Border x:Name="Styled" Width="20" Height="10" Style="{StaticResource Card}" />
 	<Border x:Name="Graded" Width="40" Height="10" Background="{StaticResource Fade}">
 		<VisualStateManager.VisualStateGroups>
-			<VisualStateGroup Name="Pulse">
-				<VisualState Name="Bright">
+			<VisualStateGroup x:Name="Pulse">
+				<VisualState x:Name="Bright">
 					<Storyboard>
 						<ColorAnimation Storyboard.TargetName="FadeEnd" Storyboard.TargetProperty="Color" To="#00FF00" Duration="0:0:1" />
 					</Storyboard>

@@ -1,3 +1,4 @@
+using SUIsei.Composition;
 using SUIsei.Drawing;
 
 namespace SUIsei.Media;

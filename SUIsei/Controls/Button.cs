@@ -9,8 +9,8 @@ namespace SUIsei.Controls;
 /// button's <see cref="Control.Background"/>, <see cref="Control.BorderBrush"/> and <see cref="Control.BorderThickness"/>,
 /// and the presenter its <see cref="Control.Foreground"/>; where those are unset it shows the built-in look. A
 /// <c>CommonStates</c> <see cref="VisualStateManager"/> group shows the pointer-over and pressed backgrounds, faded in
-/// and out by the border's <see cref="BrushTransition"/>. Click synthesis, <see cref="ButtonBase.Click"/>, and
-/// <see cref="ButtonBase.Command"/> all come from the base.
+/// and out by the border's <see cref="BrushTransition"/>, and while disabled the disabled background, border and text.
+/// Click synthesis, <see cref="ButtonBase.Click"/>, and <see cref="ButtonBase.Command"/> all come from the base.
 /// </summary>
 public sealed class Button : ButtonBase
 {
@@ -19,7 +19,11 @@ public sealed class Button : ButtonBase
 	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(80, 80, 95));
 	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(40, 40, 55));
 
-	public Button() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
+	public Button()
+	{
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		InheritedText.GiveBuiltInLook(this);
+	}
 
 	// The built-in look, shared (stateless) across default buttons: a rounded Border hosting a ContentPresenter, with a
 	// CommonStates group whose states show their own background on the border. The storyboards target the border created
@@ -37,17 +41,17 @@ public sealed class Button : ButtonBase
 			};
 			var presenter = new ContentPresenter();
 			border.Child = presenter;
-			host.RegisterTemplateBinding(BackgroundProperty, value => border.Background = value ?? NormalBackground);
-			host.RegisterTemplateBinding(BorderBrushProperty, value => border.BorderBrush = value);
-			host.RegisterTemplateBinding(BorderThicknessProperty, value => border.BorderThickness = value);
-			host.RegisterTemplateBinding(ForegroundProperty, value => presenter.Foreground = value);
-			presenter.Content = host.Content;                        // {TemplateBinding Content} — initial
-			host.ContentChanged += (_, _) => presenter.Content = host.Content; // live
+			host.RegisterTemplateBinding(BackgroundProperty, border, Border.BackgroundProperty, static value => value ?? NormalBackground);
+			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty);
+			host.RegisterTemplateBinding(BorderThicknessProperty, border, Border.BorderThicknessProperty);
+			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
+			host.RegisterContentTemplateBinding(content => presenter.Content = content); // {TemplateBinding Content}
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(border) });
+			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Disabled(border, TemplateStates.DisabledBackground, presenter) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);
 			return border;
 		},

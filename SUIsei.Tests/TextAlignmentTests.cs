@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Rasterizer;
@@ -195,7 +196,7 @@ public sealed class TextAlignmentTests
 		block.MeasureDirty.ShouldBeFalse();
 		block.ArrangeDirty.ShouldBeFalse();
 		block.Visual.Content.ShouldBeSameAs(content);
-		content.TextAlignment.ShouldBe(TextAlignment.Right);
+		content.TextAlignment.ShouldBe(CompositionTextAlignment.Right);
 		block.Visual.Dump().ShouldContain(" align=right");
 
 		const int measured = 64;

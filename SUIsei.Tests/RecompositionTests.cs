@@ -1,3 +1,4 @@
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;

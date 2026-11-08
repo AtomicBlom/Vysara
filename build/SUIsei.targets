@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    SUIsei XAML build machinery (PlanningUI.md MU0 Phase C) — targets.
+    SUIsei XAML build machinery — targets.
 
     Imported AFTER the project body (so $(SUIseiXamlSourceDir) is already set). Does two things:
       1. Registers every *.xaml under the project as <AdditionalFiles> so the SUIsei.SourceGen incremental
@@ -22,12 +22,13 @@
 
   <ItemGroup Condition="'$(SUIseiXamlEnable)' == 'true'">
     <!-- Recurse the source dir, excluding the build output trees and whatever the project keeps out of its default
-         item globs (DefaultItemExcludes), as its Compile glob does: a project that holds another repository's
+         item globs (DefaultItemExcludes, and DefaultExcludesInProjectFolder's hidden folders, such as .git and
+         .claude/worktrees checkouts), as its Compile glob does: a project that holds another repository's
          projects beneath it, such as a submodule with views of its own, excludes them there once. The .xaml
          sources exist at evaluation, so a static glob is correct here (unlike the shaders' generated .spv, which
          must be registered in a target). -->
     <SUIseiXaml Include="$(SUIseiXamlSourceDir)\**\*.xaml"
-              Exclude="$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
+              Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
     <AdditionalFiles Include="@(SUIseiXaml)" />
     <UpToDateCheckInput Include="@(SUIseiXaml)" />
     <!-- dotnet watch does not monitor AdditionalFiles by default; opt the .xaml in so a `dotnet watch` loop

@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
 using System.Numerics;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 using SUIsei.Input;
 using SUIsei.RoutedEvents;
@@ -27,6 +30,8 @@ public sealed class UIHost
 	private readonly TextureResidency _textures;
 	private int _nextSurface;
 	private Size _framebufferSize = new(1f, 1f);
+	// Work a diagnostics tool posted to this host alone (Diagnostics.Post(UIHost, Action)); made on the first post.
+	internal ConcurrentQueue<Action>? DiagnosticsPosted;
 
 	public UIHost()
 	{
@@ -36,10 +41,6 @@ public sealed class UIHost
 		Input.OnPress = el => Focus.FocusFromPointer(el);
 		HotReload.TrackHost(this);
 		Diagnostics.ViewsChanged();
-
-		// The first host brings up the endpoint a diagnostics tool loads its tap through.
-		if (Diagnostics.Enabled)
-			Diagnostics.StartEndpoint();
 	}
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
@@ -76,7 +77,9 @@ public sealed class UIHost
 	/// <summary>The roots this host owns.</summary>
 	public IReadOnlyList<UIView> Views => _views;
 
-	/// <summary>The last <see cref="Render"/> output — the draw lists handed to the Loom backend.</summary>
+	/// <summary>The last <see cref="Render"/>'s output: each view's surface and the list its compositor last produced,
+	/// read through <see cref="IDrawListSource"/>, or <see cref="DrawListData.Empty"/> from a compositor that produces
+	/// none.</summary>
 	public IReadOnlyList<(DrawListId Id, DrawListData Data)> DrawLists => _drawLists;
 
 	/// <summary>
@@ -90,8 +93,9 @@ public sealed class UIHost
 	/// A source whose texels changed is not released but replaced, which the host does itself on seeing its
 	/// <see cref="TextureSource.Version"/> move. <see cref="TextureSource.White"/> is never released.
 	/// <para>
-	/// It covers the lists this host hands out. A view composited by a foreign <see cref="IUICompositor"/> hands out
-	/// none, so that compositor tracks what it draws itself, and reads <see cref="TextureSource.IsDisposed"/>.
+	/// It covers the lists this host hands out, whichever <see cref="IDrawListSource"/> produced them. A view whose
+	/// <see cref="IUICompositor"/> is not one hands out none, so that compositor tracks what it draws itself, and reads
+	/// <see cref="TextureSource.IsDisposed"/>.
 	/// </para>
 	/// </summary>
 	public IReadOnlyList<TextureSource> ReleasedTextures => _textures.Released;
@@ -105,6 +109,7 @@ public sealed class UIHost
 		{
 			LayoutScale = layer.LayoutScale,
 			InputManager = Input,
+			FocusManager = Focus,
 			Clock = Clock
 		};
 		var view = new UIView(root, layer, interactive);
@@ -135,9 +140,10 @@ public sealed class UIHost
 	public void QueueText(ReadOnlySpan<char> utf16) => _textQueue.Enqueue(utf16.ToString());
 
 	/// <summary>
-	/// Once per frame: lay out each root, release focus from a control that has been disabled, drain pointer queue
-	/// (coalescing moves) → hit-test → route events, then drain keyboard queue → Tab intercepts focus → remaining keys
-	/// route to the focused element. Layout runs first so input hit-tests this frame's geometry.
+	/// Once per frame: lay out each root, raise the focus and pointer events of elements that have left a live tree, release
+	/// focus from a control that has been disabled, drain pointer queue (coalescing moves) → hit-test → route events, then
+	/// drain keyboard queue → Tab intercepts focus → remaining keys route to the focused element, and raise the events of
+	/// elements that input removed. Layout runs first so input hit-tests this frame's geometry.
 	/// </summary>
 	public void Tick(double deltaSeconds, float time, Vector2 framebufferSize)
 	{
@@ -148,7 +154,7 @@ public sealed class UIHost
 		// Run work a diagnostics tool posted from another thread, before layout so its edits lay out this frame and its
 		// reads see what was last drawn.
 		if (Diagnostics.Enabled)
-			Diagnostics.RunPosted();
+			Diagnostics.RunPosted(this);
 
 		// Advance animations FIRST: a clock write to a layout-affecting DP invalidates measure/arrange so the new
 		// value is reflected in this frame's LayoutPass; a visual-channel write (transform/opacity/brush) only marks
@@ -158,28 +164,72 @@ public sealed class UIHost
 		_framebufferSize = new Size(framebufferSize.X, framebufferSize.Y);
 		foreach (var view in _views)
 			view.Root.LayoutPass(_framebufferSize);
+		RaiseReleased();
 		Focus.ReleaseDisabledFocus();
 		DrainPointers();
 		DrainKeyboard();
+		RaiseReleased();
 
 		// Resolve the coarse capture report after routing/focus settle, so it is O(1) reads of this frame's state.
 		WantsPointer = Input.WantsPointer || PointerHeld;
 		WantsKeyboard = Focus.WantsKeyboard;
 	}
 
-	/// <summary>Composite each view's visual tree → <see cref="DrawLists"/>, and report the texture sources no list
-	/// samples any more → <see cref="ReleasedTextures"/>.</summary>
+	// Raise LostFocus, PointerCaptureLost and PointerExited on the elements that left a live tree since the last call, with
+	// what the host held for them already let go. Elements leave in the middle of layout (a virtualizing panel recycling
+	// rows) and in input handlers, so this runs after the layout pass and again after input is routed: app code never runs
+	// inside layout, and what a click removed hears of it in the same frame.
+	private void RaiseReleased()
+	{
+		Focus.RaiseReleased();
+		Input.RaiseReleased();
+	}
+
+	/// <summary>
+	/// Composite each view's visual tree → <see cref="DrawLists"/>, and report the texture sources no list samples any
+	/// more → <see cref="ReleasedTextures"/>. A view whose composite throws keeps its last good list and is composited
+	/// whole again next frame; the other views still draw, the texture report is still made, and then the first such
+	/// exception is rethrown. A host may leave the lists of a render that throws undrawn, so the next render's lists
+	/// carry their <see cref="DrawListData.Damage"/> too.
+	/// </summary>
 	public void Render()
 	{
 		_textures.BeginRender();
 		_drawLists.Clear();
-		foreach (var view in _views)
+		ExceptionDispatchInfo? failure = null;
+		try
 		{
-			var list = view.Root.Render();
-			_drawLists.Add((view.Surface, list));
-			view.Textures.Track(list, _textures);
+			foreach (var view in _views)
+			{
+				DrawListData list;
+				try
+				{
+					list = view.Root.Render();
+				}
+				catch (Exception exception)
+				{
+					failure ??= ExceptionDispatchInfo.Capture(exception);
+					list = view.Root.LastDraw();
+				}
+				if (!view.UndrawnDamage.IsEmpty)
+				{
+					// A copy, so the list its compositor keeps handing out says only what that compositor stamped.
+					list = list.WithDamage(list.Damage.Union(view.UndrawnDamage));
+					view.UndrawnDamage = Rect.Zero;
+				}
+				_drawLists.Add((view.Surface, list));
+				view.Textures.Track(list, _textures);
+			}
 		}
-		_textures.EndRender();
+		finally
+		{
+			_textures.EndRender();
+		}
+		if (failure is null)
+			return;
+		for (var i = 0; i < _drawLists.Count; i++)
+			_views[i].UndrawnDamage = _drawLists[i].Data.Damage;
+		failure.Throw();
 	}
 
 	/// <summary>Focus / capture / over-chains for input + focus tests.</summary>

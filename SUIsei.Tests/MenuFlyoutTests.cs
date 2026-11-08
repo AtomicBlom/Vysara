@@ -58,4 +58,30 @@ public sealed class MenuFlyoutTests
 		scroll.LayoutRect.Height.ShouldBeLessThan(scroll.ExtentHeight);
 		scroll.ScrollableHeight.ShouldBeGreaterThan(0f);
 	}
+
+	[Test]
+	public void ShowAt_sizes_the_menu_to_its_items_not_to_the_surface()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		var anchor = new Button { Width = 80f, Height = 24f };
+		view.Root.Content = anchor;
+		host.Tick(0.016, 0f, new Vector2(800f, 600f));
+
+		var flyout = new MenuFlyout();
+		flyout.Items.Add(new MenuFlyoutItem { Text = "Open" });
+		flyout.Items.Add(new MenuFlyoutItem { Text = "Quit" });
+
+		flyout.ShowAt(anchor);
+		host.Tick(0.016, 0f, new Vector2(800f, 600f));
+
+		// The menu's items fit in its scroll viewer, which asks for no more than they need: the menu is only as big as
+		// its items plus its padding and border, however much of the surface lies below the anchor.
+		var menu = (Border)view.Root.Overlays[1].Element;
+		var scroll = (ScrollViewer)menu.Child!;
+		scroll.ScrollableHeight.ShouldBe(0f);
+		scroll.LayoutRect.Height.ShouldBe(scroll.ExtentHeight);
+		menu.LayoutRect.Height.ShouldBe(scroll.ExtentHeight + 10f);
+		menu.LayoutRect.Width.ShouldBeLessThan(400f);
+	}
 }

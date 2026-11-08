@@ -90,7 +90,7 @@ internal sealed class TapEdits(TapHandles handles)
 			old = Text(CurrentValue(target, dp));
 			if (!Diagnostics.CanParseValue(valueType))
 				return $"cannot set {command.Property}: SUIsei has no markup syntax for a {TapProperties.FriendlyName(valueType)}";
-			if (!Diagnostics.TryParseValue(valueType, command.Value, out var value))
+			if (!Diagnostics.TryParseValue(dp, command.Value, out var value))
 				return $"cannot set {command.Property}: '{command.Value}' is not a {TapProperties.FriendlyName(valueType)}";
 			Diagnostics.SetLocal(target, dp, value);
 			return "applied";
@@ -193,15 +193,14 @@ internal sealed class TapEdits(TapHandles handles)
 				? property
 				: null;
 
-	// A DependencyProperty<TOwner, TValue> carries its value type as its second type argument.
-	private static Type ValueTypeOf(DependencyProperty dp) => dp.GetType().GetGenericArguments()[1];
+	private static Type ValueTypeOf(DependencyProperty dp) => Diagnostics.ValueTypeOf(dp);
 
 	// The property's effective value: as the property list reads it where the element holds or inherits one, else the
 	// property's default, which an attached property the element has never been given is at.
 	private static object? CurrentValue(UIElement element, DependencyProperty dp) =>
 		Diagnostics.Properties(element).FirstOrDefault(p => ReferenceEquals(p.Property, dp)) is { } listed
 			? listed.Value
-			: dp.GetType().GetProperty("DefaultValue")?.GetValue(dp);
+			: Diagnostics.DefaultValueOf(dp);
 
 	private static string Text(object? value) => TapProperties.Format(value).Text ?? "";
 }

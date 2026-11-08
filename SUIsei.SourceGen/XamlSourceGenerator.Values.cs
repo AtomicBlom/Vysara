@@ -36,7 +36,7 @@ partial class XamlSourceGenerator
 		["System.Numerics.Vector2"] = (ConvertVector2, "two numbers, 'x,y'"),
 		["System.Numerics.Vector3"] = (ConvertVector3, "three numbers, 'x,y,z'"),
 		["SUIsei.GridLength"] = (ConvertGridLength, "Auto, *, N* or a number"),
-		["System.TimeSpan"] = (ConvertTimeSpan, "[[h:]m:]s"),
+		["System.TimeSpan"] = (ConvertTimeSpan, XamlValueSyntax.DurationSyntax),
 		["SUIsei.Animation.RepeatBehavior"] = (ConvertRepeatBehavior, "Forever, or a count such as 3x"),
 	};
 
@@ -46,8 +46,15 @@ partial class XamlSourceGenerator
 		var unwrapped = ConverterType(type);
 		if (Converters.TryGetValue(unwrapped.ToDisplayString(), out var converter))
 		{
-			expected = converter.Syntax;
-			return converter.Convert(raw, out code) ? LiteralStatus.Ok : LiteralStatus.BadValue;
+			if (converter.Convert(raw, out code))
+			{
+				expected = converter.Syntax;
+				return LiteralStatus.Ok;
+			}
+			// A duration WinUI reads as days or as hours and minutes gets a message saying how to write it.
+			expected = unwrapped.ToDisplayString() == "System.TimeSpan" && XamlValueSyntax.IsAmbiguousDuration(raw)
+				? XamlValueSyntax.AmbiguousDurationSyntax : converter.Syntax;
+			return LiteralStatus.BadValue;
 		}
 		expected = unwrapped.TypeKind == TypeKind.Enum
 			? $"a member of {unwrapped.Name}"
@@ -127,12 +134,12 @@ partial class XamlSourceGenerator
 		}
 	}
 
-	// "Auto" (any case) for FrameworkElement.Width or Height, which WinUI's parser reads as NaN through its LengthConverter;
-	// it takes no other property.
+	// "Auto" for FrameworkElement.Width or Height (XamlValueSyntax.IsAutoLength), by its CLR property or its
+	// dependency-property field.
 	private static bool IsAutoLength(ISymbol? member, string raw) =>
-		member is { Name: "Width" or "Height" or "WidthProperty" or "HeightProperty", ContainingType: { } owner }
-		&& owner.ToDisplayString() == "SUIsei.FrameworkElement"
-		&& string.Equals(raw.Trim(), "Auto", StringComparison.OrdinalIgnoreCase);
+		member is { ContainingType: { } owner }
+		&& XamlValueSyntax.IsAutoLength(owner.ToDisplayString(), member.Name.EndsWith("Property", StringComparison.Ordinal)
+			? member.Name.Substring(0, member.Name.Length - "Property".Length) : member.Name, raw);
 
 	private static bool ConvertColor(string raw, out string code)
 	{

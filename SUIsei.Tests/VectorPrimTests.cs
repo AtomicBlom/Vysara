@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
@@ -27,7 +28,7 @@ public sealed class VectorPrimTests
 		return output;
 	}
 
-	private static TessellatedPath Stroke(string markup, float thickness, PenLineJoin join = PenLineJoin.Miter)
+	private static TessellatedPath Stroke(string markup, float thickness, CompositionStrokeLineJoin join = CompositionStrokeLineJoin.Miter)
 	{
 		var output = new TessellatedPath();
 		new Tessellator().Stroke(Geometry.Parse(markup).CompositionPath, new CompositionStrokeStyle { Thickness = thickness, LineJoin = join },
@@ -145,6 +146,29 @@ public sealed class VectorPrimTests
 	}
 
 	[Test]
+	public void A_built_texture_with_no_uv_map_is_stretched_over_the_paths_bounds()
+	{
+		var image = BitmapSource.FromRgba8(2, 2, [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255]);
+		var path = Fill("M 10,20 L 50,20 50,60 10,60 Z");
+		var builder = new DrawListBuilder();
+		builder.Begin(new Vector2(Size));
+		builder.AddVector(path, PathTrim.None, Matrix3x2.Identity, White, Surface, texture: image);
+		var draw = builder.End();
+
+		var min = new Vector2(float.MaxValue);
+		var max = new Vector2(float.MinValue);
+		foreach (var v in draw.Vertices.Span)
+		{
+			min = Vector2.Min(min, v.Uv);
+			max = Vector2.Max(max, v.Uv);
+		}
+		min.X.ShouldBe(0f, 1e-5f);
+		min.Y.ShouldBe(0f, 1e-5f);
+		max.X.ShouldBe(1f, 1e-5f);
+		max.Y.ShouldBe(1f, 1e-5f);
+	}
+
+	[Test]
 	public void A_translucent_mesh_blends_once_along_its_shared_edges()
 	{
 		// A translucent 40×40 quad: its diagonal runs through pixel centres, which the top-left rule gives to one triangle.
@@ -210,7 +234,7 @@ public sealed class VectorPrimTests
 		path.LineTo(new Vector2(640, 190));
 		path.LineTo(new Vector2(720, 70));
 		path.LineTo(new Vector2(800, 190));
-		var style = new CompositionStrokeStyle { Thickness = 18, LineJoin = PenLineJoin.Bevel, StartCap = PenLineCap.Round, EndCap = PenLineCap.Triangle };
+		var style = new CompositionStrokeStyle { Thickness = 18, LineJoin = CompositionStrokeLineJoin.Bevel, StartCap = CompositionStrokeCap.Round, EndCap = CompositionStrokeCap.Triangle };
 		var stroke = new TessellatedPath();
 		new Tessellator().Stroke(path, style, TessellationScale.For(Matrix3x2.Identity), stroke);
 		var builder = new DrawListBuilder();
@@ -314,7 +338,7 @@ public sealed class VectorPrimTests
 	public void Drawing_a_path_moved_recoloured_and_trimmed_allocates_nothing_once_warm()
 	{
 		var fill = Fill("M 0,0 C 0,40 40,40 40,0 Z");
-		var stroke = Stroke("M 0,0 C 0,40 40,40 40,0 L 20,-20 Z", 3, PenLineJoin.Round);
+		var stroke = Stroke("M 0,0 C 0,40 40,40 40,0 L 20,-20 Z", 3, CompositionStrokeLineJoin.Round);
 		var builder = new DrawListBuilder();
 		for (var i = 0; i < 8; i++)
 			Frame(i);

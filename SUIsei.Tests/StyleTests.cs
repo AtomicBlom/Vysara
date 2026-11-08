@@ -1,4 +1,6 @@
 using SUIsei.Controls;
+using SUIsei.Media;
+using SUIsei.Media.Imaging;
 
 namespace SUIsei.Tests;
 
@@ -131,6 +133,44 @@ public sealed class StyleTests
 
 		tb.FontSize.ShouldBe(18f); // from base
 		tb.Text.ShouldBe("hello");   // from derived
+	}
+
+	/// <summary>Every setter's value is checked before any is applied: a style with one the element refuses (here in its
+	/// base, an image brush for text, which can't paint glyphs) throws and leaves the element as it was, its old style still
+	/// applied and still its style.</summary>
+	[Test]
+	public void A_style_with_a_refused_setter_applies_none_of_its_setters()
+	{
+		var text = new TextBlock();
+		var foreground = text.Foreground;
+		var old = new Style { Setters = { new Setter { Property = FrameworkElement.WidthProperty, Value = 10f } } };
+		text.Style = old;
+		var bad = new Style
+		{
+			BasedOn = new Style
+			{
+				Setters =
+				{
+					new Setter { Property = FrameworkElement.HeightProperty, Value = 20f },
+					new Setter { Property = TextBlock.ForegroundProperty, Value = new ImageBrush { ImageSource = BitmapSource.FromRgba8(2, 2, new byte[16]) } },
+				},
+			},
+			Setters = { new Setter { Property = FrameworkElement.WidthProperty, Value = 30f } },
+		};
+
+		Should.Throw<ArgumentException>(() => text.Style = bad);
+		text.Style.ShouldBeSameAs(old);
+		text.Width.ShouldBe(10f);
+		text.Height.ShouldBe(float.NaN);
+		text.Foreground.ShouldBe(foreground);
+
+		Should.Throw<ArgumentException>(() => bad.Apply(text));
+		text.Width.ShouldBe(10f);
+		text.Height.ShouldBe(float.NaN);
+
+		var wrongType = new Style { Setters = { new Setter { Property = FrameworkElement.WidthProperty, Value = "wide" } } };
+		Should.Throw<ArgumentException>(() => text.Style = wrongType);
+		text.Width.ShouldBe(10f);
 	}
 
 	[Test]

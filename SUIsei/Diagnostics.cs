@@ -1,11 +1,7 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using RoseMcp.Tap.Endpoint;
-using RoseMcp.Tap.Protocol;
 
 namespace SUIsei;
 
@@ -24,15 +20,25 @@ namespace SUIsei;
 /// </para>
 /// <para>
 /// An element tree belongs to the thread that ticks its host. A tool on another thread reaches it through
-/// <see cref="Post"/>, and calls every member that reads or changes an element from the work it posts.
+/// <see cref="Post(UIHost, Action)"/> (or <see cref="Post(Action)"/>, where every host ticks on one thread), and calls
+/// every member that reads or changes an element from the work it posts.
+/// </para>
+/// <para>
+/// The pipe a RoseMCP host loads a tap through is not here: a game that wants it references SUIsei.Diagnostics.Endpoint
+/// and starts it, so turning this switch on never by itself lets another process load code into the game.
 /// </para>
 /// </summary>
 public static partial class Diagnostics
 {
 	private const string SwitchName = "SUIsei.Diagnostics.Enabled";
 
-	// The switch is fixed for the life of the process, so it is read once.
-	private static readonly bool SwitchOn = AppContext.TryGetSwitch(SwitchName, out var on) && on;
+	// The switch as the runtime config sets it, read once since it is fixed for the life of the process. The trimmer
+	// substitutes this property, not Enabled, so Enabled's dynamic-code check survives an app that sets the switch: a
+	// NativeAOT app that turns it on still reads Enabled as false and keeps none of the code it guards. Enabled reads this
+	// first, so a trimmed app that leaves the switch off folds Enabled to false on it alone; the trimmer knows
+	// IsDynamicCodeSupported only under NativeAOT, and a branch on it anywhere else would keep the guarded code.
+	[FeatureSwitchDefinition(SwitchName)]
+	private static bool SwitchOn { get; } = AppContext.TryGetSwitch(SwitchName, out var on) && on;
 
 	// Work posted for the next tick; made on the first post, so a game nobody inspects holds no queue.
 	private static ConcurrentQueue<Action>? _posted;
@@ -40,16 +46,15 @@ public static partial class Diagnostics
 	/// <summary>
 	/// Whether diagnostics are on: the runtime config sets <c>SUIsei.Diagnostics.Enabled</c> to true and dynamic code
 	/// is supported. Code inside <c>if (Diagnostics.Enabled)</c> may load and reflect over assemblies without the trim
-	/// and AOT analyzers objecting, and is removed where the switch is off.
+	/// and AOT analyzers objecting, and is removed where the switch is off and under NativeAOT, switch or no switch.
 	/// </summary>
-	[FeatureSwitchDefinition(SwitchName)]
 	[FeatureGuard(typeof(RequiresDynamicCodeAttribute))]
 	[FeatureGuard(typeof(RequiresUnreferencedCodeAttribute))]
 	[UnconditionalSuppressMessage("Trimming", "IL4000",
-		Justification = "The analyzer accepts only a bare feature check as a guard's body, and this one is also a switch. It is "
-			+ "false wherever dynamic code is not, which covers NativeAOT; a trimmed app that sets the switch has asked for "
-			+ "the code it guards, and its trimmer substitutes the value it set.")]
-	public static bool Enabled => RuntimeFeature.IsDynamicCodeSupported && SwitchOn;
+		Justification = "The analyzer accepts only a bare feature check as a guard's body, and this one also reads the switch. "
+			+ "It is false wherever dynamic code is not, which covers NativeAOT; a trimmed JIT app that sets the switch has "
+			+ "asked for the code it guards, and its trimmer substitutes SwitchOn with the value it set.")]
+	public static bool Enabled => SwitchOn && RuntimeFeature.IsDynamicCodeSupported;
 
 	/// <summary>The live hosts, in the order they were built.</summary>
 	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
@@ -90,50 +95,63 @@ public static partial class Diagnostics
 	/// ticks it, before that tick's layout: a change it makes lays out and draws that frame, and what it reads is what
 	/// the last frame drew. Safe to call from any thread. An exception the action throws leaves that tick, so an action
 	/// catches its own; work posted after it runs on the next tick. Nothing is allocated while nothing is posted.
+	/// <para>
+	/// Whichever host ticks next runs it, so this suits a game whose hosts all tick on one thread. Where hosts tick on
+	/// threads of their own, work that touches one host's tree goes to that host with <see cref="Post(UIHost, Action)"/>.
+	/// </para>
 	/// </summary>
 	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
 	public static void Post(Action action)
 	{
 		ArgumentNullException.ThrowIfNull(action);
 		RequireEnabled();
-		var queue = Volatile.Read(ref _posted);
+		Enqueue(ref _posted, action);
+	}
+
+	/// <summary>
+	/// Run <paramref name="action"/> at the start of <paramref name="host"/>'s next <see cref="UIHost.Tick"/>, on the
+	/// thread that ticks it, as <see cref="Post(Action)"/> does for any host. Safe to call from any thread.
+	/// <para>
+	/// The work waits with the host until it ticks, so work posted to a host that never ticks again, one the game has
+	/// stopped ticking or let go of, never runs, and nothing says so. A tool that waits for the work to finish waits with
+	/// a timeout.
+	/// </para>
+	/// </summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static void Post(UIHost host, Action action)
+	{
+		ArgumentNullException.ThrowIfNull(host);
+		ArgumentNullException.ThrowIfNull(action);
+		RequireEnabled();
+		Enqueue(ref host.DiagnosticsPosted, action);
+	}
+
+	// Each queue is made on its first post, so a game nobody inspects holds none.
+	private static void Enqueue(ref ConcurrentQueue<Action>? slot, Action action)
+	{
+		var queue = Volatile.Read(ref slot);
 		if (queue is null)
 		{
-			Interlocked.CompareExchange(ref _posted, new ConcurrentQueue<Action>(), null);
-			queue = _posted!;
+			Interlocked.CompareExchange(ref slot, new ConcurrentQueue<Action>(), null);
+			queue = slot!;
 		}
 		queue.Enqueue(action);
 	}
 
-	// Called by UIHost.Tick. Runs only what was queued when it started, so an action that posts again waits a tick.
-	internal static void RunPosted()
+	// Called by UIHost.Tick: the work posted to any host, then to this one. Runs only what was queued when it started,
+	// so an action that posts again waits a tick.
+	internal static void RunPosted(UIHost host)
 	{
-		var queue = Volatile.Read(ref _posted);
+		Drain(Volatile.Read(ref _posted));
+		Drain(Volatile.Read(ref host.DiagnosticsPosted));
+	}
+
+	private static void Drain(ConcurrentQueue<Action>? queue)
+	{
 		if (queue is null || queue.IsEmpty)
 			return;
 		for (var remaining = queue.Count; remaining > 0 && queue.TryDequeue(out var action); remaining--)
 			action();
-	}
-
-	// The pipe the diagnostics endpoint listens on, as a tap's RoseMcpTap attribute names it.
-	private const string EndpointPipe = "suisei-diag-{pid}";
-
-	// The endpoint a RoseMCP host loads a tap through: started with the first host and kept for the life of the process.
-	private static TapEndpoint? _endpoint;
-	private static int _endpointStarting;
-
-	/// <summary>
-	/// Start the diagnostics endpoint on <c>suisei-diag-{pid}</c>, once per process, so a RoseMCP host can load a tap into
-	/// this game whether it launched it or attached to it later. Called as each <see cref="UIHost"/> is built; does
-	/// nothing while diagnostics are off. What the endpoint does goes to <see cref="Trace"/>.
-	/// </summary>
-	internal static void StartEndpoint()
-	{
-		if (!Enabled || Interlocked.Exchange(ref _endpointStarting, 1) != 0)
-			return;
-		var version = typeof(Diagnostics).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
-		_endpoint = TapEndpoint.Start(EndpointWire.PipeName(EndpointPipe, Environment.ProcessId), "SUIsei", version,
-			static message => Trace.WriteLine(message, "SUIsei diagnostics"));
 	}
 
 	/// <summary>The elements directly beneath <paramref name="element"/> in the tree that lays out and draws: a panel's

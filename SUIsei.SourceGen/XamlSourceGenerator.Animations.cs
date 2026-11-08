@@ -25,8 +25,18 @@ partial class XamlSourceGenerator
 	{
 		var sbVar = NewName(gen, "__sb");
 		scope.Emit($"var {sbVar} = new global::SUIsei.Animation.Storyboard();");
+		// The storyboard itself takes nothing: timing and targets are set on each animation it holds.
+		foreach (var attr in sbEl.Attributes())
+		{
+			if (attr.IsNamespaceDeclaration || IsIgnorable(sbEl, attr.Name.Namespace) || IsDirective(gen, sbEl, attr))
+				continue;
+			gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a Storyboard", " (set it on each animation the storyboard holds)");
+		}
 		foreach (var animEl in sbEl.Elements())
-			EmitAnimation(gen, scope, ownerVar, sbVar, animEl);
+		{
+			if (!IsIgnorable(animEl, animEl.Name.Namespace))
+				EmitAnimation(gen, scope, ownerVar, sbVar, animEl);
+		}
 		return sbVar;
 	}
 
@@ -54,7 +64,7 @@ partial class XamlSourceGenerator
 		var hasDuration = false;
 		foreach (var attr in animEl.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(animEl, attr.Name.Namespace))
+			if (attr.IsNamespaceDeclaration || IsIgnorable(animEl, attr.Name.Namespace) || IsDirective(gen, animEl, attr))
 				continue;
 			switch (attr.Name.LocalName)
 			{
@@ -81,7 +91,8 @@ partial class XamlSourceGenerator
 				gen.Report(BadStoryboardTarget, targetName, tn);
 		}
 		ITypeSymbol? valueType = null;
-		if (targetProp is not null && targetResolved && TryResolveTargetPath(gen, targetProp, targetType, kind, name, out var path, out valueType))
+		IFieldSymbol? propertyField = null;
+		if (targetProp is not null && targetResolved && TryResolveTargetPath(gen, targetProp, targetType, kind, name, out var path, out valueType, out propertyField))
 			scope.Emit($"{animVar}.TargetProperty = {path};");
 		else if (targetProp is null && kind == AnimationKind.ObjectKeyFrames)
 			gen.Report(BadPropertyElement, animEl, $"{name} (needs a Storyboard.TargetProperty, whose type its values convert for)");
@@ -100,7 +111,7 @@ partial class XamlSourceGenerator
 				{
 					keyFrames++;
 					var keyTime = kind == AnimationKind.ObjectKeyFrames
-						? EmitObjectKeyFrame(gen, scope, ownerVar, animVar, keyEl, targetProp?.Value.Trim() ?? "", valueType)
+						? EmitObjectKeyFrame(gen, scope, ownerVar, animVar, keyEl, targetProp?.Value.Trim() ?? "", valueType, propertyField)
 						: EmitKeyFrame(gen, scope, animVar, keyEl);
 					lastKeyTime = Math.Max(lastKeyTime, keyTime);
 				}
@@ -135,7 +146,7 @@ partial class XamlSourceGenerator
 		var keyTime = 0.0;
 		foreach (var attr in keyEl.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(keyEl, attr.Name.Namespace))
+			if (attr.IsNamespaceDeclaration || IsIgnorable(keyEl, attr.Name.Namespace) || IsDirective(gen, keyEl, attr))
 				continue;
 			if (attr.Name.LocalName == "KeyTime" && !XamlValueSyntax.TryParseDuration(attr.Value, out keyTime))
 				keyTime = 0;
@@ -158,7 +169,7 @@ partial class XamlSourceGenerator
 	// property the animation sets (null when the path did not resolve, which is reported already). Returns its key time in
 	// seconds.
 	private static double EmitObjectKeyFrame(Gen gen, Scope scope, string ownerVar, string animVar, XElement keyEl, string propertyName,
-		ITypeSymbol? valueType)
+		ITypeSymbol? valueType, IFieldSymbol? propertyField)
 	{
 		var name = keyEl.Name.LocalName;
 		if (name != "DiscreteObjectKeyFrame")
@@ -175,7 +186,7 @@ partial class XamlSourceGenerator
 		XAttribute? valueAttr = null;
 		foreach (var attr in keyEl.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(keyEl, attr.Name.Namespace))
+			if (attr.IsNamespaceDeclaration || IsIgnorable(keyEl, attr.Name.Namespace) || IsDirective(gen, keyEl, attr))
 				continue;
 			if (attr.Name.LocalName == "Value")
 			{
@@ -198,7 +209,7 @@ partial class XamlSourceGenerator
 
 		if ((valueAttr is null) == (valueEl is null))
 			gen.Report(BadPropertyElement, keyEl, $"{name} (needs a Value, as an attribute or a <{name}.Value>)");
-		else if (valueType is not null && ObjectKeyFrameValue(gen, scope, ownerVar, valueAttr, valueEl, valueType, propertyName) is { } code)
+		else if (valueType is not null && ObjectKeyFrameValue(gen, scope, ownerVar, valueAttr, valueEl, valueType, propertyName, propertyField) is { } code)
 			scope.Emit($"{keyVar}.Value = {code};");
 
 		scope.Emit($"{animVar}.KeyFrames.Add({keyVar});");
@@ -208,12 +219,12 @@ partial class XamlSourceGenerator
 	// A key's Value, written as a setter's is: text converted for the property's type (an enum member, a colour for a
 	// brush), {StaticResource}, {x:Null} or {x:Static}, or in <X.Value> text or one object of the type. Null when reported.
 	private static string? ObjectKeyFrameValue(Gen gen, Scope scope, string ownerVar, XAttribute? valueAttr, XElement? valueEl,
-		ITypeSymbol valueType, string propertyName)
+		ITypeSymbol valueType, string propertyName, IFieldSymbol? propertyField)
 	{
 		if (valueAttr is not null)
 		{
 			if (!IsMarkup(valueAttr.Value, out var inner))
-				return ConvertOrReport(gen, valueAttr, valueType, valueAttr.Value, propertyName);
+				return ConvertOrReport(gen, valueAttr, valueType, valueAttr.Value, propertyName, propertyField);
 			if (TryMarkupValue(gen, scope, valueAttr, ownerVar, inner, valueType, propertyName, out var markupCode))
 				return markupCode;
 			gen.Report(UnsupportedMarkup, valueAttr, valueAttr.Value.Trim());
@@ -223,7 +234,7 @@ partial class XamlSourceGenerator
 		var children = ObjectChildren(valueEl!);
 		var text = TextContent(valueEl!);
 		if (children.Count == 0 && text is not null)
-			return ConvertOrReport(gen, valueEl!, valueType, text, propertyName);
+			return ConvertOrReport(gen, valueEl!, valueType, text, propertyName, propertyField);
 		if (children.Count == 1 && text is null)
 		{
 			var child = children[0];
@@ -260,7 +271,7 @@ partial class XamlSourceGenerator
 		var assignments = new List<string>();
 		foreach (var attr in easeEl.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || IsIgnorable(easeEl, attr.Name.Namespace))
+			if (attr.IsNamespaceDeclaration || IsIgnorable(easeEl, attr.Name.Namespace) || IsDirective(gen, easeEl, attr))
 				continue;
 			if (FindProperty(type, attr.Name.LocalName) is not { } prop)
 				gen.Report(UnknownProperty, attr, easeEl.Name.LocalName, attr.Name.LocalName);
@@ -274,10 +285,11 @@ partial class XamlSourceGenerator
 	// step and that this kind of animation can drive the final property, whose value type is `propertyType`. Reports and
 	// returns false otherwise.
 	private static bool TryResolveTargetPath(Gen gen, XAttribute attr, INamedTypeSymbol? targetType, AnimationKind kind,
-		string animationName, out string expr, out ITypeSymbol? propertyType)
+		string animationName, out string expr, out ITypeSymbol? propertyType, out IFieldSymbol? propertyField)
 	{
 		expr = "";
 		propertyType = null;
+		propertyField = null;
 		var raw = attr.Value.Trim();
 		if (raw is "RenderTransform.Translate.X" or "RenderTransform.Translate.Y")
 		{
@@ -355,6 +367,7 @@ partial class XamlSourceGenerator
 					return false;
 				}
 				propertyType = valueType;
+				propertyField = dp;
 				break;
 			}
 			if (valueType is not INamedTypeSymbol next || dependencyObject is null || !InheritsFrom(next, dependencyObject))

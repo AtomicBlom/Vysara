@@ -16,7 +16,7 @@ public abstract class Control : FrameworkElement
 			new PropertyMetadata<Control, bool>
 			{
 				DefaultValue = true,
-				Coerce = static (c, value) => value && !c._ancestorDisabled,
+				Coerce = static (c, value) => value && !c._ancestorDisabled && !c._commandDisabled,
 				PropertyChanged = static (c, _, _) => c.RefreshIsEnabled(),
 			});
 
@@ -67,6 +67,20 @@ public abstract class Control : FrameworkElement
 		RefreshIsEnabled();
 	}
 
+	// Whether a command the control runs can't execute now: folded into the effective IsEnabled, as WinUI folds
+	// CanExecute in, rather than written over the author's own value.
+	private bool _commandDisabled;
+
+	/// <summary>Set whether the control's command can't execute now; called as the command, its parameter or its
+	/// CanExecute changes.</summary>
+	private protected void SetCommandDisabled(bool disabled)
+	{
+		if (_commandDisabled == disabled)
+			return;
+		_commandDisabled = disabled;
+		RefreshIsEnabled();
+	}
+
 	// After the local value or the inherited context changed: if the effective value moved, record it, update the
 	// visual state, raise IsEnabledChanged, and pass the change down to the controls beneath.
 	private void RefreshIsEnabled()
@@ -108,7 +122,8 @@ public abstract class Control : FrameworkElement
 
 	/// <summary>The brush for the control's text, inherited as in WinUI: the text in its template, or made for its string
 	/// content, is painted with it unless that text sets its own, and so are the controls inside it. Null shows the
-	/// template's own look.</summary>
+	/// template's own look. Any brush is accepted, as in WinUI, since a template may paint more than text with it; an image
+	/// brush can't paint glyphs (they are drawn from the font atlas), so text it reaches draws nothing.</summary>
 	public static readonly DependencyProperty<Control, Brush?> ForegroundProperty =
 		DependencyProperty.Register(nameof(Foreground),
 			new PropertyMetadata<Control, Brush?>
@@ -219,10 +234,17 @@ public abstract class Control : FrameworkElement
 	/// <summary>Hook for a control to grab named parts after its template is realized.</summary>
 	protected virtual void OnApplyTemplate() { }
 
+	// The old template goes whole: its states are left, releasing what they hold (which can include this control's own
+	// properties), and the template bindings its factory registered are dropped, so later changes reach only the new
+	// template's parts and the old parts can be collected. Template bindings are registered only by template factories. A
+	// control with no template realized shows the states of its own groups, as a ListViewItem's built-in selection does; a
+	// template takes over from them, so they are left too.
 	private void OnTemplateChanged()
 	{
+		VisualStateManager.LeaveAll(_templateRoot ?? (UIElement)this);
 		if (_templateRoot is not null)
 		{
+			ClearTemplateBindings();
 			DropChild(_templateRoot);
 			_templateRoot = null;
 			_templateRootList = [];

@@ -35,7 +35,7 @@ public static partial class Diagnostics
 	/// <param name="Name">The property's name, without its owner: <c>Opacity</c>, <c>Row</c>.</param>
 	/// <param name="OwnerType">The type that registered it: the declaring control, or for an attached property the
 	/// type that declares it (<c>Grid</c> for <c>Grid.Row</c>).</param>
-	/// <param name="ValueType">The type of its value, what <see cref="TryParseValue"/> converts text to for it.</param>
+	/// <param name="ValueType">The type of its value, what <see cref="TryParseValue(Type, string, out object?)"/> converts text to for it.</param>
 	/// <param name="Value">Its effective value, coerced.</param>
 	/// <param name="Level">The level <paramref name="Value"/> came from.</param>
 	/// <param name="Source">Where in markup the value was set, when that is known: the style setter for a
@@ -130,7 +130,7 @@ public static partial class Diagnostics
 	{
 		var level = element.TopRung(dp) switch
 		{
-			DependencyObject.ValueRung.Animation => ValueLevel.Animation,
+			DependencyObject.ValueRung.Animation or DependencyObject.ValueRung.Transition => ValueLevel.Animation,
 			DependencyObject.ValueRung.Local => ValueLevel.Local,
 			DependencyObject.ValueRung.Template => ValueLevel.Template,
 			DependencyObject.ValueRung.Style => ValueLevel.Style,
@@ -157,5 +157,25 @@ public static partial class Diagnostics
 			}
 		}
 		return null;
+	}
+
+	/// <summary>The type of the values <paramref name="property"/> holds, so a tool can parse text for it
+	/// (<see cref="TryParseValue(Type, string, out object?)"/>) without reflecting over the property's generic type.</summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static Type ValueTypeOf(DependencyProperty property)
+	{
+		ArgumentNullException.ThrowIfNull(property);
+		RequireEnabled();
+		return property.ValueType;
+	}
+
+	/// <summary>The value <paramref name="property"/> reads on an object that holds none for it, boxed: what an attached
+	/// property an element has never been given is at.</summary>
+	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
+	public static object? DefaultValueOf(DependencyProperty property)
+	{
+		ArgumentNullException.ThrowIfNull(property);
+		RequireEnabled();
+		return property.BoxedDefaultValue;
 	}
 }

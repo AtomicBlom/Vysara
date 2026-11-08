@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Media;
 
 namespace SUIsei.Tests;
@@ -163,7 +164,7 @@ public sealed class GeometryTests
 
 		listener.Changes.ShouldBe(1);
 		var path = group.CompositionPath;
-		path.FillRule.ShouldBe(FillRule.Nonzero);
+		path.FillRule.ShouldBe(CompositionFillRule.Nonzero);
 		path.ToString().ShouldBe("F1 M 0,0 L 2,0 L 2,2 L 0,2 Z M 0,0 L 1,1");
 		path.GetFigure(1).IsFilled.ShouldBeFalse();
 

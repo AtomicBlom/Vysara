@@ -127,10 +127,9 @@ public sealed class ScrollViewer : FrameworkElement
 		ExtentWidth = Content.DesiredSize.Width;
 		ExtentHeight = Content.DesiredSize.Height;
 
-		// The viewport is the available size; an unbounded container collapses the viewport to the extent (no scroll).
-		var width = float.IsPositiveInfinity(available.Width) ? ExtentWidth : available.Width;
-		var height = float.IsPositiveInfinity(available.Height) ? ExtentHeight : available.Height;
-		return new Size(width, height);
+		// As WinUI's, it asks for its content's size up to the space there is: a viewer in a star cell is still arranged
+		// to fill it, while one sized to its content (a flyout's, an Auto row's) stays only as big as what it holds.
+		return new Size(MathF.Min(ExtentWidth, available.Width), MathF.Min(ExtentHeight, available.Height));
 	}
 
 	protected override Size ArrangeOverride(Size finalSize)

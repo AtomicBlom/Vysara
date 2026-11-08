@@ -108,13 +108,31 @@ public sealed class DiagnosticsTests
 		var host = new UIHost();
 		host.CreateRoot(UILayer.Default);
 		Diagnostics.Post(() => { });
-		host.Tick(0.016, 0f, Surface); // the queue now exists, and is empty
-		Diagnostics.RunPosted();
+		Diagnostics.Post(host, () => { });
+		host.Tick(0.016, 0f, Surface); // both queues now exist, and are empty
+		Diagnostics.RunPosted(host);
 
 		var before = GC.GetAllocatedBytesForCurrentThread();
 		for (var i = 0; i < 100; i++)
-			Diagnostics.RunPosted();
+			Diagnostics.RunPosted(host);
 		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0L);
+	}
+
+	/// <summary>Work posted to one host waits for that host's tick: another host ticking never runs it.</summary>
+	[Test]
+	public void Work_posted_to_a_host_runs_only_at_that_hosts_tick()
+	{
+		var mine = new UIHost();
+		mine.CreateRoot(UILayer.Default);
+		var other = new UIHost();
+		other.CreateRoot(UILayer.Default);
+		var ran = false;
+		Diagnostics.Post(mine, () => ran = true);
+
+		other.Tick(0.016, 0f, Surface);
+		ran.ShouldBeFalse();
+		mine.Tick(0.016, 0f, Surface);
+		ran.ShouldBeTrue();
 	}
 
 	// --- The tree ---
@@ -498,6 +516,60 @@ public sealed class DiagnosticsTests
 		Parse<HdrColor?>("#00FF00").ShouldBe(HdrColor.FromRgb(0, 255, 0));
 	}
 
+	/// <summary>The forms the generator converts that a tool may also need to type: radii, sizes, rectangles, path markup
+	/// and number lists, with the generator's own rules (one radius, or four).</summary>
+	[Test]
+	public void TryParseValue_reads_the_generators_other_value_forms()
+	{
+		Diagnostics.TryParseValue(typeof(CornerRadius), "4", out var radius).ShouldBeTrue();
+		radius.ShouldBe(new CornerRadius(4f));
+		Diagnostics.TryParseValue(typeof(CornerRadius), "1,2,3,4", out var radii).ShouldBeTrue();
+		radii.ShouldBe(new CornerRadius(1f, 2f, 3f, 4f));
+		Diagnostics.TryParseValue(typeof(CornerRadius), "1,2", out _).ShouldBeFalse();
+		Diagnostics.TryParseValue(typeof(Size), "10,20", out var size).ShouldBeTrue();
+		size.ShouldBe(new Size(10f, 20f));
+		Diagnostics.TryParseValue(typeof(Rect), "1,2,3,4", out var rect).ShouldBeTrue();
+		rect.ShouldBe(new Rect(1f, 2f, 3f, 4f));
+		Diagnostics.TryParseValue(typeof(Rect), "1,2,-3,4", out _).ShouldBeFalse();
+		Diagnostics.TryParseValue(typeof(Geometry), "M 0,0 L 10,10", out var geometry).ShouldBeTrue();
+		geometry.ShouldBeOfType<PathGeometry>();
+		Diagnostics.TryParseValue(typeof(PointCollection), "0,0 5,5", out var points).ShouldBeTrue();
+		((PointCollection)points!).Count.ShouldBe(2);
+		Diagnostics.TryParseValue(typeof(PointCollection), "0,0 5", out _).ShouldBeFalse();
+		Diagnostics.TryParseValue(typeof(DoubleCollection), "2 1", out var dashes).ShouldBeTrue();
+		((DoubleCollection)dashes!).ShouldBe([2.0, 1.0]);
+	}
+
+	/// <summary>A dash array reads as the doubles the generator writes, each number's round-trip text as a double literal,
+	/// not as a float widened; empty text clears a point or dash list, as it does in markup; and a matrix reads as six
+	/// numbers in WinUI's order.</summary>
+	[Test]
+	public void TryParseValue_reads_number_lists_and_matrices_as_the_generator_writes_them()
+	{
+		Diagnostics.TryParseValue(typeof(DoubleCollection), "0.1 0.3", out var dashes).ShouldBeTrue();
+		((DoubleCollection)dashes!).ShouldBe([0.1, 0.3]);
+
+		Diagnostics.TryParseValue(typeof(DoubleCollection), "", out var noDashes).ShouldBeTrue();
+		((DoubleCollection)noDashes!).Count.ShouldBe(0);
+		Diagnostics.TryParseValue(typeof(PointCollection), "  ", out var noPoints).ShouldBeTrue();
+		((PointCollection)noPoints!).Count.ShouldBe(0);
+
+		Diagnostics.CanParseValue(typeof(Matrix3x2)).ShouldBeTrue();
+		Diagnostics.TryParseValue(typeof(Matrix3x2), "1,0.5 0,2 10,-4", out var matrix).ShouldBeTrue();
+		matrix.ShouldBe(new Matrix3x2(1f, 0.5f, 0f, 2f, 10f, -4f));
+		Diagnostics.TryParseValue(typeof(Matrix3x2), "1,0,0,1,0", out _).ShouldBeFalse();
+	}
+
+	/// <summary>A property's value type and default, read without reflecting over its generic type.</summary>
+	[Test]
+	public void A_propertys_value_type_and_default_are_readable()
+	{
+		Diagnostics.ValueTypeOf(UIElement.OpacityProperty).ShouldBe(typeof(float));
+		Diagnostics.DefaultValueOf(UIElement.OpacityProperty).ShouldBe(1f);
+		Diagnostics.ValueTypeOf(Border.BackgroundProperty).ShouldBe(typeof(Brush));
+		Diagnostics.DefaultValueOf(Border.BackgroundProperty).ShouldBeNull();
+	}
+
 	[Test]
 	public void TryParseValue_takes_x_null_only_where_null_is_allowed()
 	{
@@ -519,10 +591,42 @@ public sealed class DiagnosticsTests
 	[Arguments(typeof(GridLength), "Fill")]
 	[Arguments(typeof(HdrColor), "#12345")]
 	[Arguments(typeof(Style), "Anything")]
+	[Arguments(typeof(TimeSpan), "2")]
+	[Arguments(typeof(TimeSpan), "0:30")]
+	[Arguments(typeof(TimeSpan), "1.5")]
+	[Arguments(typeof(TimeSpan), "1:02:03:04")]
+	[Arguments(typeof(TimeSpan), "-0:0:1")]
+	[Arguments(typeof(float), "Auto")]
 	public void TryParseValue_refuses_what_the_generator_refuses(Type type, string text)
 	{
 		Diagnostics.TryParseValue(type, text, out var value).ShouldBeFalse();
 		value.ShouldBeNull();
+	}
+
+	[Test]
+	public void TryParseValue_reads_durations_in_WinUIs_grammar()
+	{
+		Parse<TimeSpan>("0:0:0.25").ShouldBe(TimeSpan.FromSeconds(0.25));
+		Parse<TimeSpan>(" 01:02:03 ").ShouldBe(new TimeSpan(1, 2, 3));
+		Parse<TimeSpan>("1.02:03").ShouldBe(new TimeSpan(1, 2, 3, 0));
+		Parse<TimeSpan>("1.02:03:04.5").ShouldBe(new TimeSpan(1, 2, 3, 4, 500));
+		Parse<TimeSpan>("0").ShouldBe(TimeSpan.Zero);
+		Parse<TimeSpan>("0:00").ShouldBe(TimeSpan.Zero);
+	}
+
+	[Test]
+	public void TryParseValue_for_a_property_takes_Auto_where_the_generator_does()
+	{
+		Diagnostics.TryParseValue(FrameworkElement.WidthProperty, "Auto", out var width).ShouldBeTrue();
+		float.IsNaN(width.ShouldBeOfType<float>()).ShouldBeTrue();
+		Diagnostics.TryParseValue(FrameworkElement.HeightProperty, "auto", out var height).ShouldBeTrue();
+		float.IsNaN(height.ShouldBeOfType<float>()).ShouldBeTrue();
+		Diagnostics.TryParseValue(FrameworkElement.WidthProperty, "40", out var pixels).ShouldBeTrue();
+		pixels.ShouldBe(40f);
+
+		Diagnostics.TryParseValue(FrameworkElement.MinWidthProperty, "Auto", out var minWidth).ShouldBeFalse();
+		minWidth.ShouldBeNull();
+		Diagnostics.TryParseValue(UIElement.OpacityProperty, "Auto", out _).ShouldBeFalse();
 	}
 
 	private static T Parse<T>(string text)

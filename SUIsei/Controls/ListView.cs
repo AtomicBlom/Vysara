@@ -18,6 +18,10 @@ public class ListView : ItemsControl
 	/// <summary>The selected data item, or null.</summary>
 	public object? SelectedItem { get; private set; }
 
+	/// <summary>Raised when the selection changes, by a click or by <see cref="SelectIndex"/>, or when reloading the items
+	/// clears it.</summary>
+	public event SelectionChangedEventHandler? SelectionChanged;
+
 	/// <summary>Select the item at <paramref name="index"/> (or clear with -1).</summary>
 	public void SelectIndex(int index)
 	{
@@ -40,9 +44,13 @@ public class ListView : ItemsControl
 
 	protected override void OnReload()
 	{
+		var removed = SelectedItem;
+		var hadSelection = _selected is not null;
 		_selected = null;
 		SelectedItem = null;
 		SelectedIndex = -1;
+		if (hadSelection)
+			RaiseSelectionChanged(true, removed, false, null);
 	}
 
 	internal void SelectContainer(ListViewItem container)
@@ -50,19 +58,40 @@ public class ListView : ItemsControl
 		if (SelectionMode == SelectionMode.None || ReferenceEquals(_selected, container))
 			return;
 
-		_selected?.SetSelected(false);
+		var previous = _selected;
+		var removed = SelectedItem;
+		previous?.SetSelected(false);
 		_selected = container;
 		container.SetSelected(true);
 		SelectedItem = container.DataItem;
 		SelectedIndex = ItemsHost is { } host ? IndexOf(host, container) : -1;
+		RaiseSelectionChanged(previous is not null, removed, true, SelectedItem);
 	}
 
 	private void ClearSelection()
 	{
-		_selected?.SetSelected(false);
+		if (_selected is not { } previous)
+			return;
+		var removed = SelectedItem;
+		previous.SetSelected(false);
 		_selected = null;
 		SelectedItem = null;
 		SelectedIndex = -1;
+		RaiseSelectionChanged(true, removed, false, null);
+	}
+
+	// Raise SelectionChanged from this list, with at most one item on each side, as single selection changes them. Nothing
+	// is made when no one listens, and an empty side is the shared empty array.
+	private void RaiseSelectionChanged(bool hasRemoved, object? removed, bool hasAdded, object? added)
+	{
+		if (SelectionChanged is not { } handler)
+			return;
+		var args = new SelectionChangedEventArgs(hasRemoved ? [removed] : Array.Empty<object?>(), hasAdded ? [added] : Array.Empty<object?>())
+		{
+			OriginalSource = this,
+			Source = this,
+		};
+		handler(this, args);
 	}
 
 	private static int IndexOf(Panel host, UIElement container)

@@ -1,6 +1,7 @@
 using System.Numerics;
 using SUIsei.Animation;
 using SUIsei.Controls;
+using SUIsei.Extensions;
 using SUIsei.Media;
 using SUIsei.Tests.Sample;
 
@@ -46,6 +47,132 @@ public sealed class AnimationChannelTests
 
 		clock.Advance(0.5);
 		border.Background.SolidColor().ShouldBe(new HdrColor(0.5f, 0f, 0.5f, 1f));
+	}
+
+	/// <summary>
+	/// The path is walked again each time the storyboard begins: a background replaced since (by a style, a binding or
+	/// code) is the brush animated, and the old brush, which may be shared with other elements, is let go of the colour
+	/// the earlier run held on it.
+	/// </summary>
+	[Test]
+	public void A_storyboard_animates_the_brush_its_path_reaches_now_and_lets_go_of_a_replaced_one()
+	{
+		var first = new SolidColorBrush(Red);
+		var border = new Border { Background = first };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor });
+		clock.Begin(storyboard);
+		clock.Advance(1.5);
+		first.Color.ShouldBe(Blue); // finished, and holding
+
+		var second = new SolidColorBrush(Red);
+		border.Background = second;
+		clock.Begin(storyboard);
+		clock.Advance(1.5);
+
+		second.Color.ShouldBe(Blue);
+		first.Color.ShouldBe(Red); // released
+
+		clock.Stop(storyboard);
+		second.Color.ShouldBe(Red);
+	}
+
+	/// <summary>Restarted while it runs, the storyboard releases the old brush through the binding it ran on.</summary>
+	[Test]
+	public void Restarting_after_the_brush_is_replaced_mid_run_releases_the_old_one()
+	{
+		var first = new SolidColorBrush(Red);
+		var border = new Border { Background = first };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor });
+		clock.Begin(storyboard);
+		clock.Advance(0.5);
+
+		var second = new SolidColorBrush(Red);
+		border.Background = second;
+		clock.Begin(storyboard);
+
+		first.Color.ShouldBe(Red);
+		clock.Advance(1.5);
+		second.Color.ShouldBe(Blue);
+	}
+
+	/// <summary>An animation whose path reaches one of SUIsei's sealed built-in brushes fails as it begins, before anything
+	/// changes, rather than throwing from every frame after.</summary>
+	[Test]
+	public void A_storyboard_reaching_a_sealed_brush_fails_when_it_begins_and_changes_nothing()
+	{
+		var border = new Border { Background = Brush.Sealed(Red), Opacity = 0.8f };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(
+			new DoubleAnimation { To = 0.0, Duration = OneSecond, Target = border, TargetProperty = UIElement.OpacityProperty },
+			new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor });
+
+		Should.Throw<InvalidOperationException>(() => clock.Begin(storyboard)).Message.ShouldContain("built-in look");
+
+		clock.HasActiveClocks.ShouldBeFalse();
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.8f);
+		border.Background.SolidColor().ShouldBe(Red);
+	}
+
+	/// <summary>
+	/// A restart that fails leaves the run it would have replaced as it was: an animation checked before the one that failed
+	/// still drives the brush it was driving, from where it started, and stopping the storyboard releases that brush, not the
+	/// one its path reaches now.
+	/// </summary>
+	[Test]
+	public void A_restart_that_cannot_begin_leaves_every_animation_bound_as_it_was()
+	{
+		var first = new SolidColorBrush(Red);
+		var border = new Border { Background = first };
+		var sized = new Border { MaxWidth = 100f };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(
+			new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor },
+			new DoubleAnimation { To = 50, BeginTime = TimeSpan.FromSeconds(2), Duration = OneSecond, Target = sized, TargetProperty = FrameworkElement.MaxWidthProperty });
+		clock.Begin(storyboard);
+		clock.Advance(0.25);
+		var quarter = first.Color;
+
+		var second = new SolidColorBrush(Red);
+		border.Background = second;
+		sized.ClearValue(FrameworkElement.MaxWidthProperty); // infinite: the MaxWidth animation, yet to begin, can't start there
+		Should.Throw<InvalidOperationException>(() => clock.Begin(storyboard));
+
+		first.Color.ShouldBe(quarter);
+		clock.Advance(0.25);
+		first.Color.ShouldBe(Lerps.Color(Red, Blue, 0.5f)); // the same run, from the same start
+		second.Color.ShouldBe(Red);
+		clock.Stop(storyboard);
+		first.Color.ShouldBe(Red);
+		second.Color.ShouldBe(Red);
+	}
+
+	/// <summary>A running storyboard begun again starts each animation with no From from the value its target shows once
+	/// the run is released, and is checked against that value: one that can't start there fails, leaving the run going.</summary>
+	[Test]
+	public void A_restart_is_checked_against_the_values_the_released_run_leaves()
+	{
+		var border = new Border { Width = 20f };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(new DoubleAnimation { To = 60, Duration = OneSecond, Target = border, TargetProperty = FrameworkElement.WidthProperty });
+		clock.Begin(storyboard);
+		clock.Advance(0.25);
+		border.Width.ShouldBe(30f, 1e-4f);
+
+		border.ClearValue(FrameworkElement.WidthProperty); // beneath the animation, Auto
+		Should.Throw<InvalidOperationException>(() => clock.Begin(storyboard)).Message.ShouldContain("give it a From");
+
+		border.Width.ShouldBe(30f, 1e-4f);
+		clock.Advance(0.25);
+		border.Width.ShouldBe(40f, 1e-4f); // the run carried on
+
+		border.Width = 10f;
+		clock.Begin(storyboard); // released, it starts from 10
+		border.Width.ShouldBe(10f, 1e-4f);
+		clock.Advance(0.5);
+		border.Width.ShouldBe(35f, 1e-4f);
 	}
 
 	// WinUI's (Border.Background).(SolidColorBrush.Color), and the same through Control's background.
@@ -203,18 +330,176 @@ public sealed class AnimationChannelTests
 		clock.HasActiveClocks.ShouldBeFalse(); // the first tween was replaced, not left running
 	}
 
+	/// <summary>As a WinUI property transition: the end becomes the local value at once, and only what is shown moves
+	/// toward it, on the transition rung above the local value, cleared when the tween ends.</summary>
 	[Test]
-	public void A_dependency_property_tween_writes_its_local_value()
+	public void A_dependency_property_tween_sets_its_end_as_the_local_value_at_once_and_shows_the_way_there()
 	{
 		var border = new Border();
 		var clock = new AnimationClock();
 		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
 
+		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeTrue();
+		border.TopRung(UIElement.OpacityProperty).ShouldBe(DependencyObject.ValueRung.Transition);
+		border.Opacity.ShouldBe(1f); // nothing moves until the first frame
 		clock.Advance(0.25);
 		border.Opacity.ShouldBe(0.75f);
-		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeTrue();
 		clock.Advance(1.0);
 		border.Opacity.ShouldBe(0f);
+		border.TopRung(UIElement.OpacityProperty).ShouldBe(DependencyObject.ValueRung.Local);
+		clock.HasActiveClocks.ShouldBeFalse();
+	}
+
+	/// <summary>
+	/// An outline can't be negative, and a BackEase overshoots its end: tweening to 0 passes through negative values. Only
+	/// the end is checked, as the tween starts, so the tween runs to its end without throwing.
+	/// </summary>
+	[Test]
+	public void A_tween_that_overshoots_the_valid_range_never_throws_mid_tween()
+	{
+		var text = new TextBlock { Text = "Hi" };
+		TextEffects.SetOutlineThickness(text, 0.05f);
+		var clock = new AnimationClock();
+		clock.Tween(text, TextEffects.OutlineThicknessProperty, 0f, OneSecond, new BackEase { EasingMode = EasingMode.EaseOut });
+
+		var lowest = float.MaxValue;
+		for (var i = 0; i < 60; i++)
+		{
+			clock.Advance(1.0 / 60);
+			lowest = MathF.Min(lowest, TextEffects.GetOutlineThickness(text));
+		}
+
+		lowest.ShouldBeLessThan(0f); // the overshoot happened
+		TextEffects.GetOutlineThickness(text).ShouldBe(0f);
+		Should.Throw<ArgumentException>(() => clock.Tween(text, TextEffects.OutlineThicknessProperty, -1f, OneSecond));
+	}
+
+	/// <summary>
+	/// Stopped mid-overshoot, the property shows the local value the tween set, as a WinUI transition cut
+	/// short lands on the value that was set.
+	/// </summary>
+	[Test]
+	public void Stopping_a_tween_mid_overshoot_leaves_its_end_value()
+	{
+		var text = new TextBlock { Text = "Hi" };
+		TextEffects.SetOutlineThickness(text, 0.05f);
+		var clock = new AnimationClock();
+		clock.Tween(text, TextEffects.OutlineThicknessProperty, 0f, OneSecond, new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 2 });
+		while (TextEffects.GetOutlineThickness(text) >= 0f)
+			clock.Advance(1.0 / 60);
+
+		clock.StopTweens(text);
+
+		TextEffects.GetOutlineThickness(text).ShouldBe(0f);
+		clock.HasActiveClocks.ShouldBeFalse();
+	}
+
+	/// <summary>The end is the local value from the start: a tween stopped before its first frame shows it, never the
+	/// style's value it started from.</summary>
+	[Test]
+	public void Stopping_a_tween_before_its_first_frame_shows_its_end_not_the_style_s_value()
+	{
+		var border = new Border
+		{
+			Style = new Style { Setters = { new Setter { Property = UIElement.OpacityProperty, Value = 0.4f } } },
+		};
+		var clock = new AnimationClock();
+		clock.Tween(border, UIElement.OpacityProperty, 0.9f, OneSecond);
+
+		clock.StopTweens(border);
+
+		border.Opacity.ShouldBe(0.9f);
+		border.TopRung(UIElement.OpacityProperty).ShouldBe(DependencyObject.ValueRung.Local);
+		border.Style = null;
+		border.Opacity.ShouldBe(0.9f); // the tween's end, set locally, outranks the style as a set value does
+	}
+
+	/// <summary>A value set while a tween runs ends it and shows at once, as a set without a transition does; a tween
+	/// started on a tweening property takes over from the value on screen.</summary>
+	[Test]
+	public void A_local_set_mid_tween_ends_it_and_another_tween_takes_over_from_the_screen()
+	{
+		var border = new Border();
+		var clock = new AnimationClock();
+		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
+		clock.Advance(0.25);
+
+		border.Opacity = 0.6f;
+		border.Opacity.ShouldBe(0.6f);
+		clock.Advance(0.25);
+		border.Opacity.ShouldBe(0.6f);
+		clock.HasActiveClocks.ShouldBeFalse();
+
+		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.3f, 1e-6f);
+		clock.Tween(border, UIElement.OpacityProperty, 1f, OneSecond);
+		border.Opacity.ShouldBe(0.3f, 1e-6f); // from the value on screen
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.65f, 1e-6f);
+	}
+
+	/// <summary>A storyboard holding the property (a visual state) outranks a tween as it outranks a local value: the state's
+	/// value shows throughout the tween and after it, and the tween's end shows when the state releases it.</summary>
+	[Test]
+	public void A_held_storyboard_value_outranks_a_tween_and_the_tween_s_end_shows_when_it_is_released()
+	{
+		var border = new Border { Opacity = 0.2f };
+		var clock = new AnimationClock();
+		var state = StoryboardOf(new DoubleAnimation { To = 0.5, Duration = TimeSpan.FromSeconds(0.1), Target = border, TargetProperty = UIElement.OpacityProperty });
+		clock.Begin(state);
+		clock.Advance(0.2);
+		border.Opacity.ShouldBe(0.5f);
+
+		clock.Tween(border, UIElement.OpacityProperty, 1f, OneSecond);
+		for (var i = 0; i < 70; i++)
+		{
+			clock.Advance(1.0 / 60);
+			border.Opacity.ShouldBe(0.5f);
+		}
+
+		clock.Stop(state);
+		border.Opacity.ShouldBe(1f);
+	}
+
+	/// <summary>A storyboard beginning mid-tween outranks it at once, and the tween ending never wipes the value the
+	/// storyboard holds.</summary>
+	[Test]
+	public void A_storyboard_begun_mid_tween_outranks_it_and_keeps_its_held_value_when_the_tween_ends()
+	{
+		var border = new Border();
+		var clock = new AnimationClock();
+		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
+		clock.Advance(0.25);
+		var state = StoryboardOf(new DoubleAnimation { To = 0.5, Duration = TimeSpan.FromSeconds(0.1), Target = border, TargetProperty = UIElement.OpacityProperty });
+
+		clock.Begin(state);
+		for (var i = 0; i < 70; i++)
+			clock.Advance(1.0 / 60);
+
+		border.Opacity.ShouldBe(0.5f);
+		clock.Stop(state);
+		border.Opacity.ShouldBe(0f);
+	}
+
+	/// <summary>A storyboard with no From starts from what is on screen, which may be another animation's overshoot; that
+	/// start isn't checked, so taking over never throws.</summary>
+	[Test]
+	public void A_storyboard_with_no_From_takes_over_from_an_overshoot_without_throwing()
+	{
+		var text = new TextBlock { Text = "Hi" };
+		TextEffects.SetOutlineThickness(text, 0.05f);
+		var clock = new AnimationClock();
+		clock.Tween(text, TextEffects.OutlineThicknessProperty, 0f, OneSecond, new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 2 });
+		while (TextEffects.GetOutlineThickness(text) >= 0f)
+			clock.Advance(1.0 / 60);
+		var takeOver = new DoubleAnimation { To = 0.1, Duration = OneSecond, Target = text, TargetProperty = TextEffects.OutlineThicknessProperty };
+
+		Should.NotThrow(() => clock.Begin(StoryboardOf(takeOver)));
+		for (var i = 0; i < 120; i++)
+			clock.Advance(1.0 / 60);
+		TextEffects.GetOutlineThickness(text).ShouldBe(0.1f, 1e-6f); // the tween ending leaves the storyboard's held value
+		clock.HasActiveClocks.ShouldBeFalse();
 	}
 
 	[Test]

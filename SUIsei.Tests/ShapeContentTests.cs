@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 using SUIsei.Media;
 using SUIsei.Media.Imaging;
@@ -62,8 +63,8 @@ public sealed class ShapeContentTests
 			Trim = new PathTrim(0f, 0.5f, 0.25f),
 		};
 		shape.StrokeStyle.Thickness = 4f;
-		shape.StrokeStyle.LineJoin = PenLineJoin.Round;
-		shape.StrokeStyle.StartCap = PenLineCap.Round;
+		shape.StrokeStyle.LineJoin = CompositionStrokeLineJoin.Round;
+		shape.StrokeStyle.StartCap = CompositionStrokeCap.Round;
 		shape.StrokeStyle.SetDashArray([2f, 1f]);
 		shape.StrokeStyle.DashOffset = 0.5f;
 
@@ -72,6 +73,25 @@ public sealed class ShapeContentTests
 			"stroke=4(0,0,1,1)*0.5 join=Round caps=Round,Flat dashes=2,1@0.5 trim=0..0.5+0.25\n");
 		new SpriteVisual { Content = new ShapeContent { Path = PathOf("M 0,0 L 1,1") } }.Dump()
 			.ShouldBe("SpriteVisual xform=[0,0] op=1 shape path=\"M 0,0 L 1,1\"\n");
+	}
+
+	/// <summary>A dash pattern too fine for its path draws the rest of the stroke solid past the dash limit, and the dump
+	/// says so once the stroke is tessellated.</summary>
+	[Test]
+	public void A_dash_pattern_past_the_limit_says_so_in_the_dump()
+	{
+		var shape = new ShapeContent { Path = PathOf("M 0,0 L 1000000,0"), Stroke = new CompositionColorBrush(Blue) };
+		shape.StrokeStyle.Thickness = 0.01f;
+		shape.StrokeStyle.SetDashArray([0.5f, 0.5f]);
+		var visual = new SpriteVisual { Content = shape };
+		visual.Dump().ShouldNotContain("dash limit"); // not tessellated yet
+
+		shape.TessellateStroke(TessellationScale.Identity)!.DashesLimited.ShouldBeTrue();
+		visual.Dump().ShouldEndWith(" dashes=0.5,0.5 (past the dash limit, the rest drawn solid)\n");
+
+		shape.StrokeStyle.SetDashArray([5000f, 5000f]); // 50 units each at this thickness: 10,000 dashes, within the limit
+		shape.TessellateStroke(TessellationScale.Identity);
+		visual.Dump().ShouldNotContain("dash limit");
 	}
 
 	[Test]
@@ -317,7 +337,7 @@ public sealed class ShapeContentTests
 	public void A_letterboxed_image_paints_only_where_it_lies_under_any_transform(float degrees)
 	{
 		// A square image in a 40×20 box, Uniform: it fills x 30..50 and leaves the rest of the box unpainted, turned or not.
-		var image = new CompositionSurfaceBrush { Surface = BitmapSource.FromRgba8(1, 1, [255, 255, 255, 255]), Stretch = Stretch.Uniform };
+		var image = new CompositionSurfaceBrush { Surface = BitmapSource.FromRgba8(1, 1, [255, 255, 255, 255]), Stretch = CompositionStretch.Uniform };
 		var shape = new ShapeContent { Path = PathOf("M 20,40 L 60,40 L 60,60 L 20,60 Z"), Fill = image };
 		var (root, sprite) = Scene(shape);
 		var turn = Matrix3x2.CreateRotation(degrees * MathF.PI / 180f, new Vector2(40f, 50f));
