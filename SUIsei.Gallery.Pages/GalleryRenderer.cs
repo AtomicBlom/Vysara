@@ -18,7 +18,7 @@ namespace SUIsei.Gallery;
 /// returned damage key changed, so a static frame costs almost nothing. Owns the <see cref="UIHost"/>, the bound
 /// font page, and a size-matched rasterizer (rebuilt when the surface size changes).
 /// </summary>
-internal sealed class GalleryRenderer
+internal sealed class GalleryRenderer : IDisposable
 {
 	private readonly UIHost _host = new();
 	private readonly UIView _view;
@@ -80,6 +80,10 @@ internal sealed class GalleryRenderer
 		_view.Root.LayoutPass(new Size(pixelWidth, 100_000f));
 		return Math.Max(1, (int)MathF.Ceiling(_content.Root.DesiredSize.Height * Scale));
 	}
+
+	/// <summary>Take the content out of the live tree, so the brushes the gallery's static styles share stop listening to it
+	/// and a capture's tree can be collected once it is drawn.</summary>
+	public void Dispose() => _view.Root.Content = null;
 
 	/// <summary>Per-phase wall-clock cost of the last presented frame (for the <c>--bench</c> diagnostic).</summary>
 	public FrameTimings LastTimings { get; private set; }

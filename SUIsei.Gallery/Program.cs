@@ -3,6 +3,13 @@ using SUIsei;
 using SUIsei.Gallery;
 using SUIsei.Input;
 
+ConsoleOutput.Connect();
+if (CheckOptions(args) is { } wrong)
+{
+	ConsoleOutput.Error(wrong);
+	return 2;
+}
+
 // The page the gallery opens at, by its key (text, controls, ...); every mode below takes it.
 //   SUIsei.Gallery [--page <key>]
 var page = TryGetArg(args, "--page", out var pageKey) ? pageKey : null;
@@ -14,7 +21,7 @@ if (page is not null)
 	}
 	catch (ArgumentException e)
 	{
-		Console.Error.WriteLine(e.Message);
+		ConsoleOutput.Error(e.Message);
 		return 2;
 	}
 }
@@ -64,7 +71,7 @@ if (args.Contains("--bench"))
 
 	var pixelW = (int)MathF.Round(dipW * scale);
 	var pixelH = (int)MathF.Round(dipH * scale);
-	var renderer = new GalleryRenderer(new GalleryShell(page)) { Scale = scale };
+	using var renderer = new GalleryRenderer(new GalleryShell(page)) { Scale = scale };
 	var bgra = new byte[pixelW * pixelH * 4];
 
 	void RenderOne(int i) { renderer.Compose(pixelW, pixelH, i / 60.0); renderer.PresentTo(bgra, forceFull: true); }
@@ -108,7 +115,7 @@ if (args.Contains("--selftest"))
 	// visual state entered on the first frame starts its transition on the second — so separately composed frames can
 	// differ in content, and the diff would measure that instead of the rasterizers. The parallel raster runs first,
 	// onto the fresh (transparent) framebuffer, so a row it fails to cover can't inherit the serial pass's pixels.
-	var renderer = new GalleryRenderer(new GalleryShell(page)) { Scale = scale };
+	using var renderer = new GalleryRenderer(new GalleryShell(page)) { Scale = scale };
 	renderer.Compose(pixelW, pixelH, 0d);
 	var parallel = renderer.RasterizeParallelRgba(); // parallel raster + exact resolve (RGBA)
 	var serial = renderer.RasterizeSerialRgba();     // serial raster + exact resolve (RGBA)
@@ -149,8 +156,8 @@ if (args.Contains("--selftest-damage"))
 	var pixelH = (int)MathF.Round(dipH * scale);
 
 	// On the controls page unless --page names another, so the pointer has buttons and checkboxes to cross.
-	var damaged = new GalleryRenderer(new GalleryShell(page ?? "controls")) { Scale = scale };   // repaints only the damage rect
-	var reference = new GalleryRenderer(new GalleryShell(page ?? "controls")) { Scale = scale }; // repaints the whole frame each time
+	using var damaged = new GalleryRenderer(new GalleryShell(page ?? "controls")) { Scale = scale };   // repaints only the damage rect
+	using var reference = new GalleryRenderer(new GalleryShell(page ?? "controls")) { Scale = scale }; // repaints the whole frame each time
 	var bgraDamaged = new byte[pixelW * pixelH * 4];
 	var bgraReference = new byte[pixelW * pixelH * 4];
 
@@ -196,6 +203,27 @@ var window = new Win32Window(page);
 window.Create(960, 720, "SUIsei — Control Gallery (software-rendered)");
 window.RunLoop();
 return 0;
+
+// What is wrong with the command line, or null: an option the gallery doesn't take, or one missing its value.
+static string? CheckOptions(string[] args)
+{
+	string[] valued = ["--page", "--capture", "--capture-pages", "--size", "--scale", "--frames"];
+	string[] switches = ["--bench", "--selftest", "--selftest-damage"];
+	for (var i = 0; i < args.Length; i++)
+	{
+		if (valued.Contains(args[i]))
+		{
+			if (i + 1 == args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+				return $"{args[i]} needs a value.";
+			i++;
+		}
+		else if (!switches.Contains(args[i]))
+		{
+			return $"Unknown option '{args[i]}'. The gallery takes {string.Join(", ", valued.Select(static v => v + " <value>").Concat(switches))}.";
+		}
+	}
+	return null;
+}
 
 static bool TryGetArg(string[] args, string name, out string? value)
 {

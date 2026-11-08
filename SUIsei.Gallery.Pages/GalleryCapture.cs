@@ -19,7 +19,7 @@ internal sealed record GalleryCapture(int Width, int Height, byte[] Rgba)
 	/// </summary>
 	public static GalleryCapture Page(GalleryPage page, int pixelWidth = PageWidth, float scale = 1f, int frames = SettleFrames)
 	{
-		var renderer = new GalleryRenderer(page.Create()) { Scale = scale };
+		using var renderer = new GalleryRenderer(page.Create()) { Scale = scale };
 		var height = renderer.DesiredHeight(pixelWidth);
 		return new(pixelWidth, height, Frames(renderer, pixelWidth, height, frames));
 	}
@@ -30,7 +30,7 @@ internal sealed record GalleryCapture(int Width, int Height, byte[] Rgba)
 	public static GalleryCapture Shell(string? page, int pixelWidth, int pixelHeight, float scale = 1f, int frames = 1, Action<GalleryShell>? then = null)
 	{
 		var shell = new GalleryShell(page);
-		var renderer = new GalleryRenderer(shell) { Scale = scale };
+		using var renderer = new GalleryRenderer(shell) { Scale = scale };
 		return new(pixelWidth, pixelHeight, Frames(renderer, pixelWidth, pixelHeight, frames, then is null ? null : () => then(shell)));
 	}
 

@@ -9,7 +9,8 @@ namespace SUIsei.Tests;
 /// default window, against their golden images in <c>Goldens/Gallery/</c>. The CPU rasterizer draws the same pixels every
 /// run, but not to the bit on every machine (the C runtime's transcendental functions differ in their last bits between
 /// platforms), so an image matches when at most 0.5% of its pixels differ by more than 4/255 in any channel, the bar Loom
-/// holds its two backends to. Set <c>SUISEI_GOLDEN_UPDATE=1</c> to write the goldens instead. An image that fails leaves
+/// holds its two backends to, and at most 24 by more than 32/255, so a small but real change (a missing tick, a changed
+/// word) fails too. Set <c>SUISEI_GOLDEN_UPDATE=1</c> to write the goldens instead. An image that fails leaves
 /// what was drawn in the temp directory, named in the failure.
 /// </summary>
 [NotInParallel(TestIsolation.HotReload)]
@@ -20,6 +21,10 @@ public sealed class GalleryGoldenTests
 	private const string MenuGolden = "shell-menu";
 	private const int Tolerance = 4;
 	private const double MostDiffering = 0.005;
+	// Platform noise is a few levels on antialiased edges; a missing tick, a changed word or a wrong-coloured border is a
+	// large change to a few dozen pixels, which the share of pixels over the tolerance alone lets through.
+	private const int Large = 32;
+	private const int MostLarge = 24;
 
 	public static IEnumerable<string> PageKeys() => GalleryPages.All.Select(static p => p.Key);
 
@@ -102,20 +107,24 @@ public sealed class GalleryGoldenTests
 			Keep(capture, actual);
 			throw new ShouldAssertException($"'{name}' drew {capture.Width}x{capture.Height}; its golden is {golden.PixelWidth}x{golden.PixelHeight}. It drew {actual}.");
 		}
-		var (differing, worst) = Compare(golden.Pixels.Span, capture.Rgba);
+		var (differing, large, worst) = Compare(golden.Pixels.Span, capture.Rgba);
 		var fraction = differing / (double)(capture.Width * capture.Height);
-		if (fraction > MostDiffering)
+		if (fraction > MostDiffering || large > MostLarge)
 		{
 			Keep(capture, actual);
 			throw new ShouldAssertException(
-				$"'{name}' differs from its golden in {fraction:P2} of its pixels (at most {MostDiffering:P1} may differ by more than {Tolerance}/255; the worst is {worst}/255). It drew {actual}.");
+				$"'{name}' differs from its golden in {fraction:P2} of its pixels, {large} of them by more than {Large}/255 " +
+				$"(at most {MostDiffering:P1} may differ by more than {Tolerance}/255, and {MostLarge} by more than {Large}/255; " +
+				$"the worst is {worst}/255). It drew {actual}.");
 		}
 	}
 
-	// How many pixels differ by more than the tolerance in any channel, and the largest difference in any channel.
-	private static (int Differing, int Worst) Compare(ReadOnlySpan<byte> golden, ReadOnlySpan<byte> actual)
+	// How many pixels differ by more than the tolerance in any channel, how many by more than `Large`, and the largest
+	// difference in any channel.
+	private static (int Differing, int LargelyDiffering, int Worst) Compare(ReadOnlySpan<byte> golden, ReadOnlySpan<byte> actual)
 	{
 		var differing = 0;
+		var large = 0;
 		var worst = 0;
 		for (var i = 0; i < actual.Length; i += 4)
 		{
@@ -124,9 +133,11 @@ public sealed class GalleryGoldenTests
 				pixel = Math.Max(pixel, Math.Abs(golden[i + c] - actual[i + c]));
 			if (pixel > Tolerance)
 				differing++;
+			if (pixel > Large)
+				large++;
 			worst = Math.Max(worst, pixel);
 		}
-		return (differing, worst);
+		return (differing, large, worst);
 	}
 
 	private static int DistinctColours(byte[] rgba)

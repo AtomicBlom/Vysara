@@ -16,5 +16,5 @@ internal static class GalleryPages
 	/// <summary>The page <paramref name="key"/> names, or an <see cref="ArgumentException"/> listing the keys there are.</summary>
 	public static GalleryPage Find(string key) =>
 		All.FirstOrDefault(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase))
-		?? throw new ArgumentException($"No gallery page '{key}'. The pages are: {string.Join(", ", All.Select(static p => p.Key))}.", nameof(key));
+		?? throw new ArgumentException($"No gallery page '{key}'. The pages are: {string.Join(", ", All.Select(static p => p.Key))}.");
 }
