@@ -40,6 +40,9 @@ public sealed class XamlMarkupGeneratorTests
 				private void OnRouted(object sender, SUIsei.RoutedEvents.RoutedEventArgs e) { }
 				private void OnPlain(object sender, System.EventArgs e) { }
 				private void OnSelection(object sender, SUIsei.Controls.SelectionChangedEventArgs e) { }
+				private void OnAny<T>(object sender, T e) { }
+				private static void OnStatic(object sender, SUIsei.RoutedEvents.RoutedEventArgs e) { }
+				private void OnByRef(object sender, ref SUIsei.RoutedEvents.RoutedEventArgs e) { }
 			}
 			public sealed class Caption : SUIsei.Controls.ContentControl { }
 			public struct Pair { public float A { get; set; } }
@@ -121,12 +124,15 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<Slider ValueChanged=\"OnPlain\" />", ".ValueChanged += this.OnPlain;")]
 	[Arguments("<ListView SelectionChanged=\"OnSelection\" />", ".SelectionChanged += this.OnSelection;")]
 	[Arguments("<ListView SelectionChanged=\"OnRouted\" />", ".SelectionChanged += this.OnRouted;")]
+	[Arguments("<Button Click=\"OnAny\" />", ".Click += this.OnAny;")]
 	public void Event_handlers_bind_to_the_events_own_delegate(string body, string expected) =>
 		Generates(body).ShouldContain(expected);
 
 	[Test]
 	[Arguments("<Button Click=\"OnPlain\" />", "'OnPlain(object, RoutedEventArgs)' for event 'Click'")]
 	[Arguments("<ListView SelectionChanged=\"OnMissing\" />", "'OnMissing(object, SelectionChangedEventArgs)' for event 'SelectionChanged'")]
+	[Arguments("<Button Click=\"OnStatic\" />", "'OnStatic(object, RoutedEventArgs)' for event 'Click'")]
+	[Arguments("<Button Click=\"OnByRef\" />", "'OnByRef(object, RoutedEventArgs)' for event 'Click'")]
 	public void A_handler_the_event_cannot_bind_to_is_reported(string body, string message)
 	{
 		var diagnostic = Fails(body);

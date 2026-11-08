@@ -258,9 +258,10 @@ partial class XamlSourceGenerator
 		return null;
 	}
 
-	// Whether the page declares `handler` as a method the event's delegate binds to, as C# would bind it: returning void,
-	// with as many parameters, each of which takes the delegate's argument (so an (object, RoutedEventArgs) handler binds to
-	// an event whose args derive from RoutedEventArgs).
+	// Whether the page declares `handler` as a method the event's delegate binds to, as C# binds `this.handler` to it: an
+	// instance method the page can reach, with as many parameters, each passed the same way (by value, ref, out or in) and
+	// taking the delegate's argument (so an (object, RoutedEventArgs) handler binds to an event whose args derive from
+	// RoutedEventArgs), and returning what the delegate returns. A generic handler is left to C#'s inference.
 	private static bool HandlerSignatureOk(Gen gen, string handler, IEventSymbol evt)
 	{
 		if (gen.PageType is null || (evt.Type as INamedTypeSymbol)?.DelegateInvokeMethod is not { } invoke)
@@ -269,7 +270,8 @@ partial class XamlSourceGenerator
 		{
 			foreach (var m in t.GetMembers(handler).OfType<IMethodSymbol>())
 			{
-				if (m.ReturnsVoid && m.Parameters.Length == invoke.Parameters.Length && Binds(m))
+				if (!m.IsStatic && m.Parameters.Length == invoke.Parameters.Length
+					&& gen.Compilation.IsSymbolAccessibleWithin(m, gen.PageType) && (m.IsGenericMethod || Binds(m)))
 					return true;
 			}
 		}
@@ -279,11 +281,17 @@ partial class XamlSourceGenerator
 		{
 			for (var i = 0; i < m.Parameters.Length; i++)
 			{
-				var conversion = gen.Compilation.ClassifyCommonConversion(invoke.Parameters[i].Type, m.Parameters[i].Type);
-				if (!conversion.IsIdentity && !(conversion.IsImplicit && conversion.IsReference))
+				var (from, to) = (invoke.Parameters[i], m.Parameters[i]);
+				if (from.RefKind != to.RefKind || !Converts(from.Type, to.Type, exactly: from.RefKind != RefKind.None))
 					return false;
 			}
-			return true;
+			return invoke.ReturnsVoid ? m.ReturnsVoid : !m.ReturnsVoid && Converts(m.ReturnType, invoke.ReturnType, exactly: false);
+		}
+
+		bool Converts(ITypeSymbol from, ITypeSymbol to, bool exactly)
+		{
+			var conversion = gen.Compilation.ClassifyCommonConversion(from, to);
+			return conversion.IsIdentity || (!exactly && conversion.IsImplicit && conversion.IsReference);
 		}
 	}
 
