@@ -51,17 +51,13 @@ public static class DiagnosticsEndpoint
 	/// <summary>The environment variable naming more folders RoseMCP finds taps in, separated as a PATH is.</summary>
 	public const string TapsVariable = "ROSEMCP_TAPS";
 
-	/// <summary>The environment variable naming the root RoseMCP is installed to, in place of its default.</summary>
-	public const string DeployRootVariable = "ROSEMCP_DEPLOY_ROOT";
-
 	/// <summary>
-	/// The folders <see cref="Start"/> loads taps from when given none: the <c>taps</c> folder of RoseMCP's install
-	/// root, which is <c>%LOCALAPPDATA%/BinaryVibrance/RoseMCP</c> (local application data as .NET finds it on each
-	/// platform, <c>~/.local/share</c> on Linux) or the folder <c>ROSEMCP_DEPLOY_ROOT</c> names where it is set, as
-	/// tools/deploy-tap.ps1 deploys to; then each folder <c>ROSEMCP_TAPS</c> names, separated as a PATH is. An entry of
-	/// <c>ROSEMCP_TAPS</c> that is not a full path is left out, since the game and RoseMCP would each read it against a
-	/// folder of their own. The folders RoseMCP's settings name are not read; a game that loads taps from one passes it to
-	/// <see cref="Start"/> along with these.
+	/// The folders <see cref="Start"/> loads taps from when given none, the ones RoseMCP finds taps in: the <c>taps</c> folder
+	/// beside RoseMCP's settings, <c>%LOCALAPPDATA%/BinaryVibrance/RoseMCP/taps</c> (local application data as .NET finds it on
+	/// each platform, <c>~/.local/share</c> on Linux), where tools/deploy-tap.ps1 deploys to, wherever RoseMCP itself is
+	/// installed; then each folder <c>ROSEMCP_TAPS</c> names, separated as a PATH is. An entry of <c>ROSEMCP_TAPS</c> that is
+	/// not a full path is left out, since the game and RoseMCP would each read it against a folder of their own. The folders
+	/// RoseMCP's settings name are not read; a game that loads taps from one passes it to <see cref="Start"/> along with these.
 	/// </summary>
 	public static IReadOnlyList<string> DefaultTapDirectories() =>
 		DefaultTapDirectories(Environment.GetEnvironmentVariable, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
@@ -70,11 +66,8 @@ public static class DiagnosticsEndpoint
 	internal static IReadOnlyList<string> DefaultTapDirectories(Func<string, string?> environment, string localAppData)
 	{
 		var folders = new List<string>();
-		var root = environment(DeployRootVariable) is { Length: > 0 } deployRoot ? deployRoot
-			: localAppData.Length > 0 ? Path.Combine(localAppData, "BinaryVibrance", "RoseMCP")
-			: null;
-		if (root is not null)
-			Add(Path.Combine(root, "taps"));
+		if (localAppData.Length > 0)
+			Add(Path.Combine(localAppData, "BinaryVibrance", "RoseMCP", "taps"));
 		foreach (var named in (environment(TapsVariable) ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
 		{
 			if (Path.IsPathFullyQualified(named))

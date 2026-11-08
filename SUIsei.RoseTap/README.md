@@ -15,8 +15,9 @@ This builds the tap and copies `SUIsei.RoseTap.dll` and its pdb to RoseMCP's tap
 %LOCALAPPDATA%/BinaryVibrance/RoseMCP/taps
 ```
 
-`-Destination`, or `$env:ROSEMCP_DEPLOY_ROOT`, names another install root, as it does for RoseMCP's own deploy. The
-taps folder sits beside RoseMCP's `settings.json`, and installing RoseMCP never clears it. RoseMCP also looks in the
+The taps folder sits beside RoseMCP's `settings.json`, wherever RoseMCP itself is installed (`ROSEMCP_DEPLOY_ROOT` moves
+only its binaries), and installing RoseMCP never clears it. `-Destination` names another folder, which RoseMCP and the
+game look in only when `ROSEMCP_TAPS` names it. RoseMCP also looks in the
 folders its settings name, and then in the folders the `ROSEMCP_TAPS` environment variable names (separated as a PATH
 is). The first tap it finds for a framework is the one that serves it.
 
@@ -47,9 +48,8 @@ game turns it on in two steps, usually in a Debug configuration only:
 
    The endpoint loads a tap only from the folders RoseMCP finds taps in, and from the folders beneath them:
 
-   - the taps folder of RoseMCP's install root, `%LOCALAPPDATA%/BinaryVibrance/RoseMCP/taps` (local application data
-     as .NET finds it, so `~/.local/share/BinaryVibrance/RoseMCP/taps` on Linux), or `$ROSEMCP_DEPLOY_ROOT/taps` where
-     that variable is set, which is where `deploy-tap.ps1` puts it;
+   - RoseMCP's taps folder, `%LOCALAPPDATA%/BinaryVibrance/RoseMCP/taps` (local application data as .NET finds it, so
+     `~/.local/share/BinaryVibrance/RoseMCP/taps` on Linux), which is where `deploy-tap.ps1` puts it;
    - each folder `ROSEMCP_TAPS` names, separated as a PATH is. An entry that is not a full path is left out, since the
      game and RoseMCP would read it against different folders.
 

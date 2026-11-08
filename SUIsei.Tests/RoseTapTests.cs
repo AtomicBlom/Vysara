@@ -1127,13 +1127,14 @@ public sealed class RoseTapTests
 	}
 
 	[Test]
-	public void A_deploy_root_takes_the_place_of_RoseMCPs_install_root()
+	public void An_install_root_elsewhere_leaves_the_taps_folder_beside_RoseMCPs_settings()
 	{
-		var root = Path.Combine(Path.GetTempPath(), "rose");
-		var environment = new Dictionary<string, string?> { [DiagnosticsEndpoint.DeployRootVariable] = root };
+		// ROSEMCP_DEPLOY_ROOT moves where RoseMCP's binaries install, not the folder it finds taps in.
+		var localAppData = Path.Combine(Path.GetTempPath(), "local");
+		var environment = new Dictionary<string, string?> { ["ROSEMCP_DEPLOY_ROOT"] = Path.Combine(Path.GetTempPath(), "rose") };
 
-		DiagnosticsEndpoint.DefaultTapDirectories(environment.GetValueOrDefault, Path.Combine(Path.GetTempPath(), "local"))
-			.ShouldBe([Path.Combine(root, "taps")]);
+		DiagnosticsEndpoint.DefaultTapDirectories(environment.GetValueOrDefault, localAppData)
+			.ShouldBe([Path.Combine(localAppData, "BinaryVibrance", "RoseMCP", "taps")]);
 	}
 
 	[Test]
