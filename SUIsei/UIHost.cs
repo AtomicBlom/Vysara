@@ -237,6 +237,20 @@ public sealed class UIHost
 				continue;
 			}
 
+			// A d-pad moves focus by direction, to the nearest tab stop that way; it never reaches the focused element
+			if (e.Key is VirtualKey.GamepadDPadUp or VirtualKey.GamepadDPadDown or VirtualKey.GamepadDPadLeft or VirtualKey.GamepadDPadRight)
+			{
+				if (e.Down)
+					Focus.MoveFocus(e.Key switch
+					{
+						VirtualKey.GamepadDPadUp => FocusNavigationDirection.Up,
+						VirtualKey.GamepadDPadDown => FocusNavigationDirection.Down,
+						VirtualKey.GamepadDPadLeft => FocusNavigationDirection.Left,
+						_ => FocusNavigationDirection.Right,
+					}, _views);
+				continue;
+			}
+
 			var focused = Focus.FocusedElement;
 			if (focused is null)
 				continue;

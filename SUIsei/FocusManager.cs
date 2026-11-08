@@ -10,6 +10,9 @@ namespace SUIsei;
 /// navigation across a set of <see cref="UIView"/>s respecting <see cref="UIElement.IsTabStop"/>,
 /// <see cref="Controls.Control.IsEnabled"/> and <see cref="UIElement.TabIndex"/>. Tab order runs across all the views as one
 /// sequence: no subtree keeps focus within itself, and <see cref="Controls.Control.TabFocusNavigation"/> is not read.
+/// Up, down, left and right (a gamepad's d-pad, <see cref="UIHost"/>) move focus by position instead, to the nearest tab
+/// stop that way within the focused element's view, or its <see cref="UIElement.XYFocusUp"/> and the like; a control
+/// shows how it holds focus in its template's <c>FocusStates</c>.
 /// </summary>
 public sealed class FocusManager
 {
@@ -77,6 +80,8 @@ public sealed class FocusManager
 
 		FocusedElement = newEl;
 		FocusState = newEl is null ? FocusState.Unfocused : state;
+		(oldEl as Controls.Control)?.ShowFocus(FocusState.Unfocused);
+		(newEl as Controls.Control)?.ShowFocus(state);
 
 		// GotFocus bubble on new element
 		if (newEl is not null)
@@ -130,7 +135,98 @@ public sealed class FocusManager
 			return TrySetFocus(candidates[next], FocusState.Keyboard);
 		}
 
-		// Arrow directions fall back to Next/Previous; there is no spatial navigation.
+		return MoveFocusSpatially(dir, views);
+	}
+
+	/// <summary>
+	/// Up, down, left or right: focus the nearest tab stop that way from the focused element (its
+	/// <see cref="UIElement.XYFocusUp"/> and the like first, where set), among the tab stops of the view it is in, as a
+	/// gamepad's d-pad moves through a page. With nothing focused, the first tab stop takes focus. Nearest is by the gap
+	/// between the facing edges, with any offset across the direction counting double, so a control straight ahead beats
+	/// a nearer one off to the side. Returns false when there is nothing that way (focus stays; it doesn't wrap).
+	/// </summary>
+	private bool MoveFocusSpatially(FocusNavigationDirection dir, IReadOnlyList<UIView> views)
+	{
+		if (FocusedElement is not { } from || !IsFocusable(from))
+		{
+			var first = CollectTabStops(views);
+			return first.Count > 0 && TrySetFocus(first[0], FocusState.Keyboard);
+		}
+
+		var explicitTarget = dir switch
+		{
+			FocusNavigationDirection.Up => from.XYFocusUp,
+			FocusNavigationDirection.Down => from.XYFocusDown,
+			FocusNavigationDirection.Left => from.XYFocusLeft,
+			_ => from.XYFocusRight,
+		};
+		if (explicitTarget is not null && IsFocusable(explicitTarget))
+			return TrySetFocus(explicitTarget, FocusState.Keyboard);
+
+		// Only the view focus is in: a menu over the page keeps the d-pad to itself
+		var scope = views.Where(v => IsIn(from, v)).ToArray();
+		var candidates = CollectTabStops(scope.Length > 0 ? scope : views);
+		var a = BoundsOf(from);
+		UIElement? best = null;
+		float bestScore = float.MaxValue;
+		foreach (var c in candidates)
+		{
+			if (ReferenceEquals(c, from))
+				continue;
+			if (Score(a, BoundsOf(c), dir) is { } score && score < bestScore)
+			{
+				best = c;
+				bestScore = score;
+			}
+		}
+		return best is not null && TrySetFocus(best, FocusState.Keyboard);
+	}
+
+	// How far b lies from a in a direction, or null when it doesn't lie that way: the gap between their facing edges
+	// (0 if they overlap along it), plus twice the gap across it (0 if they overlap across it), plus a hundredth of the
+	// distance between their centres to break ties
+	internal static float? Score(Rect a, Rect b, FocusNavigationDirection dir)
+	{
+		float acx = a.X + a.Width / 2f, acy = a.Y + a.Height / 2f, bcx = b.X + b.Width / 2f, bcy = b.Y + b.Height / 2f;
+		const float Slack = 0.5f;
+		float ahead, across;
+		switch (dir)
+		{
+			case FocusNavigationDirection.Down:
+				if (bcy <= acy + Slack || b.Bottom <= a.Bottom) return null;
+				ahead = Math.Max(0f, b.Y - a.Bottom);
+				across = Math.Max(0f, Math.Max(b.X - a.Right, a.X - b.Right));
+				break;
+			case FocusNavigationDirection.Up:
+				if (bcy >= acy - Slack || b.Y >= a.Y) return null;
+				ahead = Math.Max(0f, a.Y - b.Bottom);
+				across = Math.Max(0f, Math.Max(b.X - a.Right, a.X - b.Right));
+				break;
+			case FocusNavigationDirection.Right:
+				if (bcx <= acx + Slack || b.Right <= a.Right) return null;
+				ahead = Math.Max(0f, b.X - a.Right);
+				across = Math.Max(0f, Math.Max(b.Y - a.Bottom, a.Y - b.Bottom));
+				break;
+			default:
+				if (bcx >= acx - Slack || b.X >= a.X) return null;
+				ahead = Math.Max(0f, a.X - b.Right);
+				across = Math.Max(0f, Math.Max(b.Y - a.Bottom, a.Y - b.Bottom));
+				break;
+		}
+		float centres = MathF.Sqrt((bcx - acx) * (bcx - acx) + (bcy - acy) * (bcy - acy));
+		return ahead + 2f * across + centres * 0.01f;
+	}
+
+	// An element's box on its surface, as last laid out
+	private static Rect BoundsOf(UIElement el)
+		=> el.TransformToVisual(null).TransformBounds(new Rect(0f, 0f, el.LayoutRect.Width, el.LayoutRect.Height));
+
+	// Whether el is in view's tree: it, or an ancestor, is the view's root or its content
+	private static bool IsIn(UIElement el, UIView view)
+	{
+		for (UIElement? at = el; at is not null; at = at.Parent)
+			if (ReferenceEquals(at, view.Root) || ReferenceEquals(at, view.Root.Content))
+				return true;
 		return false;
 	}
 

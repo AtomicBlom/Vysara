@@ -137,7 +137,7 @@ public abstract class ButtonBase : ContentControl
 
 	private void OnKeyDown(object sender, RoutedEventArgs e)
 	{
-		if (e is KeyRoutedEventArgs key && key.Key is VirtualKey.Enter or VirtualKey.Space)
+		if (e is KeyRoutedEventArgs key && key.Key is VirtualKey.Enter or VirtualKey.Space or VirtualKey.GamepadA)
 			OnClick();
 	}
 }
