@@ -58,7 +58,8 @@ game turns it on in two steps, usually in a Debug configuration only:
    yourself, `DiagnosticsEndpoint.Start([.. DiagnosticsEndpoint.DefaultTapDirectories(), folder])`. Folders passed to
    `Start` take the place of the defaults; no call loads a tap from any path the game can read.
 
-`Start` does nothing unless diagnostics are on, and they are always off under NativeAOT. Then `rose_debug_attach` or
+`Start` does nothing unless diagnostics are on, and they are always off under NativeAOT, which `./tools/check-aot.ps1`
+checks by NativeAOT-publishing `SUIsei.RoseTap.Sample` and running it. Then `rose_debug_attach` or
 `rose_debug_launch` the game. When it attaches, RoseMCP finds `SUIsei.dll` among the game's modules and loads the tap.
 
 ## Threads
