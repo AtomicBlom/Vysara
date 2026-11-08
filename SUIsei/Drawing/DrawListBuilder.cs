@@ -57,6 +57,15 @@ public sealed class DrawListBuilder
 	/// <summary>Close the innermost open layer; <paramref name="clip"/> scissors its composite.</summary>
 	public void EndLayer(in Rect clip) => _list.EndLayer(clip);
 
-	/// <summary>Finish the list.</summary>
-	public DrawListData End(bool hdr = false) => _list.End(hdr);
+	/// <summary>
+	/// Finish the list. Its <see cref="DrawListData.Damage"/> is <paramref name="damage"/>, the region that changed since the
+	/// list built before it, or the whole surface without it: a builder does not compare one list with the last, and a list
+	/// whose damage said nothing changed would never be drawn by a host that repaints only damage.
+	/// </summary>
+	public DrawListData End(bool hdr = false, Rect? damage = null)
+	{
+		var list = _list.End(hdr);
+		list.StampDamage(damage ?? new Rect(0f, 0f, list.CoordinateSize.X, list.CoordinateSize.Y));
+		return list;
+	}
 }

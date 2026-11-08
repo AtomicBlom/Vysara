@@ -69,4 +69,18 @@ public sealed class DamageTests
 		again.TextureRevision.ShouldBe(textureRevision + 1);
 		again.Damage.IsEmpty.ShouldBeTrue();
 	}
+
+	/// <summary>A builder does not compare a list with the one before it, so its list damages the whole surface unless
+	/// the build names what changed: a list saying nothing changed would never be drawn by a host that repaints only
+	/// damage.</summary>
+	[Test]
+	public void A_builder_list_damages_the_whole_surface_unless_its_build_names_what_changed()
+	{
+		var builder = new DrawListBuilder();
+		builder.Begin(Surface);
+		builder.End().Damage.ShouldBe(new Rect(0f, 0f, Surface.X, Surface.Y));
+
+		builder.Begin(Surface);
+		builder.End(damage: new Rect(10f, 20f, 30f, 40f)).Damage.ShouldBe(new Rect(10f, 20f, 30f, 40f));
+	}
 }
