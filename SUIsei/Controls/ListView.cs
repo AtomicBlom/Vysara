@@ -50,7 +50,7 @@ public class ListView : ItemsControl
 		SelectedItem = null;
 		SelectedIndex = -1;
 		if (hadSelection)
-			SelectionChanged?.Invoke(this, new SelectionChangedEventArgs([removed], []));
+			RaiseSelectionChanged(true, removed, false, null);
 	}
 
 	internal void SelectContainer(ListViewItem container)
@@ -65,7 +65,7 @@ public class ListView : ItemsControl
 		container.SetSelected(true);
 		SelectedItem = container.DataItem;
 		SelectedIndex = ItemsHost is { } host ? IndexOf(host, container) : -1;
-		SelectionChanged?.Invoke(this, new SelectionChangedEventArgs(previous is null ? [] : [removed], [SelectedItem]));
+		RaiseSelectionChanged(previous is not null, removed, true, SelectedItem);
 	}
 
 	private void ClearSelection()
@@ -77,7 +77,21 @@ public class ListView : ItemsControl
 		_selected = null;
 		SelectedItem = null;
 		SelectedIndex = -1;
-		SelectionChanged?.Invoke(this, new SelectionChangedEventArgs([removed], []));
+		RaiseSelectionChanged(true, removed, false, null);
+	}
+
+	// Raise SelectionChanged from this list, with at most one item on each side, as single selection changes them. Nothing
+	// is made when no one listens, and an empty side is the shared empty array.
+	private void RaiseSelectionChanged(bool hasRemoved, object? removed, bool hasAdded, object? added)
+	{
+		if (SelectionChanged is not { } handler)
+			return;
+		var args = new SelectionChangedEventArgs(hasRemoved ? [removed] : Array.Empty<object?>(), hasAdded ? [added] : Array.Empty<object?>())
+		{
+			OriginalSource = this,
+			Source = this,
+		};
+		handler(this, args);
 	}
 
 	private static int IndexOf(Panel host, UIElement container)

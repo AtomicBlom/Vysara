@@ -98,6 +98,8 @@ public sealed class ItemsControlTests
 		lv.SelectionChanged += (sender, e) =>
 		{
 			sender.ShouldBeSameAs(lv);
+			e.OriginalSource.ShouldBeSameAs(lv);
+			e.Source.ShouldBeSameAs(lv);
 			changes.Add((e.RemovedItems.SingleOrDefault(), e.AddedItems.SingleOrDefault()));
 		};
 
