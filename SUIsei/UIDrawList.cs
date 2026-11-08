@@ -266,7 +266,9 @@ internal sealed class UIDrawList
 		switch (layer)
 		{
 			case GlyphLayer.Outline:
-				bias = MathF.Min(run.OutlineThickness / font.DistanceRangeEm, 0.5f - 0.5f / screenPxRange);
+				var wanted = run.OutlineThickness / font.DistanceRangeEm;
+				bias = MathF.Min(wanted, 0.5f - 0.5f / screenPxRange);
+				run.OutlineDrawnClamped = bias < wanted;
 				if (!(bias > 0f))
 					return; // no outline, or text so small the field cannot hold one past the ramp
 				break;

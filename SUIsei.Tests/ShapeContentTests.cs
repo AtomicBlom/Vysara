@@ -74,6 +74,25 @@ public sealed class ShapeContentTests
 			.ShouldBe("SpriteVisual xform=[0,0] op=1 shape path=\"M 0,0 L 1,1\"\n");
 	}
 
+	/// <summary>A dash pattern too fine for its path draws the rest of the stroke solid past the dash limit, and the dump
+	/// says so once the stroke is tessellated.</summary>
+	[Test]
+	public void A_dash_pattern_past_the_limit_says_so_in_the_dump()
+	{
+		var shape = new ShapeContent { Path = PathOf("M 0,0 L 1000000,0"), Stroke = new CompositionColorBrush(Blue) };
+		shape.StrokeStyle.Thickness = 0.01f;
+		shape.StrokeStyle.SetDashArray([0.5f, 0.5f]);
+		var visual = new SpriteVisual { Content = shape };
+		visual.Dump().ShouldNotContain("dash limit"); // not tessellated yet
+
+		shape.TessellateStroke(TessellationScale.Identity)!.DashesLimited.ShouldBeTrue();
+		visual.Dump().ShouldEndWith(" dashes=0.5,0.5 (past the dash limit, the rest drawn solid)\n");
+
+		shape.StrokeStyle.SetDashArray([5000f, 5000f]); // 50 units each at this thickness: 10,000 dashes, within the limit
+		shape.TessellateStroke(TessellationScale.Identity);
+		visual.Dump().ShouldNotContain("dash limit");
+	}
+
 	[Test]
 	public void The_version_moves_with_what_the_content_holds_and_not_with_its_retained_parts()
 	{

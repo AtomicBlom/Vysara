@@ -92,6 +92,36 @@ public sealed class TextEffectsTests
 		text.Visual.Dump().ShouldContain("(past the font's field, drawn clamped)");
 	}
 
+	/// <summary>At a small size the edge's own ramp takes some of the field, so an outline within the font's field can still
+	/// be drawn clamped: at 14 px the default font holds about 0.152 EM past the ramp, short of its 0.1875 EM field. The dump
+	/// says so whenever the outline is drawn clamped, and not when it isn't.</summary>
+	[Test]
+	[Arguments(0.17f, true)]
+	[Arguments(0.12f, false)]
+	public void An_outline_drawn_clamped_at_a_small_size_says_so_in_the_dump(float thickness, bool clamped)
+	{
+		var text = InRoot(out var root);
+		text.FontSize = 14f;
+		TextEffects.SetOutlineThickness(text, thickness);
+		TextEffects.SetOutlineBrush(text, new SolidColorBrush(Black));
+		thickness.ShouldBeLessThan(Reach); // within the font's field either way
+
+		var draw = Render(root);
+
+		var bias = draw.Vertices.ToArray().Max(v => v.Custom.Y);
+		var unclamped = thickness / FontAtlas.Default.DistanceRangeEm;
+		if (clamped)
+		{
+			bias.ShouldBeLessThan(unclamped);
+			text.Visual.Dump().ShouldContain("(past the font's field, drawn clamped)");
+		}
+		else
+		{
+			bias.ShouldBe(unclamped, 1e-6f);
+			text.Visual.Dump().ShouldNotContain("drawn clamped");
+		}
+	}
+
 	[Test]
 	public void A_negative_or_non_finite_size_or_an_image_brush_throws_even_outside_a_tree()
 	{

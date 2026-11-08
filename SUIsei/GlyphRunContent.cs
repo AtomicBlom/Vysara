@@ -85,6 +85,11 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 	/// <summary>Whether the run draws an outline or a shadow.</summary>
 	internal bool HasEffects => (OutlineBrush is not null && OutlineThickness > 0f) || ShadowBrush is not null;
 
+	/// <summary>Whether the outline was last drawn clamped: what the field holds past the edge's own ramp depends on the size
+	/// the glyphs land at on the surface, so the draw list records it as it draws the outline, for <see cref="Describe"/>.
+	/// A diagnostic, so it does not advance <see cref="VisualContent.Version"/>.</summary>
+	internal bool OutlineDrawnClamped { get; set; }
+
 	/// <summary>Set the run's effects at once, advancing <see cref="VisualContent.Version"/> only if something differs.</summary>
 	public void UpdateEffects(float outlineThickness, CompositionBrush? outlineBrush, Vector2 shadowOffset, float shadowSoftness,
 		CompositionBrush? shadowBrush)
@@ -142,7 +147,7 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 		{
 			sb.Append(CultureInfo.InvariantCulture, $" outline={OutlineThickness:0.###}");
 			outline.Describe(sb);
-			if (OutlineThickness > Font.DistanceRangeEm / 2f)
+			if (OutlineDrawnClamped || OutlineThickness > Font.DistanceRangeEm / 2f)
 				sb.Append(" (past the font's field, drawn clamped)");
 		}
 		if (ShadowBrush is { } shadow)

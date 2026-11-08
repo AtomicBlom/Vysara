@@ -204,6 +204,8 @@ public sealed class ShapeContent : VisualContent
 					sb.Append(c, $"@{style.DashOffset:0.###}");
 				if (style.DashCap != PenLineCap.Flat)
 					sb.Append(c, $" dashcap={style.DashCap}");
+				if (_stroke.DashesLimited)
+					sb.Append(" (past the dash limit, the rest drawn solid)");
 			}
 			if (!Trim.IsNone)
 				sb.Append(c, $" trim={Trim.Start:0.###}..{Trim.End:0.###}+{Trim.Offset:0.###}");
