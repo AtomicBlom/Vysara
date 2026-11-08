@@ -4,8 +4,8 @@ namespace SUIsei.Animation;
 
 /// <summary>
 /// Drives a control between named visual states. The <see cref="VisualStateGroupsProperty"/>
-/// attached property carries the groups on a control's template root; <see cref="GoToState"/> stops the current
-/// state's storyboard and starts the target's. When the control is attached to a host its
+/// attached property carries the groups on a control's template root; <see cref="GoToState"/> starts the target state's
+/// storyboard, then stops the current state's. When the control is attached to a host its
 /// <see cref="AnimationClock"/> animates the transition; when detached (or <c>useTransitions</c> is
 /// false) the target state's end values are applied synchronously so headless tests still observe the result. As in
 /// WinUI, leaving a state releases what it set, whether its storyboard is still running or has finished, except a
@@ -38,7 +38,9 @@ public static class VisualStateManager
 	/// Transition <paramref name="control"/> to the state named <paramref name="stateName"/>. Returns false when no
 	/// group contains that state. The groups are read from the control's template root (falling back to the control
 	/// itself when it has no template). Leaving a state releases every property its storyboard holds, whether that is
-	/// still running or has finished and holds its end values, except one the state entered has taken over. As in WinUI,
+	/// still running or has finished and holds its end values, except one the state entered has taken over. The state
+	/// entered begins first, so an animation of it with no From starts from the value the state left shows, and a
+	/// storyboard that can't begin throws with the group still in, and still showing, the state it was in. As in WinUI,
 	/// going to the state a group is already in does nothing and returns true: a storyboard still running carries on rather
 	/// than starting again, so code may set every group's state whenever anything changes.
 	/// </summary>
@@ -72,29 +74,22 @@ public static class VisualStateManager
 			var previousClock = group.CurrentClock;
 			var next = target.Storyboard;
 
-			if (next is not null && useTransitions && clock is not null)
+			// Begin the state entered, then release the state left, with a transition or without, as WPF's "start new, then
+			// stop old" does: an animation with no From starts at the value the state being left shows, so a transition hands
+			// over smoothly, and one that can't begin throws while the state being left still shows. On the same clock the
+			// state entered takes over each property both animate; elsewhere leaving the state keeps those for it. Without a
+			// transition the state entered shows its end values at once and holds them.
+			if (next is not null)
 			{
-				// Begin first: an animation with no From starts at the value the previous state's animation is showing, so
-				// the transition hands over smoothly, and takes over each property both states animate. Then release the
-				// previous state, which leaves those to it.
-				clock.Begin(next);
-				if (previous is not null && !ReferenceEquals(previous, next))
-					Leave(previous, previousClock, next);
-			}
-			else
-			{
-				// Release the previous state first, so its release cannot wipe the end values shown next. On a clock they are
-				// held as a finished storyboard's are, so leaving this state releases them in turn. The next state is checked
-				// before anything is released, so one that can't begin leaves the previous state showing.
-				if (next is not null)
-					Check(next);
-				if (previous is not null && !ReferenceEquals(previous, next))
-					Leave(previous, previousClock, null);
-				if (next is not null && clock is not null)
-					clock.SkipToFill(next);
-				else if (next is not null)
+				if (clock is null)
 					SnapToEnd(next);
+				else if (useTransitions)
+					clock.Begin(next);
+				else
+					clock.SkipToFill(next);
 			}
+			if (previous is not null && !ReferenceEquals(previous, next))
+				Leave(previous, previousClock, next, clock);
 			// Only once the state's storyboard has begun: one that can't begin throws before anything changes, and leaves
 			// the group in the state it was in, so going to the state again tries again rather than finding it current.
 			group.CurrentState = target;
@@ -108,7 +103,8 @@ public static class VisualStateManager
 	/// <summary>
 	/// Leave every group's current state on <paramref name="host"/>, releasing what each holds through the clock it ran on,
 	/// as a control does when its template is replaced: a state of the old template may hold a property of the control itself,
-	/// or of an object reached through a path that outlives the template, such as a shared brush.
+	/// or of an object reached through a path that outlives the template, such as a shared brush. The host is the old
+	/// template's root, or the control itself when it showed the states of its own groups with no template realized.
 	/// </summary>
 	internal static void LeaveAll(UIElement host)
 	{
@@ -118,47 +114,37 @@ public static class VisualStateManager
 		foreach (var group in groups)
 		{
 			if (group.CurrentState?.Storyboard is { } storyboard)
-				Leave(storyboard, group.CurrentClock, null);
+				Leave(storyboard, group.CurrentClock, null, null);
 			group.CurrentState = null;
 			group.CurrentClock = null;
 		}
 	}
 
-	// Release what the state being left set, as leaving a WinUI visual state does: through the clock its storyboard ran or
-	// held its values on, which leaves alone any property a later animation has taken over, or, for a state shown with no
-	// clock, directly, except the properties the state being entered (`next`) animates now.
-	private static void Leave(Storyboard previous, AnimationClock? clock, Storyboard? next)
+	// Release what the state being left set, as leaving a WinUI visual state does, except the properties the state being
+	// entered (`next`) animates now: through the clock its storyboard ran or held its values on, or, for a state shown with
+	// no clock, directly. On the clock `next` began on (`nextClock`), `next` has taken those properties over, so the clock
+	// leaves them to it already, along with any another storyboard has taken.
+	private static void Leave(Storyboard previous, AnimationClock? clock, Storyboard? next, AnimationClock? nextClock)
 	{
 		if (clock is not null)
 		{
-			clock.Stop(previous);
+			clock.StopExcept(previous, ReferenceEquals(clock, nextClock) ? null : next);
 			return;
 		}
 		var children = previous.Children;
 		for (var i = 0; i < children.Count; i++)
 		{
-			if (children[i] is AnimationTimeline anim && (next is null || !Animates(next, anim)))
+			if (children[i] is AnimationTimeline anim && (next is null || !AnimationClock.Animates(next, anim)))
 				anim.ReleaseTarget();
 		}
 	}
 
-	// Whether one of the storyboard's animations drives the property `anim` drives.
-	private static bool Animates(Storyboard storyboard, AnimationTimeline anim)
-	{
-		var children = storyboard.Children;
-		for (var i = 0; i < children.Count; i++)
-		{
-			if (children[i] is AnimationTimeline other && other.DrivesSamePropertyAs(anim))
-				return true;
-		}
-		return false;
-	}
-
 	// Apply each animation's end value immediately — used when the control is detached from a host and has no clock, so
-	// a state change is still observable in headless tests. Leaving the state releases the values directly.
+	// a state change is still observable in headless tests. Every animation is checked first, as one, so a storyboard that
+	// can't begin changes nothing. Leaving the state releases the values directly.
 	private static void SnapToEnd(Storyboard storyboard)
 	{
-		Check(storyboard);
+		AnimationClock.CheckStart(storyboard);
 		var children = storyboard.Children;
 		for (var i = 0; i < children.Count; i++)
 		{
@@ -167,17 +153,6 @@ public static class VisualStateManager
 				anim.CaptureStart();
 				anim.ApplyAt(1.0);
 			}
-		}
-	}
-
-	// Throw, changing nothing, if any animation of the storyboard can't begin (AnimationTimeline.CheckStart).
-	private static void Check(Storyboard storyboard)
-	{
-		var children = storyboard.Children;
-		for (var i = 0; i < children.Count; i++)
-		{
-			if (children[i] is AnimationTimeline anim)
-				anim.CheckStart();
 		}
 	}
 }

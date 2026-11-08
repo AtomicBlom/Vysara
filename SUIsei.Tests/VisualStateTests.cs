@@ -283,6 +283,98 @@ public sealed class VisualStateTests
 		control.Opacity.ShouldBe(1f); // and A is released when left
 	}
 
+	// A control left Auto wide whose one group has Fixed (Width from 10 to 50, held), Wider (Width to 80 from wherever it
+	// is), Plain (no storyboard) and Broken (Width to 80 too, and MaxWidth to 50 from its infinite default, which can't
+	// begin); on a host's root unless `attach` is false.
+	private static (UIHost Host, ContentControl Control, VisualStateGroup Group) ControlWithWidths(bool attach)
+	{
+		var host = new UIHost();
+		var control = new ContentControl { Height = 20 };
+		var group = new VisualStateGroup { Name = "Widths" };
+		group.States.Add(new VisualState { Name = "Fixed", Storyboard = new Storyboard { Children = { WidthTo(control, 50, from: 10) } } });
+		group.States.Add(new VisualState { Name = "Wider", Storyboard = new Storyboard { Children = { WidthTo(control, 80) } } });
+		group.States.Add(new VisualState { Name = "Plain" });
+		group.States.Add(new VisualState
+		{
+			Name = "Broken",
+			Storyboard = new Storyboard
+			{
+				Children =
+				{
+					WidthTo(control, 80),
+					new DoubleAnimation { To = 50, Duration = TimeSpan.FromSeconds(0.2), Target = control, TargetProperty = FrameworkElement.MaxWidthProperty },
+				},
+			},
+		});
+		VisualStateManager.GetVisualStateGroups(control).Add(group);
+		if (attach)
+			host.CreateRoot(UILayer.Default).Root.Content = control;
+		return (host, control, group);
+
+		static DoubleAnimation WidthTo(UIElement element, double to, double? from = null) =>
+			new() { From = from, To = to, Duration = TimeSpan.FromSeconds(0.2), Target = element, TargetProperty = FrameworkElement.WidthProperty };
+	}
+
+	/// <summary>
+	/// Without a transition, as with one, the state entered begins before the state left is released (WPF's "start new, then
+	/// stop old"): an animation with no From starts from the value the state being left shows, rather than from the value
+	/// beneath it, which may be one it can't start from (a width left Auto).
+	/// </summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_entered_without_a_transition_starts_from_the_value_the_state_left_shows(bool attach)
+	{
+		var (_, control, group) = ControlWithWidths(attach);
+		VisualStateManager.GoToState(control, "Fixed", useTransitions: false).ShouldBeTrue();
+		control.Width.ShouldBe(50f);
+
+		VisualStateManager.GoToState(control, "Wider", useTransitions: false).ShouldBeTrue();
+
+		group.CurrentState!.Name.ShouldBe("Wider");
+		control.Width.ShouldBe(80f);
+		VisualStateManager.GoToState(control, "Fixed", useTransitions: false).ShouldBeTrue();
+		control.Width.ShouldBe(50f); // gone back to, rather than found current and left alone
+		VisualStateManager.GoToState(control, "Plain", useTransitions: false).ShouldBeTrue();
+		float.IsNaN(control.Width).ShouldBeTrue(); // Auto again once nothing holds it
+	}
+
+	/// <summary>A state that can't begin, entered without a transition, leaves the state being left current and still
+	/// applied, attached or not.</summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_that_cannot_begin_without_a_transition_leaves_the_state_it_would_leave_applied(bool attach)
+	{
+		var (_, control, group) = ControlWithWidths(attach);
+		VisualStateManager.GoToState(control, "Fixed", useTransitions: false).ShouldBeTrue();
+
+		Should.Throw<InvalidOperationException>(() => VisualStateManager.GoToState(control, "Broken", useTransitions: false));
+
+		group.CurrentState!.Name.ShouldBe("Fixed");
+		control.Width.ShouldBe(50f);
+		VisualStateManager.GoToState(control, "Plain", useTransitions: false).ShouldBeTrue();
+		float.IsNaN(control.Width).ShouldBeTrue(); // and released when left
+	}
+
+	/// <summary>A control whose own groups carry its states, with no template, as a ListViewItem's built-in selection does,
+	/// leaves them when it is given a template, whose groups take over.</summary>
+	[Test]
+	public void Giving_a_template_to_a_control_showing_its_own_states_leaves_them()
+	{
+		var host = new UIHost();
+		var item = new ListViewItem { Content = "Row", Width = 20, Height = 20 };
+		host.CreateRoot(UILayer.Default).Root.Content = item;
+		item.SetSelected(true);
+		host.Tick(0.5, 0f, Surface);
+		item.Background.ShouldNotBeNull(); // the selection brush, held by the item's own Selected state
+
+		item.Template = HoldingTemplate(out _);
+		host.Tick(0.016, 0.5f, Surface);
+
+		item.Background.ShouldBeNull();
+	}
+
 	/// <summary>
 	/// A template with a group whose "Held" state fades the control's own opacity to 0.3 and holds it, and whose border
 	/// part takes the control's background through a template binding.

@@ -97,6 +97,84 @@ public sealed class AnimationChannelTests
 		second.Color.ShouldBe(Blue);
 	}
 
+	/// <summary>An animation whose path reaches one of SUIsei's sealed built-in brushes fails as it begins, before anything
+	/// changes, rather than throwing from every frame after.</summary>
+	[Test]
+	public void A_storyboard_reaching_a_sealed_brush_fails_when_it_begins_and_changes_nothing()
+	{
+		var border = new Border { Background = Brush.Sealed(Red), Opacity = 0.8f };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(
+			new DoubleAnimation { To = 0.0, Duration = OneSecond, Target = border, TargetProperty = UIElement.OpacityProperty },
+			new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor });
+
+		Should.Throw<InvalidOperationException>(() => clock.Begin(storyboard)).Message.ShouldContain("built-in look");
+
+		clock.HasActiveClocks.ShouldBeFalse();
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.8f);
+		border.Background.SolidColor().ShouldBe(Red);
+	}
+
+	/// <summary>
+	/// A restart that fails leaves the run it would have replaced as it was: an animation checked before the one that failed
+	/// still drives the brush it was driving, from where it started, and stopping the storyboard releases that brush, not the
+	/// one its path reaches now.
+	/// </summary>
+	[Test]
+	public void A_restart_that_cannot_begin_leaves_every_animation_bound_as_it_was()
+	{
+		var first = new SolidColorBrush(Red);
+		var border = new Border { Background = first };
+		var sized = new Border { MaxWidth = 100f };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(
+			new ColorAnimation { To = Blue, Duration = OneSecond, Target = border, TargetProperty = BackgroundColor },
+			new DoubleAnimation { To = 50, BeginTime = TimeSpan.FromSeconds(2), Duration = OneSecond, Target = sized, TargetProperty = FrameworkElement.MaxWidthProperty });
+		clock.Begin(storyboard);
+		clock.Advance(0.25);
+		var quarter = first.Color;
+
+		var second = new SolidColorBrush(Red);
+		border.Background = second;
+		sized.ClearValue(FrameworkElement.MaxWidthProperty); // infinite: the MaxWidth animation, yet to begin, can't start there
+		Should.Throw<InvalidOperationException>(() => clock.Begin(storyboard));
+
+		first.Color.ShouldBe(quarter);
+		clock.Advance(0.25);
+		first.Color.ShouldBe(Lerps.Color(Red, Blue, 0.5f)); // the same run, from the same start
+		second.Color.ShouldBe(Red);
+		clock.Stop(storyboard);
+		first.Color.ShouldBe(Red);
+		second.Color.ShouldBe(Red);
+	}
+
+	/// <summary>A running storyboard begun again starts each animation with no From from the value its target shows once
+	/// the run is released, and is checked against that value: one that can't start there fails, leaving the run going.</summary>
+	[Test]
+	public void A_restart_is_checked_against_the_values_the_released_run_leaves()
+	{
+		var border = new Border { Width = 20f };
+		var clock = new AnimationClock();
+		var storyboard = StoryboardOf(new DoubleAnimation { To = 60, Duration = OneSecond, Target = border, TargetProperty = FrameworkElement.WidthProperty });
+		clock.Begin(storyboard);
+		clock.Advance(0.25);
+		border.Width.ShouldBe(30f, 1e-4f);
+
+		border.ClearValue(FrameworkElement.WidthProperty); // beneath the animation, Auto
+		Should.Throw<InvalidOperationException>(() => clock.Begin(storyboard)).Message.ShouldContain("give it a From");
+
+		border.Width.ShouldBe(30f, 1e-4f);
+		clock.Advance(0.25);
+		border.Width.ShouldBe(40f, 1e-4f); // the run carried on
+
+		border.Width = 10f;
+		clock.Begin(storyboard); // released, it starts from 10
+		border.Width.ShouldBe(10f, 1e-4f);
+		clock.Advance(0.5);
+		border.Width.ShouldBe(35f, 1e-4f);
+	}
+
 	// WinUI's (Border.Background).(SolidColorBrush.Color), and the same through Control's background.
 	private static readonly PropertyPath BackgroundColor = new(Border.BackgroundProperty, SolidColorBrush.ColorProperty);
 	private static readonly PropertyPath ControlBackgroundColor = new(Control.BackgroundProperty, SolidColorBrush.ColorProperty);

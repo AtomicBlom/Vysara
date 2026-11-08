@@ -222,12 +222,14 @@ public abstract class Control : FrameworkElement
 
 	// The old template goes whole: its states are left, releasing what they hold (which can include this control's own
 	// properties), and the template bindings its factory registered are dropped, so later changes reach only the new
-	// template's parts and the old parts can be collected. Template bindings are registered only by template factories.
+	// template's parts and the old parts can be collected. Template bindings are registered only by template factories. A
+	// control with no template realized shows the states of its own groups, as a ListViewItem's built-in selection does; a
+	// template takes over from them, so they are left too.
 	private void OnTemplateChanged()
 	{
+		VisualStateManager.LeaveAll(_templateRoot ?? (UIElement)this);
 		if (_templateRoot is not null)
 		{
-			VisualStateManager.LeaveAll(_templateRoot);
 			ClearTemplateBindings();
 			DropChild(_templateRoot);
 			_templateRoot = null;

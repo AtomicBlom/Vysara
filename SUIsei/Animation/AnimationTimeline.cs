@@ -27,15 +27,33 @@ public abstract class AnimationTimeline : Timeline
 	/// apply/release/read, once, before the storyboard runs. A no-op when an explicit apply delegate was set in code.</summary>
 	internal abstract void EnsureResolved();
 
-	/// <summary>Throw if this run cannot begin: its target can't be bound, or a value it names is one the target refuses.
-	/// Binds the target (<see cref="EnsureResolved"/>) but changes nothing a clock tracks or a target shows, so a clock
-	/// checks every animation of a storyboard before it changes anything, and a storyboard that can't begin leaves
-	/// everything as it was.</summary>
-	internal abstract void CheckStart();
+	/// <summary>Throw if this run cannot begin: its target can't be bound, is one of SUIsei's sealed built-in objects, or a
+	/// value it names is one the target refuses. A clock checks every animation of a storyboard before it changes anything,
+	/// so a storyboard that can't begin leaves everything as it was: the check binds the target (<see cref="EnsureResolved"/>)
+	/// and records where the run would start, but keeps what that replaced until the begin goes ahead
+	/// (<see cref="CaptureStart"/>) or is given up (<see cref="AbandonStart"/>), which puts it back. With
+	/// <paramref name="released"/>, the clock releases this animation's previous run before the new one starts, so a start
+	/// read from the target is the value beneath that run's.</summary>
+	internal abstract void CheckStart(bool released);
 
-	/// <summary>Record where this run starts — <c>From</c> when set, else the target's current value. Called as the
-	/// animation begins, after <see cref="CheckStart"/>; it throws nothing.</summary>
+	/// <summary>Give up a begin this animation was checked for (<see cref="CheckStart"/>, passed or failed), because the
+	/// storyboard can't begin: put back the binding and start it had before, so a run still going carries on as it was and
+	/// releases what it set where it set it. A no-op when no check is pending.</summary>
+	internal abstract void AbandonStart();
+
+	/// <summary>Record where this run starts — <c>From</c> when set, else the target's current value — and keep the binding
+	/// the check made. Called as the animation begins, after <see cref="CheckStart"/>; it throws nothing.</summary>
 	internal abstract void CaptureStart();
+
+	/// <summary>Throw if the object this animation is bound to is sealed: part of SUIsei's built-in look, shared by every
+	/// control that shows it, which nothing may change.</summary>
+	private protected void ThrowIfSealed()
+	{
+		if (BoundOwner is { IsSealed: true } owner)
+			throw new InvalidOperationException(
+				$"Property path {TargetProperty} reaches a {owner.GetType().Name} that is part of SUIsei's built-in look, shared by " +
+				"every control that shows it, which no animation can change; give the element one of its own to animate.");
+	}
 
 	/// <summary>True between a <see cref="CheckStart"/> whose walk of the target path reached a different object than the
 	/// last begin bound and the <see cref="CaptureStart"/> after it. Until then <see cref="ReleaseTarget"/> releases the
@@ -103,6 +121,7 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 		Apply = value => typed.Write(owner, value);
 		Release = () => typed.Release(owner);
 		ReadCurrent = () => typed.Read(owner);
+		ReadReleased = () => typed.ReadUnanimated(owner);
 		ValidateValue = typed.Validates ? value => typed.Validate(owner, value) : null;
 		(BoundOwner, BoundProperty) = (owner, target);
 		return true;
@@ -131,19 +150,74 @@ public abstract class AnimationTimeline<T> : AnimationTimeline
 
 	internal override bool BindingMoved => _releaseMoved is not null;
 
-	internal override void CheckStart()
+	// What the animation was bound to and started from before the pending begin's first check, put back if that begin is
+	// given up. Held only while a check is pending.
+	private struct Bound
 	{
+		public Action<T>? Apply;
+		public Action? Release, ReleaseMovedFrom;
+		public Func<T>? ReadCurrent, ReadReleased;
+		public Action<T>? ValidateValue;
+		public DependencyObject? Owner;
+		public IAnimationTarget? Property;
+		public T StartValue;
+	}
+
+	private Bound _beforeCheck;
+	private bool _checking;
+
+	internal override void CheckStart(bool released)
+	{
+		if (!_checking)
+		{
+			_beforeCheck = new Bound
+			{
+				Apply = Apply,
+				Release = Release,
+				ReadCurrent = ReadCurrent,
+				ReadReleased = ReadReleased,
+				ValidateValue = ValidateValue,
+				Owner = BoundOwner,
+				Property = BoundProperty,
+				ReleaseMovedFrom = _releaseMoved,
+				StartValue = StartValue,
+			};
+			_checking = true;
+		}
 		EnsureResolved();
-		StartValue = ReadCurrent is { } read ? read() : default!; // the start a missing From stands for, as it is now
+		ThrowIfSealed();
+		// The start a missing From stands for, as it will be when the run begins: the value beneath this animation's own
+		// previous run where the clock releases that first, on the object it is bound to still.
+		var read = released && !BindingMoved && ReadReleased is { } beneath ? beneath : ReadCurrent;
+		StartValue = read is not null ? read() : default!;
 		if (ValidateValue is { } validate)
 			ValidateValues(validate);
 	}
 
+	internal override void AbandonStart()
+	{
+		if (!_checking)
+			return;
+		var before = _beforeCheck;
+		(Apply, Release, ReadCurrent, ReadReleased, ValidateValue) = (before.Apply, before.Release, before.ReadCurrent, before.ReadReleased, before.ValidateValue);
+		(BoundOwner, BoundProperty, _releaseMoved, StartValue) = (before.Owner, before.Property, before.ReleaseMovedFrom, before.StartValue);
+		_beforeCheck = default;
+		_checking = false;
+	}
+
 	internal override void CaptureStart()
 	{
+		_beforeCheck = default;
+		_checking = false;
 		_releaseMoved = null;
 		StartValue = ReadCurrent is { } read ? read() : default!;
 	}
+
+	/// <summary>Reads the value the target shows once no animation drives it, where a restarted run with no <c>From</c>
+	/// starts after its previous run is released. Bound with <see cref="Apply"/> from
+	/// <see cref="AnimationTimeline.TargetProperty"/>; null for an animation whose delegates were set in code, which reads
+	/// <see cref="ReadCurrent"/> instead.</summary>
+	internal Func<T>? ReadReleased { get; set; }
 
 	/// <summary>
 	/// Checks a value against the target property's own rules (its <see cref="PropertyMetadata{TOwner, TValue}.Validate"/>),

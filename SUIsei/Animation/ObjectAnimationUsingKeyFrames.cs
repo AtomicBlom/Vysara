@@ -47,11 +47,18 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 		(BoundOwner, BoundProperty) = (owner, target);
 	}
 
-	internal override void CheckStart()
+	// Its keys are checked, not where it starts: before the first key the property holds whatever it showed as the run began.
+	internal override void CheckStart(bool released)
 	{
+		if (!_checking)
+		{
+			_beforeCheck = (_binding, _bindingMoved, BoundOwner, BoundProperty);
+			_checking = true;
+		}
 		EnsureResolved();
 		if (_binding is not { } binding)
 			return;
+		ThrowIfSealed();
 		for (var i = 0; i < KeyFrames.Count; i++)
 		{
 			var value = KeyFrames[i].Value;
@@ -63,8 +70,24 @@ public sealed class ObjectAnimationUsingKeyFrames : AnimationTimeline
 		}
 	}
 
+	// The binding the animation had before the pending begin's first check, put back if that begin is given up.
+	private (ObjectBinding? Binding, ObjectBinding? Moved, DependencyObject? Owner, IAnimationTarget? Property) _beforeCheck;
+
+	private bool _checking;
+
+	internal override void AbandonStart()
+	{
+		if (!_checking)
+			return;
+		(_binding, _bindingMoved, BoundOwner, BoundProperty) = _beforeCheck;
+		_beforeCheck = default;
+		_checking = false;
+	}
+
 	internal override void CaptureStart()
 	{
+		_beforeCheck = default;
+		_checking = false;
 		_bindingMoved = null;
 		_binding?.CaptureStart();
 	}

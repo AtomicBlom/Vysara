@@ -138,6 +138,11 @@ public abstract class DependencyObject
 	internal bool HasTransitionValue(DependencyProperty dp) =>
 		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Has(ValueRung.Transition);
 
+	/// <summary>Read the property's value as it resolves with no animated value, coerced: what it shows once its animation
+	/// is released (<see cref="ClearAnimatedValue"/>), a running tween's Transition value included.</summary>
+	internal TValue GetUnanimatedValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
+		Slot(dp) is { } slot ? Effective(dp, slot, belowAnimation: true) : GetValue(dp);
+
 	/// <summary>Push the <b>Style</b> rung (applied by a Style; below Local). The setter's value arrives boxed and is
 	/// unboxed once into the typed store.</summary>
 	internal void SetStyleValue(DependencyProperty dp, object? value) => dp.SetRungBoxed(this, ValueRung.Style, value);

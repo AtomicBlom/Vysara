@@ -199,6 +199,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 
 	TValue IAnimationTarget<TValue>.Read(DependencyObject target) => target.GetValue(this);
 
+	TValue IAnimationTarget<TValue>.ReadUnanimated(DependencyObject target) => target.GetUnanimatedValue(this);
+
 	void IAnimationTarget<TValue>.Write(DependencyObject target, TValue value) => target.SetAnimatedValue(this, value);
 
 	void IAnimationTarget<TValue>.Release(DependencyObject target) => target.ClearAnimatedValue(this);

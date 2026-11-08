@@ -49,20 +49,26 @@ public sealed class AnimationClock
 
 	/// <summary>Start (or restart) <paramref name="storyboard"/> from time zero. Each animation with no <c>From</c>
 	/// starts at the value its target shows now, so a storyboard that takes over a property mid-animation continues
-	/// from where the other left it. Restarting one that is still running releases its targets first; one that has
-	/// finished starts from the end values it holds. As in WinUI, an animation takes its property over from any other
-	/// storyboard's that is animating or holding it, which then leaves the property to it: it stops writing it and does
-	/// not release it when stopped. The clock compares animations bound through <c>Target</c> and <c>TargetProperty</c>;
-	/// one whose delegates were set in code takes nothing over and is never taken over.</summary>
+	/// from where the other left it. Restarting one that is still running releases its targets first, so its animations start,
+	/// and are checked, at the values those show once released; one that has finished starts from the end values it holds. As
+	/// in WinUI, an animation takes its property over from any other storyboard's that is animating or holding it, which then
+	/// leaves the property to it: it stops writing it and does not release it when stopped. The clock compares animations bound
+	/// through <c>Target</c> and <c>TargetProperty</c>; one whose delegates were set in code takes nothing over and is never
+	/// taken over. A storyboard that can't begin (an animation's target can't be bound, is sealed, or refuses a value it names)
+	/// throws before anything changes.</summary>
 	public void Begin(Storyboard storyboard) => _active.Add(Start(storyboard));
 
 	/// <summary>Stop <paramref name="storyboard"/> and release every target it animates, whether it is still running or
 	/// has finished and holds its values (<see cref="FillBehavior.HoldEnd"/>), as WinUI's <c>Storyboard.Stop</c> does. A
 	/// property another storyboard has since taken over (<see cref="Begin"/>) is left to it.</summary>
-	public void Stop(Storyboard storyboard)
+	public void Stop(Storyboard storyboard) => StopExcept(storyboard, keep: null);
+
+	/// <summary>As <see cref="Stop(Storyboard)"/>, leaving alone each property <paramref name="keep"/> animates: for a visual
+	/// state left for one that began on another clock, or with none, which has taken nothing over here.</summary>
+	internal void StopExcept(Storyboard storyboard, Storyboard? keep)
 	{
-		Remove(_active, storyboard, release: true);
-		Remove(_holding, storyboard, release: true);
+		Remove(_active, storyboard, release: true, keep);
+		Remove(_holding, storyboard, release: true, keep);
 	}
 
 	/// <summary>Begin <paramref name="storyboard"/> at its end, much as WinUI's <c>Storyboard.SkipToFill</c> does: each
@@ -85,20 +91,17 @@ public sealed class AnimationClock
 
 	// Begin's work up to listing the entry. Every animation is checked first (its target bound, the values it names
 	// validated), so one that can't begin throws before anything changes: the storyboard is not stopped, nothing is taken
-	// over, and what was running or holding still is. Then a running storyboard is stopped, releasing its targets, while a
-	// finished one is let go with its values held, so a restart starts from them as from any value its targets show.
-	// Children are walked by index: a foreach over the IList would box an enumerator.
+	// over, and what was running or holding still is. A running storyboard's animations are checked against the values its
+	// targets show once that run is released. Then a running storyboard is stopped, releasing its targets, while a finished
+	// one is let go with its values held, so a restart starts from them as from any value its targets show. Children are
+	// walked by index: a foreach over the IList would box an enumerator.
 	private Entry Start(Storyboard storyboard)
 	{
-		var children = storyboard.Children;
-		for (var i = 0; i < children.Count; i++)
-		{
-			if (children[i] is AnimationTimeline anim)
-				anim.CheckStart();
-		}
+		CheckStart(storyboard, Running(storyboard));
 
 		Remove(_active, storyboard, release: true);
 		Remove(_holding, storyboard, release: false);
+		var children = storyboard.Children;
 		for (var i = 0; i < children.Count; i++)
 		{
 			if (children[i] is AnimationTimeline anim)
@@ -117,10 +120,52 @@ public sealed class AnimationClock
 		return entry;
 	}
 
+	// The entry `storyboard` runs in, when it is running.
+	private Entry? Running(Storyboard storyboard)
+	{
+		for (var i = 0; i < _active.Count; i++)
+		{
+			if (ReferenceEquals(_active[i].Storyboard, storyboard))
+				return _active[i];
+		}
+		return null;
+	}
+
+	/// <summary>Check every animation of <paramref name="storyboard"/> as one (<see cref="AnimationTimeline.CheckStart"/>):
+	/// when one can't begin, each animation checked is put back as it was (<see cref="AnimationTimeline.AbandonStart"/>)
+	/// before the exception goes on, so a storyboard that can't begin changes nothing.</summary>
+	internal static void CheckStart(Storyboard storyboard) => CheckStart(storyboard, null);
+
+	// As CheckStart(Storyboard), where `running` is the entry of the storyboard's run when it is running: each animation of
+	// it still driving its property is released before the new run starts, so is checked against the value beneath.
+	private static void CheckStart(Storyboard storyboard, Entry? running)
+	{
+		var children = storyboard.Children;
+		var i = 0;
+		try
+		{
+			for (; i < children.Count; i++)
+			{
+				if (children[i] is AnimationTimeline anim)
+					anim.CheckStart(released: running is not null && i < running.Count && running.Runs[i] is Run.Running or Run.Holding);
+			}
+		}
+		catch
+		{
+			for (var c = 0; c <= i && c < children.Count; c++)
+			{
+				if (children[c] is AnimationTimeline anim)
+					anim.AbandonStart();
+			}
+			throw;
+		}
+	}
+
 	// Drop the entries of `list` that run or hold `storyboard`, releasing its targets first when `release` is set, and
 	// with them any holding entry whose storyboard has been collected. Kept values are released anyway where the
-	// animation's binding has moved to another object, since nothing of this storyboard drives the old one any more.
-	private void Remove(List<Entry> list, Storyboard storyboard, bool release)
+	// animation's binding has moved to another object, since nothing of this storyboard drives the old one any more. A
+	// property `keep` animates is not released.
+	private void Remove(List<Entry> list, Storyboard storyboard, bool release, Storyboard? keep = null)
 	{
 		for (var i = list.Count - 1; i >= 0; i--)
 		{
@@ -129,7 +174,7 @@ public sealed class AnimationClock
 			if (listed is not null && !ReferenceEquals(listed, storyboard))
 				continue;
 			if (listed is not null)
-				Release(entry, listed, movedOnly: !release);
+				Release(entry, listed, movedOnly: !release, keep);
 			list.RemoveAt(i);
 			Recycle(entry);
 		}
@@ -200,15 +245,30 @@ public sealed class AnimationClock
 	}
 
 	// Release each target the entry's storyboard still drives: not one released as it finished (FillBehavior.Stop), nor
-	// one a later animation has taken over. With `movedOnly`, only those whose binding has moved to another object.
-	private static void Release(Entry entry, Storyboard storyboard, bool movedOnly = false)
+	// one a later animation has taken over, nor one `keep` animates. With `movedOnly`, only those whose binding has moved to
+	// another object.
+	private static void Release(Entry entry, Storyboard storyboard, bool movedOnly = false, Storyboard? keep = null)
 	{
 		var children = storyboard.Children;
 		for (var c = 0; c < entry.Count; c++)
 		{
-			if (entry.Runs[c] is Run.Running or Run.Holding && children[c] is AnimationTimeline anim && (!movedOnly || anim.BindingMoved))
+			if (entry.Runs[c] is Run.Running or Run.Holding && children[c] is AnimationTimeline anim && (!movedOnly || anim.BindingMoved)
+				&& (keep is null || !Animates(keep, anim)))
 				anim.ReleaseTarget();
 		}
+	}
+
+	/// <summary>Whether one of <paramref name="storyboard"/>'s animations drives the property <paramref name="anim"/>
+	/// drives.</summary>
+	internal static bool Animates(Storyboard storyboard, AnimationTimeline anim)
+	{
+		var children = storyboard.Children;
+		for (var i = 0; i < children.Count; i++)
+		{
+			if (children[i] is AnimationTimeline other && other.DrivesSamePropertyAs(anim))
+				return true;
+		}
+		return false;
 	}
 
 	private static bool Holds(Entry entry) => Array.IndexOf(entry.Runs, Run.Holding, 0, entry.Count) >= 0;
