@@ -123,12 +123,25 @@ public sealed class ShapedRunCacheTests
 		shaper.Shapes.ShouldBe(3); // three lines, each shaped once for both measure and draw
 		var height = second.DesiredSize.Height;
 
-		host.Clock.Tween(card, Control.FontSizeProperty, 28f, TimeSpan.FromSeconds(0.5));
-		for (var i = 1; i <= 40; i++)
+		host.Clock.Tween(card, Control.FontSizeProperty, 28f, TimeSpan.FromSeconds(2));
+		var frame = 0;
+		void Frame()
 		{
-			host.Tick(1.0 / 60, i / 60f, new Vector2(400f, 300f));
+			frame++;
+			host.Tick(1.0 / 60, frame / 60f, new Vector2(400f, 300f));
 			host.Render();
 		}
+		for (var i = 0; i < 5; i++)
+			Frame();
+		// Re-measuring at each new size, and drawing it, allocates nothing either.
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 5; i++)
+				Frame();
+		});
+		while (frame < 130)
+			Frame();
+
 
 		second.FontSize.ShouldBe(28f);
 		second.DesiredSize.Height.ShouldBe(height * 2f, 1e-3f); // re-measured at the new size
