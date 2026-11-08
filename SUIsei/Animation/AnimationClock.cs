@@ -257,6 +257,12 @@ public sealed class AnimationClock
 		for (var i = _tweens.Count - 1; i >= 0; i--)
 		{
 			var tween = _tweens[i];
+			if (tween.Cut)
+			{
+				_tweens.RemoveAt(i);
+				tween.Recycle();
+				continue;
+			}
 			if (!tween.Advance(deltaSeconds))
 				continue;
 			_tweens.RemoveAt(i);
@@ -291,11 +297,15 @@ public sealed class AnimationClock
 	}
 
 	/// <summary>
-	/// Animate a dependency property from its value now to <paramref name="to"/>. Each frame's value is written to the
-	/// property's animation value, as a storyboard's is, so it outranks the local value without replacing it and is never
-	/// checked frame by frame: an easing that overshoots the property's valid range never throws mid-tween. The end value
-	/// is checked here, as the tween starts, and when the tween finishes it becomes the property's local value, as code
-	/// setting it would. Otherwise as the delegate-based
+	/// Animate a dependency property from the value on screen to <paramref name="to"/>, as a WinUI property transition
+	/// (<c>OpacityTransition</c>, <c>BrushTransition</c>) animates a property that is set. <paramref name="to"/> is checked
+	/// and becomes the property's local value at once, so <see cref="DependencyObject.GetValue{TOwner, TValue}"/> reads it
+	/// from the start: like any local value it replaces the one set before and outranks a style's. Only what is shown
+	/// moves toward it, on a transition value just above the local one and below a storyboard's, which is never checked
+	/// frame by frame, so an easing that overshoots the property's valid range never throws mid-tween; a storyboard holding
+	/// the property outranks the tween as it outranks a local value, and the tween ending never disturbs it. A local
+	/// change to the property while it tweens ends the tween and shows at once; another tween of it takes over from the
+	/// value on screen. Otherwise as the delegate-based
 	/// <see cref="Tween{TTarget, T}(TTarget, Func{TTarget, T}, Action{TTarget, T}, T, TimeSpan, IEasingFunction, Lerp{T})"/>.
 	/// The property must be animatable.
 	/// </summary>
@@ -304,22 +314,23 @@ public sealed class AnimationClock
 		where TOwner : DependencyObject
 	{
 		var lerp = property.Lerp ?? throw new ArgumentException($"{property.Name} is not animatable; its type has no interpolation.", nameof(property));
-		var from = target.GetValue(property);
+		var from = target.GetTransitionStart(property);
 		ThrowIfNoStart(from, property); // before a running tween is taken over or a new one listed
 		if (property.Metadata.Validate is { } validate && target is TOwner owner)
 			validate(owner, to); // the start is what is on screen, and is not checked
-		PropertyTween<TOwner, T>? tween = null;
-		for (var i = 0; tween is null && i < _tweens.Count; i++)
-			if (_tweens[i] is PropertyTween<TOwner, T> running && running.Matches(target, property))
-				tween = running;
-		if (tween is null)
-			_tweens.Add(tween = PropertyTween<TOwner, T>.Rent());
-		tween.Start(target, property, lerp, from, to, duration, easing);
+		PropertyTween<TOwner, T>? running = null;
+		for (var i = 0; running is null && i < _tweens.Count; i++)
+			if (_tweens[i] is PropertyTween<TOwner, T> tween && tween.Matches(target, property))
+				running = tween;
+		var started = running ?? PropertyTween<TOwner, T>.Rent();
+		started.Start(target, property, lerp, from, to, duration, easing);
+		if (running is null)
+			_tweens.Add(started);
 	}
 
-	/// <summary>Stop every tween running on <paramref name="target"/>, leaving its properties where they are. A dependency
-	/// property's value where it stopped becomes its local value; one its validation rejects, as an easing's overshoot can
-	/// be, is left at the tween's end value instead.</summary>
+	/// <summary>Stop every tween running on <paramref name="target"/>. A delegate-based tween leaves its property where it
+	/// is; a dependency property shows the local value its tween set, as a WinUI transition cut short lands on the value
+	/// that was set.</summary>
 	public void StopTweens(object target)
 	{
 		for (var i = _tweens.Count - 1; i >= 0; i--)
@@ -353,6 +364,9 @@ public sealed class AnimationClock
 		private IEasingFunction? _easing;
 
 		public abstract bool Targets(object target);
+
+		// True once something other than the clock has ended the tween; it is then dropped without writing again.
+		public virtual bool Cut => false;
 
 		// Step by deltaSeconds and write the value; true once the end value has been written.
 		public bool Advance(double deltaSeconds)
@@ -437,41 +451,27 @@ public sealed class AnimationClock
 		public bool Matches(DependencyObject target, DependencyProperty<TOwner, T> property) =>
 			ReferenceEquals(_target, target) && ReferenceEquals(_property, property);
 
+		// The end value becomes the local value at once, checked as any set is; the transition rung above it shows the value
+		// on screen until the first frame moves it.
 		public void Start(DependencyObject target, DependencyProperty<TOwner, T> property, Lerp<T> lerp, T from, T to, TimeSpan duration, IEasingFunction? easing)
 		{
+			target.BeginTransition(property, from, to);
 			(_target, _property, _lerp, _from, _to) = (target, property, lerp, from, to);
 			Restart(duration, easing);
 		}
 
 		public override bool Targets(object target) => ReferenceEquals(_target, target);
 
-		protected override void Write(float progress) => _target!.SetAnimatedValue(_property!, _lerp!(_from, _to, progress));
+		// A local change to the property clears the transition rung, which ends the tween.
+		public override bool Cut => !_target!.HasTransitionValue(_property!);
 
-		// The end value, checked as the tween started, becomes the local value, and the animation value is released.
-		public override void Complete() => Settle(_to);
+		protected override void Write(float progress) => _target!.SetTransitionValue(_property!, _lerp!(_from, _to, progress));
 
-		public override void Stop()
-		{
-			var here = _target!.GetValue(_property!);
-			if (_property!.Metadata.Validate is { } validate && _target is TOwner owner)
-			{
-				try
-				{
-					validate(owner, here);
-				}
-				catch (ArgumentException)
-				{
-					here = _to; // an overshoot the property can't hold
-				}
-			}
-			Settle(here);
-		}
+		// The end value is the local value already: the transition rung is cleared, and the property shows it.
+		public override void Complete() => _target!.ClearTransitionValue(_property!);
 
-		private void Settle(T value)
-		{
-			_target!.SetValue(_property!, value);
-			_target.ClearAnimatedValue(_property!);
-		}
+		// Cut short, the property lands on the value it was set to, as a WinUI transition cut short does.
+		public override void Stop() => _target!.ClearTransitionValue(_property!);
 
 		protected override void ReturnToPool()
 		{

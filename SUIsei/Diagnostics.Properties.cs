@@ -130,7 +130,7 @@ public static partial class Diagnostics
 	{
 		var level = element.TopRung(dp) switch
 		{
-			DependencyObject.ValueRung.Animation => ValueLevel.Animation,
+			DependencyObject.ValueRung.Animation or DependencyObject.ValueRung.Transition => ValueLevel.Animation,
 			DependencyObject.ValueRung.Local => ValueLevel.Local,
 			DependencyObject.ValueRung.Template => ValueLevel.Template,
 			DependencyObject.ValueRung.Style => ValueLevel.Style,

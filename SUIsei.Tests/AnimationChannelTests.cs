@@ -204,22 +204,24 @@ public sealed class AnimationChannelTests
 		clock.HasActiveClocks.ShouldBeFalse(); // the first tween was replaced, not left running
 	}
 
-	/// <summary>Each frame is the property's animation value, which outranks the local value without replacing it; the end
-	/// becomes the local value, as code setting it would.</summary>
+	/// <summary>As a WinUI property transition: the end becomes the local value at once, and only what is shown moves
+	/// toward it, on the transition rung above the local value, cleared when the tween ends.</summary>
 	[Test]
-	public void A_dependency_property_tween_animates_the_property_and_leaves_its_end_as_the_local_value()
+	public void A_dependency_property_tween_sets_its_end_as_the_local_value_at_once_and_shows_the_way_there()
 	{
 		var border = new Border();
 		var clock = new AnimationClock();
 		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
 
+		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeTrue();
+		border.TopRung(UIElement.OpacityProperty).ShouldBe(DependencyObject.ValueRung.Transition);
+		border.Opacity.ShouldBe(1f); // nothing moves until the first frame
 		clock.Advance(0.25);
 		border.Opacity.ShouldBe(0.75f);
-		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeFalse();
 		clock.Advance(1.0);
 		border.Opacity.ShouldBe(0f);
-		border.HasLocalValue(UIElement.OpacityProperty).ShouldBeTrue();
 		border.TopRung(UIElement.OpacityProperty).ShouldBe(DependencyObject.ValueRung.Local);
+		clock.HasActiveClocks.ShouldBeFalse();
 	}
 
 	/// <summary>
@@ -246,7 +248,10 @@ public sealed class AnimationChannelTests
 		Should.Throw<ArgumentException>(() => clock.Tween(text, TextEffects.OutlineThicknessProperty, -1f, OneSecond));
 	}
 
-	/// <summary>Stopped mid-overshoot, the value it can't hold is left at the tween's end instead.</summary>
+	/// <summary>
+	/// Stopped mid-overshoot, the property shows the local value the tween set, as a WinUI transition cut
+	/// short lands on the value that was set.
+	/// </summary>
 	[Test]
 	public void Stopping_a_tween_mid_overshoot_leaves_its_end_value()
 	{
@@ -263,6 +268,94 @@ public sealed class AnimationChannelTests
 		clock.HasActiveClocks.ShouldBeFalse();
 	}
 
+	/// <summary>The end is the local value from the start: a tween stopped before its first frame shows it, never the
+	/// style's value it started from.</summary>
+	[Test]
+	public void Stopping_a_tween_before_its_first_frame_shows_its_end_not_the_style_s_value()
+	{
+		var border = new Border
+		{
+			Style = new Style { Setters = { new Setter { Property = UIElement.OpacityProperty, Value = 0.4f } } },
+		};
+		var clock = new AnimationClock();
+		clock.Tween(border, UIElement.OpacityProperty, 0.9f, OneSecond);
+
+		clock.StopTweens(border);
+
+		border.Opacity.ShouldBe(0.9f);
+		border.TopRung(UIElement.OpacityProperty).ShouldBe(DependencyObject.ValueRung.Local);
+		border.Style = null;
+		border.Opacity.ShouldBe(0.9f); // the tween's end, set locally, outranks the style as a set value does
+	}
+
+	/// <summary>A value set while a tween runs ends it and shows at once, as a set without a transition does; a tween
+	/// started on a tweening property takes over from the value on screen.</summary>
+	[Test]
+	public void A_local_set_mid_tween_ends_it_and_another_tween_takes_over_from_the_screen()
+	{
+		var border = new Border();
+		var clock = new AnimationClock();
+		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
+		clock.Advance(0.25);
+
+		border.Opacity = 0.6f;
+		border.Opacity.ShouldBe(0.6f);
+		clock.Advance(0.25);
+		border.Opacity.ShouldBe(0.6f);
+		clock.HasActiveClocks.ShouldBeFalse();
+
+		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.3f, 1e-6f);
+		clock.Tween(border, UIElement.OpacityProperty, 1f, OneSecond);
+		border.Opacity.ShouldBe(0.3f, 1e-6f); // from the value on screen
+		clock.Advance(0.5);
+		border.Opacity.ShouldBe(0.65f, 1e-6f);
+	}
+
+	/// <summary>A storyboard holding the property (a visual state) outranks a tween as it outranks a local value: the state's
+	/// value shows throughout the tween and after it, and the tween's end shows when the state releases it.</summary>
+	[Test]
+	public void A_held_storyboard_value_outranks_a_tween_and_the_tween_s_end_shows_when_it_is_released()
+	{
+		var border = new Border { Opacity = 0.2f };
+		var clock = new AnimationClock();
+		var state = StoryboardOf(new DoubleAnimation { To = 0.5, Duration = TimeSpan.FromSeconds(0.1), Target = border, TargetProperty = UIElement.OpacityProperty });
+		clock.Begin(state);
+		clock.Advance(0.2);
+		border.Opacity.ShouldBe(0.5f);
+
+		clock.Tween(border, UIElement.OpacityProperty, 1f, OneSecond);
+		for (var i = 0; i < 70; i++)
+		{
+			clock.Advance(1.0 / 60);
+			border.Opacity.ShouldBe(0.5f);
+		}
+
+		clock.Stop(state);
+		border.Opacity.ShouldBe(1f);
+	}
+
+	/// <summary>A storyboard beginning mid-tween outranks it at once, and the tween ending never wipes the value the
+	/// storyboard holds.</summary>
+	[Test]
+	public void A_storyboard_begun_mid_tween_outranks_it_and_keeps_its_held_value_when_the_tween_ends()
+	{
+		var border = new Border();
+		var clock = new AnimationClock();
+		clock.Tween(border, UIElement.OpacityProperty, 0f, OneSecond);
+		clock.Advance(0.25);
+		var state = StoryboardOf(new DoubleAnimation { To = 0.5, Duration = TimeSpan.FromSeconds(0.1), Target = border, TargetProperty = UIElement.OpacityProperty });
+
+		clock.Begin(state);
+		for (var i = 0; i < 70; i++)
+			clock.Advance(1.0 / 60);
+
+		border.Opacity.ShouldBe(0.5f);
+		clock.Stop(state);
+		border.Opacity.ShouldBe(0f);
+	}
+
 	/// <summary>A storyboard with no From starts from what is on screen, which may be another animation's overshoot; that
 	/// start isn't checked, so taking over never throws.</summary>
 	[Test]
@@ -277,6 +370,10 @@ public sealed class AnimationChannelTests
 		var takeOver = new DoubleAnimation { To = 0.1, Duration = OneSecond, Target = text, TargetProperty = TextEffects.OutlineThicknessProperty };
 
 		Should.NotThrow(() => clock.Begin(StoryboardOf(takeOver)));
+		for (var i = 0; i < 120; i++)
+			clock.Advance(1.0 / 60);
+		TextEffects.GetOutlineThickness(text).ShouldBe(0.1f, 1e-6f); // the tween ending leaves the storyboard's held value
+		clock.HasActiveClocks.ShouldBeFalse();
 	}
 
 	[Test]
