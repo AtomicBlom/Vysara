@@ -40,7 +40,7 @@ public sealed class Button : ButtonBase
 			host.RegisterTemplateBinding(BackgroundProperty, value => border.Background = value ?? NormalBackground);
 			host.RegisterTemplateBinding(BorderBrushProperty, value => border.BorderBrush = value);
 			host.RegisterTemplateBinding(BorderThicknessProperty, value => border.BorderThickness = value);
-			host.RegisterTemplateBinding(ForegroundProperty, value => presenter.Foreground = value);
+			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
 			presenter.Content = host.Content;                        // {TemplateBinding Content} — initial
 			host.ContentChanged += (_, _) => presenter.Content = host.Content; // live
 

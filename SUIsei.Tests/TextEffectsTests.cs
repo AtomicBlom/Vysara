@@ -130,8 +130,8 @@ public sealed class TextEffectsTests
 		Should.Throw<ArgumentOutOfRangeException>(() => TextEffects.SetShadowSoftness(text, float.NaN));
 		Should.Throw<ArgumentOutOfRangeException>(() => TextEffects.SetShadowOffset(text, new Point(float.PositiveInfinity, 0f)));
 		var image = new ImageBrush { ImageSource = BitmapSource.FromRgba8(1, 1, new byte[4]) };
-		Should.Throw<NotSupportedException>(() => TextEffects.SetOutlineBrush(text, image));
-		Should.Throw<NotSupportedException>(() => TextEffects.SetShadowBrush(text, image));
+		Should.Throw<ArgumentException>(() => TextEffects.SetOutlineBrush(text, image));
+		Should.Throw<ArgumentException>(() => TextEffects.SetShadowBrush(text, image));
 		TextEffects.GetOutlineBrush(text).ShouldBeNull();
 	}
 

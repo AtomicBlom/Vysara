@@ -68,7 +68,7 @@ public sealed class CheckBox : ToggleButton
 				VerticalAlignment = VerticalAlignment.Center,
 			};
 			checkBox.RegisterTemplateBinding(BackgroundProperty, value => row.Background = value);
-			checkBox.RegisterTemplateBinding(ForegroundProperty, value => presenter.Foreground = value);
+			checkBox.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
 			presenter.Content = checkBox.Content;
 			checkBox.ContentChanged += (_, _) => presenter.Content = checkBox.Content;
 

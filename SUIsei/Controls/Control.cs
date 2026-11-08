@@ -108,13 +108,13 @@ public abstract class Control : FrameworkElement
 
 	/// <summary>The brush for the control's text, inherited as in WinUI: the text in its template, or made for its string
 	/// content, is painted with it unless that text sets its own, and so are the controls inside it. Null shows the
-	/// template's own look.</summary>
+	/// template's own look. Any brush is accepted, as in WinUI, since a template may paint more than text with it; an image
+	/// brush can't paint glyphs (they are drawn from the font atlas), so text it reaches draws nothing.</summary>
 	public static readonly DependencyProperty<Control, Brush?> ForegroundProperty =
 		DependencyProperty.Register(nameof(Foreground),
 			new PropertyMetadata<Control, Brush?>
 			{
 				Inherits = InheritedText.Foreground,
-				Validate = static (_, brush) => InheritedText.ValidateForeground(brush),
 				PropertyChanged = static (c, _, value) => c.OnForegroundChanged(value),
 			});
 

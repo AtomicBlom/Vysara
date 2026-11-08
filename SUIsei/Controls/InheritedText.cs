@@ -26,13 +26,14 @@ internal static class InheritedText
 		_ => null,
 	});
 
-	/// <summary>Reject a text foreground the compositor can't paint glyphs with, where it is set: an image brush, since
-	/// glyphs are drawn from the font atlas and a glyph prim samples one texture.</summary>
+	/// <summary>Reject a text foreground the compositor can't paint glyphs with, where it is set, with an
+	/// <see cref="ArgumentException"/>: an image brush, since glyphs are drawn from the font atlas and a glyph prim samples
+	/// one texture.</summary>
 	public static void ValidateForeground(Brush? brush)
 	{
 		if (brush is TileBrush)
-			throw new NotSupportedException(
-				"An image brush cannot paint text yet: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
+			throw new ArgumentException(
+				"An image brush cannot paint text: glyphs are drawn from the font atlas, and a glyph prim samples one texture.", "value");
 	}
 
 	/// <summary><paramref name="child"/> joined <paramref name="parent"/>: it takes the text properties the parent passes

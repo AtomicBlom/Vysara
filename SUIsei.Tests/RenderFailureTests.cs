@@ -110,9 +110,90 @@ public sealed class RenderFailureTests
 	{
 		var image = new ImageBrush { ImageSource = BitmapSource.FromRgba8(2, 2, new byte[16]) };
 
-		Should.Throw<NotSupportedException>(() => new TextBlock().Foreground = image).Message.ShouldContain("cannot paint text");
-		Should.Throw<NotSupportedException>(() => new Button().Foreground = image);
-		Should.Throw<NotSupportedException>(() => new ContentPresenter().Foreground = image);
+		Should.Throw<ArgumentException>(() => new TextBlock().Foreground = image).Message.ShouldContain("cannot paint text");
+		Should.Throw<ArgumentException>(() => new ContentPresenter().Foreground = image);
+	}
+
+	/// <summary>A control's foreground takes any brush, as WinUI's does, since a template may paint more than text with it.
+	/// Text an image brush reaches draws nothing, as glyphs can't sample an image, and the frame still draws.</summary>
+	[Test]
+	[Arguments(false)]
+	[Arguments(true)]
+	public void A_control_takes_an_image_brush_as_its_foreground_and_text_it_reaches_draws_nothing(bool textBox)
+	{
+		Control Make() => textBox ? new TextBox { Text = "Go" } : new Button { Content = "Go" };
+		static DrawListData Draw(Control control)
+		{
+			var root = new UIRoot(new DrawListId(0)) { Content = control };
+			root.LayoutPass(new Size(200f, 100f));
+			return root.Render();
+		}
+
+		var image = new ImageBrush { ImageSource = BitmapSource.FromRgba8(2, 2, new byte[16]) };
+		var painted = Make();
+		painted.Foreground = new SolidColorBrush(new HdrColor(1f, 0f, 0f, 1f));
+		DrawsText(Draw(painted)).ShouldBeTrue();
+
+		var imaged = Make();
+		Should.NotThrow(() => imaged.Foreground = image);
+		imaged.Foreground.ShouldBeSameAs(image);
+		DrawListData draw = null!;
+		Should.NotThrow(() => draw = Draw(imaged));
+		DrawsText(draw).ShouldBeFalse();
+	}
+
+	private static readonly DependencyProperty<Border, CornerRadius> BoundRadiusProperty =
+		DependencyProperty.RegisterAttached("BoundRadius", new PropertyMetadata<Border, CornerRadius>());
+
+	/// <summary>A value bound from a template comes from another property, checked where it was set there, so a part that
+	/// would refuse it set directly takes it and draws what it can: text bound to an image brush draws nothing, and a border
+	/// bound to radii that differ draws at the top-left radius.</summary>
+	[Test]
+	public void A_template_bound_value_a_part_would_refuse_is_taken_and_drawn_as_it_can_be()
+	{
+		static DrawListData Draw(Border border)
+		{
+			border.Width = border.Height = 50f;
+			var root = new UIRoot(new DrawListId(0)) { Content = border };
+			root.LayoutPass(new Size(100f, 100f));
+			return root.Render();
+		}
+
+		var image = new ImageBrush { ImageSource = BitmapSource.FromRgba8(2, 2, new byte[16]) };
+		var button = new Button();
+		var text = new TextBlock { Text = "Go" };
+		button.RegisterTemplateBinding(Control.ForegroundProperty, text, TextBlock.ForegroundProperty);
+		Should.NotThrow(() => button.Foreground = image);
+		text.Foreground.ShouldBeSameAs(image);
+
+		var red = new HdrColor(1f, 0f, 0f, 1f);
+		var source = new Border();
+		var part = new Border { Background = new SolidColorBrush(red) };
+		source.RegisterTemplateBinding(BoundRadiusProperty, part, Border.CornerRadiusProperty);
+		Should.NotThrow(() => source.SetValue(BoundRadiusProperty, new CornerRadius(4f, 1f, 2f, 3f)));
+		part.CornerRadius.ShouldBe(new CornerRadius(4f, 1f, 2f, 3f));
+		DrawListData drawn = null!;
+		Should.NotThrow(() => drawn = Draw(part));
+		var uniform = Draw(new Border { Background = new SolidColorBrush(red), CornerRadius = new CornerRadius(4f) });
+		drawn.Vertices.ToArray().ShouldBe(uniform.Vertices.ToArray());
+	}
+
+	// Whether any glyph the list draws is visible.
+	private static bool DrawsText(DrawListData draw)
+	{
+		var vertices = draw.Vertices.Span;
+		var indices = draw.Indices.Span;
+		foreach (var cmd in draw.Commands.Span)
+		{
+			if (cmd.Tag != (uint)UIPrimKind.Glyph)
+				continue;
+			for (var i = cmd.IndexOffset; i < cmd.IndexOffset + cmd.IndexCount; i++)
+			{
+				if ((float)vertices[(int)cmd.VertexOffset + indices[(int)i]].Color.A > 0f)
+					return true;
+			}
+		}
+		return false;
 	}
 
 	/// <summary>

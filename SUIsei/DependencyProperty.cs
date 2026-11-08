@@ -120,6 +120,11 @@ public abstract class DependencyProperty
 	internal abstract void SetRungBoxed(DependencyObject target, DependencyObject.ValueRung rung, object? value);
 	internal abstract void ClearRung(DependencyObject target, DependencyObject.ValueRung rung);
 
+	/// <summary>Check a boxed <paramref name="value"/> for <paramref name="target"/>, storing nothing: throws
+	/// <see cref="ArgumentException"/> if it is not of the property's type or its validator refuses it, so a caller writing
+	/// several values can check them all before it writes any.</summary>
+	internal abstract void ValidateBoxed(DependencyObject target, object? value);
+
 	/// <summary>The property's value on <paramref name="target"/> as a <see cref="DependencyObject"/>, or null when it
 	/// holds none (or holds a value type) — how a property path steps from one object to the next.</summary>
 	internal abstract DependencyObject? GetObjectValue(DependencyObject target);
@@ -173,6 +178,13 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 
 	internal override void ClearRung(DependencyObject target, DependencyObject.ValueRung rung) =>
 		target.SetRung(this, rung, default!, hasValue: false);
+
+	internal override void ValidateBoxed(DependencyObject target, object? value)
+	{
+		if (!Accepts(value))
+			throw new ArgumentException($"{Name} holds a {typeof(TValue).Name}, so it can't be set to {value?.GetType().Name ?? "null"}.", nameof(value));
+		Metadata.Validate?.Invoke((TOwner)target, (TValue)value!);
+	}
 
 	internal override DependencyObject? GetObjectValue(DependencyObject target) =>
 		typeof(TValue).IsValueType ? null : target.GetValue(this) as DependencyObject;

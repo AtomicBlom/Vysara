@@ -27,13 +27,18 @@ public sealed class Border : FrameworkElement
 			new PropertyMetadata<Border, Brush?> { PropertyChanged = static (b, old, @new) => b.OnBrushChanged(old, @new) });
 
 	/// <summary>The corner radius. SUIsei draws one radius for all four corners: radii that differ throw
-	/// <see cref="NotSupportedException"/> when set, and are refused at build time in markup.</summary>
+	/// <see cref="ArgumentException"/> when set, and are refused at build time in markup. Radii bound from a template are
+	/// not checked, and draw at the top-left corner's radius.</summary>
 	public static readonly DependencyProperty<Border, CornerRadius> CornerRadiusProperty =
 		DependencyProperty.Register(nameof(CornerRadius),
 			new PropertyMetadata<Border, CornerRadius>
 			{
 				// Checked before the value is stored, so a refused value leaves the border as it was.
-				Validate = static (border, value) => _ = value.Uniform,
+				Validate = static (_, value) =>
+				{
+					if (!value.IsUniform)
+						throw new ArgumentException($"Corner radii that differ ({value}) are not supported: SUIsei draws one radius for all four corners.", nameof(value));
+				},
 				PropertyChanged = static (b, _, _) => b.InvalidateContent(),
 			});
 
@@ -122,6 +127,8 @@ public sealed class Border : FrameworkElement
 		var thickness = BorderThickness;
 		if (fill is null && (border is null || thickness.Horizontal + thickness.Vertical <= 0f))
 			return null;
-		return RetainedRect(fill, CornerRadius.Uniform, border, thickness.Left);
+		// A value set here is uniform (checked where it is set); one bound from a template is not checked, and draws at the
+		// top-left corner's radius, as the stroke draws at the left side's width.
+		return RetainedRect(fill, CornerRadius.TopLeft, border, thickness.Left);
 	}
 }

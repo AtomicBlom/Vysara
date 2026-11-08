@@ -27,6 +27,7 @@ public sealed class TextBox : Control
 	private static readonly CompositionColorBrush FocusBorder = new(HdrColor.FromRgb(80, 150, 240));
 	private static readonly CompositionColorBrush FocusBackground = new(HdrColor.FromRgb(36, 38, 48));
 	private static readonly SolidColorBrush TextForeground = Brush.Sealed(HdrColor.FromRgb(235, 235, 240));
+	private static readonly SolidColorBrush NoText = Brush.Sealed(new HdrColor(0f, 0f, 0f, 0f));
 
 	// The Windows caret cadence: solid through a half-period, then hidden through the next, repeating. The short ramp
 	// keeps it an effectively hard on/off (a fade would read as a pulse, not a caret).
@@ -183,7 +184,9 @@ public sealed class TextBox : Control
 	/// <summary>The caret's arranged rect within the field (test seam).</summary>
 	internal Rect CaretRect => _caretVisual.LayoutRect;
 
-	private protected override void OnForegroundChanged(Brush? foreground) => _textBlock.Foreground = foreground ?? TextForeground;
+	// An image brush can't paint glyphs, so the field's text draws nothing with one, as inherited text does.
+	private protected override void OnForegroundChanged(Brush? foreground) =>
+		_textBlock.Foreground = foreground is TileBrush ? NoText : foreground ?? TextForeground;
 
 	private protected override VisualContent? UpdateContent()
 	{

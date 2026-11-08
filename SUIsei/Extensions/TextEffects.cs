@@ -106,7 +106,7 @@ public sealed class TextEffects : DependencyObject
 	private static void ValidateBrush(Brush? brush)
 	{
 		if (brush is TileBrush)
-			throw new NotSupportedException(
-				"A text effect is painted by a colour or a linear gradient: glyphs are drawn from the font atlas, and a glyph prim samples one texture.");
+			throw new ArgumentException(
+				"A text effect is painted by a colour or a linear gradient: glyphs are drawn from the font atlas, and a glyph prim samples one texture.", "value");
 	}
 }

@@ -129,6 +129,8 @@ public abstract class FrameworkElement : UIElement
 		DependencyProperty.Register(nameof(Style),
 			new PropertyMetadata<FrameworkElement, Style?>
 			{
+				// Every setter is checked before the style is stored, so one the element refuses leaves it with its old style.
+				Validate = static (o, style) => style?.Validate(o),
 				PropertyChanged = static (o, old, @new) => { old?.Clear(o); @new?.Apply(o); }
 			});
 

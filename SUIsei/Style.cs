@@ -14,10 +14,27 @@ public sealed class Style
 	/// <summary>The setters applied by this style (not including <see cref="BasedOn"/> setters).</summary>
 	public IList<Setter> Setters { get; } = [];
 
-	/// <summary>Apply all setters in this chain to <paramref name="target"/> (base-first so derived wins).</summary>
+	/// <summary>Apply all setters in this chain to <paramref name="target"/> (base-first so derived wins). Every setter's
+	/// value is checked against its property before any is applied, so a value the target refuses throws and leaves it as it
+	/// was.</summary>
 	public void Apply(DependencyObject target)
 	{
-		BasedOn?.Apply(target);
+		Validate(target);
+		ApplySetters(target);
+	}
+
+	/// <summary>Check every setter in this chain against <paramref name="target"/>, applying none: throws
+	/// <see cref="ArgumentException"/> on a value its property refuses.</summary>
+	internal void Validate(DependencyObject target)
+	{
+		BasedOn?.Validate(target);
+		foreach (var s in Setters)
+			s.Validate(target);
+	}
+
+	private void ApplySetters(DependencyObject target)
+	{
+		BasedOn?.ApplySetters(target);
 		foreach (var s in Setters)
 			s.Apply(target);
 	}

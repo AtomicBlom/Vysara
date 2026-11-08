@@ -170,8 +170,11 @@ public abstract class DependencyObject
 			throw new InvalidOperationException(
 				$"This {GetType().Name} is part of SUIsei's built-in look, shared by every control that shows it, and cannot change; " +
 				$"give the element one of its own to change its {dp.Name}.");
-		if (hasValue && rung != ValueRung.Animation && dp.Metadata.Validate is { } validate)
-			validate((TOwner)this, value); // an animation's values are checked as it begins, never frame by frame
+		// Only a value set on this object is checked. An animation's values are checked as it begins, never frame by frame;
+		// an inherited or template-bound value comes from another property, checked where it was set there, and an object
+		// that can't draw it draws what it can.
+		if (hasValue && rung is (ValueRung.Local or ValueRung.Style or ValueRung.BuiltInStyle) && dp.Metadata.Validate is { } validate)
+			validate((TOwner)this, value);
 		var slot = Slot(dp);
 		if (slot is null)
 		{

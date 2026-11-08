@@ -327,10 +327,10 @@ public sealed class BrushTests
 	}
 
 	[Test]
-	public void An_image_brush_on_text_is_not_supported_yet()
+	public void An_image_brush_on_a_text_block_is_refused()
 	{
 		var image = BitmapSource.FromRgba8(2, 2, new byte[16]);
-		Should.Throw<NotSupportedException>(() => new TextBlock { Text = "Hi", Foreground = new ImageBrush { ImageSource = image } })
+		Should.Throw<ArgumentException>(() => new TextBlock { Text = "Hi", Foreground = new ImageBrush { ImageSource = image } })
 			.Message.ShouldContain("cannot paint text");
 	}
 
@@ -340,7 +340,7 @@ public sealed class BrushTests
 		var border = new Border { CornerRadius = new CornerRadius(4f) };
 		border.CornerRadius.ShouldBe(new CornerRadius(4f, 4f, 4f, 4f));
 
-		Should.Throw<NotSupportedException>(() => border.CornerRadius = new CornerRadius(1f, 2f, 3f, 4f)).Message.ShouldContain("not supported yet");
+		Should.Throw<ArgumentException>(() => border.CornerRadius = new CornerRadius(1f, 2f, 3f, 4f)).Message.ShouldContain("not supported");
 
 		// Refused before it was stored: the border keeps its radius, and lays out and draws.
 		border.CornerRadius.ShouldBe(new CornerRadius(4f));

@@ -131,7 +131,7 @@ public class ToggleButton : ButtonBase
 			toggle.RegisterTemplateBinding(BackgroundProperty, value => baseBorder.Background = value ?? NormalBackground);
 			toggle.RegisterTemplateBinding(BorderBrushProperty, value => baseBorder.BorderBrush = value);
 			toggle.RegisterTemplateBinding(BorderThicknessProperty, value => baseBorder.BorderThickness = value);
-			toggle.RegisterTemplateBinding(ForegroundProperty, value => presenter.Foreground = value);
+			toggle.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
 			presenter.Content = toggle.Content;
 			toggle.ContentChanged += (_, _) => presenter.Content = toggle.Content;
 

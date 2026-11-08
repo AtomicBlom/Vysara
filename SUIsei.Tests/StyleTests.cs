@@ -133,6 +133,42 @@ public sealed class StyleTests
 		tb.Text.ShouldBe("hello");   // from derived
 	}
 
+	/// <summary>Every setter's value is checked before any is applied: a style with one the element refuses (here in its
+	/// base) throws and leaves the element as it was, its old style still applied and still its style.</summary>
+	[Test]
+	public void A_style_with_a_refused_setter_applies_none_of_its_setters()
+	{
+		var border = new Border();
+		var old = new Style { Setters = { new Setter { Property = FrameworkElement.WidthProperty, Value = 10f } } };
+		border.Style = old;
+		var bad = new Style
+		{
+			BasedOn = new Style
+			{
+				Setters =
+				{
+					new Setter { Property = FrameworkElement.HeightProperty, Value = 20f },
+					new Setter { Property = Border.CornerRadiusProperty, Value = new CornerRadius(1f, 2f, 3f, 4f) },
+				},
+			},
+			Setters = { new Setter { Property = FrameworkElement.WidthProperty, Value = 30f } },
+		};
+
+		Should.Throw<ArgumentException>(() => border.Style = bad);
+		border.Style.ShouldBeSameAs(old);
+		border.Width.ShouldBe(10f);
+		border.Height.ShouldBe(float.NaN);
+		border.CornerRadius.ShouldBe(default);
+
+		Should.Throw<ArgumentException>(() => bad.Apply(border));
+		border.Width.ShouldBe(10f);
+		border.Height.ShouldBe(float.NaN);
+
+		var wrongType = new Style { Setters = { new Setter { Property = FrameworkElement.WidthProperty, Value = "wide" } } };
+		Should.Throw<ArgumentException>(() => border.Style = wrongType);
+		border.Width.ShouldBe(10f);
+	}
+
 	[Test]
 	public void FindResource_walks_up_the_element_tree()
 	{
