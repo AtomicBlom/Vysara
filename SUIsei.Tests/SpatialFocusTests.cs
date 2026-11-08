@@ -105,19 +105,35 @@ public sealed class SpatialFocusTests
 	}
 
 	[Test]
-	public void A_presses_the_focused_button_and_the_dpad_never_reaches_it()
+	public void A_presses_the_focused_button()
 	{
 		var (host, b) = Grid3(out _);
-		int clicks = 0, keys = 0;
+		int clicks = 0;
 		b[0, 0].Click += (_, _) => clicks++;
-		b[0, 0].KeyDown += (_, _) => keys++;
 		host.Focus.TrySetFocus(b[0, 0], FocusState.Keyboard);
-
 		Press(host, VirtualKey.GamepadA);
 		clicks.ShouldBe(1);
-		keys = 0;
-		Press(host, VirtualKey.GamepadDPadLeft);   // nothing that way: focus stays, and the key goes nowhere
-		keys.ShouldBe(0);
-		host.Focus.FocusedElement.ShouldBe(b[0, 0]);
+	}
+
+	[Test]
+	public void The_dpad_reaches_the_focused_element_first_and_moves_focus_only_if_it_doesnt_handle_it()
+	{
+		var (host, b) = Grid3(out _);
+		int stepped = 0;
+		// A value row: takes left and right itself
+		b[1, 1].KeyDown += (_, e) =>
+		{
+			if (e is RoutedEvents.KeyRoutedEventArgs { Key: VirtualKey.GamepadDPadLeft or VirtualKey.GamepadDPadRight })
+			{
+				stepped++;
+				e.Handled = true;
+			}
+		};
+		host.Focus.TrySetFocus(b[1, 1], FocusState.Keyboard);
+		Press(host, VirtualKey.GamepadDPadRight);
+		stepped.ShouldBe(1);
+		host.Focus.FocusedElement.ShouldBe(b[1, 1]);
+		Press(host, VirtualKey.GamepadDPadDown);   // not handled: focus moves
+		host.Focus.FocusedElement.ShouldBe(b[2, 1]);
 	}
 }

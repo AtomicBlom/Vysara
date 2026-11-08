@@ -221,6 +221,14 @@ public sealed class UIHost
 		}
 	}
 
+	private void MoveFocusFor(VirtualKey dpad) => Focus.MoveFocus(dpad switch
+	{
+		VirtualKey.GamepadDPadUp => FocusNavigationDirection.Up,
+		VirtualKey.GamepadDPadDown => FocusNavigationDirection.Down,
+		VirtualKey.GamepadDPadLeft => FocusNavigationDirection.Left,
+		_ => FocusNavigationDirection.Right,
+	}, _views);
+
 	private void DrainKeyboard()
 	{
 		while (_keyQueue.Count > 0)
@@ -237,23 +245,16 @@ public sealed class UIHost
 				continue;
 			}
 
-			// A d-pad moves focus by direction, to the nearest tab stop that way; it never reaches the focused element
-			if (e.Key is VirtualKey.GamepadDPadUp or VirtualKey.GamepadDPadDown or VirtualKey.GamepadDPadLeft or VirtualKey.GamepadDPadRight)
-			{
-				if (e.Down)
-					Focus.MoveFocus(e.Key switch
-					{
-						VirtualKey.GamepadDPadUp => FocusNavigationDirection.Up,
-						VirtualKey.GamepadDPadDown => FocusNavigationDirection.Down,
-						VirtualKey.GamepadDPadLeft => FocusNavigationDirection.Left,
-						_ => FocusNavigationDirection.Right,
-					}, _views);
-				continue;
-			}
-
+			// A d-pad goes to the focused element first, as in WinUI (a value row can take left and right); unhandled, it
+			// moves focus by direction, to the nearest tab stop that way
+			bool dpad = e.Key is VirtualKey.GamepadDPadUp or VirtualKey.GamepadDPadDown or VirtualKey.GamepadDPadLeft or VirtualKey.GamepadDPadRight;
 			var focused = Focus.FocusedElement;
 			if (focused is null)
+			{
+				if (dpad && e.Down)
+					MoveFocusFor(e.Key);
 				continue;
+			}
 
 			// Tunnel Preview → if unhandled → bubble main event.
 			var previewEvt = e.Down ? UIElement.PreviewKeyDownEvent : UIElement.PreviewKeyUpEvent;
@@ -266,6 +267,8 @@ public sealed class UIHost
 
 			_keyArgs.Reset(mainEvt, focused, e);
 			focused.RaiseEvent(mainEvt, _keyArgs);
+			if (dpad && e.Down && !_keyArgs.Handled)
+				MoveFocusFor(e.Key);
 		}
 
 		var focusedForText = Focus.FocusedElement;

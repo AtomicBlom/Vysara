@@ -47,4 +47,5 @@ public enum VirtualKey
 	// focus by direction (UIHost); the host queues them for a pad when the UI has it
 	GamepadA = 195, GamepadB = 196, GamepadX = 197, GamepadY = 198,
 	GamepadDPadUp = 203, GamepadDPadDown = 204, GamepadDPadLeft = 205, GamepadDPadRight = 206,
+	GamepadMenu = 207, GamepadView = 208,
 }
