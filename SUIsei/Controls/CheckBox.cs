@@ -69,8 +69,7 @@ public sealed class CheckBox : ToggleButton
 			};
 			checkBox.RegisterTemplateBinding(BackgroundProperty, row, Panel.BackgroundProperty);
 			checkBox.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
-			presenter.Content = checkBox.Content;
-			checkBox.ContentChanged += (_, _) => presenter.Content = checkBox.Content;
+			checkBox.RegisterContentTemplateBinding(content => presenter.Content = content);
 
 			row.Children.Add(box);
 			row.Children.Add(presenter);

@@ -311,12 +311,12 @@ partial class XamlSourceGenerator
 	// A {TemplateBinding source} wire: the templated control's property flows OneWay into a template part's property.
 	private static void EmitTemplateBinding(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop, string sourceProp)
 	{
-		// Content is a CLR property carrying a ContentChanged event (not a dependency property); wire via that event.
+		// Content is a CLR property, not a dependency property: its template binding is the control's own, dropped with the
+		// template as the others are.
 		if (sourceProp == "Content")
 		{
 			var host = $"((global::SUIsei.Controls.ContentControl){scope.DataRootExpr})";
-			scope.Emit($"{targetVar}.{prop.Name} = {host}.Content;");
-			scope.Emit($"{host}.ContentChanged += (_, _) => {targetVar}.{prop.Name} = {host}.Content;");
+			scope.Emit($"{host}.RegisterContentTemplateBinding(__v => {targetVar}.{prop.Name} = __v);");
 			return;
 		}
 		// Otherwise the source must be a typed dependency property on the templated control; the push is typed too, so a

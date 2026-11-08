@@ -9,7 +9,7 @@ namespace SUIsei.Tests;
 /// <summary>
 /// Template runtime coverage: a <see cref="ControlTemplate"/> realized on first measure becomes
 /// the control's single visual child; <c>{TemplateBinding Content}</c> routes the control's content into the
-/// template's <see cref="ContentPresenter"/> (live via <see cref="ContentControl.ContentChanged"/>);
+/// template's <see cref="ContentPresenter"/> (live, through <see cref="ContentControl.RegisterContentTemplateBinding"/>);
 /// <see cref="ContentPresenter.ContentTemplate"/> realizes a <see cref="DataTemplate"/>; and
 /// <see cref="DependencyObject.RegisterTemplateBinding"/> pushes a DP-valued binding. All headless.
 /// </summary>
@@ -23,8 +23,7 @@ public sealed class TemplateTests
 			var border = new Border { Background = new SolidColorBrush(HdrColor.FromRgb(10, 20, 30)), CornerRadius = new CornerRadius(4f) };
 			var presenter = new ContentPresenter();
 			border.Child = presenter;
-			presenter.Content = cc.Content; // {TemplateBinding Content} — initial
-			cc.ContentChanged += (_, _) => presenter.Content = cc.Content; // live
+			cc.RegisterContentTemplateBinding(content => presenter.Content = content); // {TemplateBinding Content}
 			return border;
 		},
 	};
@@ -57,7 +56,7 @@ public sealed class TemplateTests
 		((TextBlock)presenter.VisualChildren[0]).Text.ShouldBe("Hi");
 
 		control.Content = "Bye";
-		((TextBlock)presenter.VisualChildren[0]).Text.ShouldBe("Bye"); // ContentChanged kept the presenter in sync
+		((TextBlock)presenter.VisualChildren[0]).Text.ShouldBe("Bye"); // the content template binding kept the presenter in sync
 	}
 
 	[Test]

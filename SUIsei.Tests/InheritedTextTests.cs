@@ -36,8 +36,8 @@ public sealed class InheritedTextTests
 			Factory = static control =>
 			{
 				var host = (ContentControl)control;
-				var presenter = new ContentPresenter { Content = host.Content };
-				host.ContentChanged += (_, _) => presenter.Content = host.Content;
+				var presenter = new ContentPresenter();
+				host.RegisterContentTemplateBinding(content => presenter.Content = content);
 				return new Border { Child = presenter };
 			},
 		},
@@ -143,7 +143,7 @@ public sealed class InheritedTextTests
 		plain.FontSize.ShouldBe(22f);
 		plain.Foreground.ShouldBeSameAs(Gold);
 		button.FontSize.ShouldBe(14f);
-		button.Foreground.ShouldBeSameAs(InheritedText.BuiltInForeground);
+		button.Foreground.SolidColor().ShouldBe(InheritedText.BuiltInForeground);
 		box.FontSize.ShouldBe(14f);
 		var label = TextOf(PresenterOf(button));
 		label.FontSize.ShouldBe(14f);
@@ -319,6 +319,65 @@ public sealed class InheritedTextTests
 		view.Own.TextAlignment.ShouldBe(TextAlignment.Right); // End, from markup, is Right
 		view.Styled.FontSize.ShouldBe(9f);
 		view.Styled.Foreground.ShouldBeSameAs(view.Title.Foreground);
+	}
+
+	/// <summary>
+	/// A template whose presenter takes the control's own brush and animates
+	/// <c>(ContentPresenter.Foreground).(SolidColorBrush.Color)</c>, as WinUI templates do: each built-in control's look gives
+	/// it a brush of its own, so the state recolours that control's text and no other's.
+	/// </summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_animating_a_built_in_control_s_foreground_recolours_only_that_control(bool useTransitions)
+	{
+		var lit = HdrColor.FromRgb(255, 215, 0);
+		var template = new ControlTemplate
+		{
+			Factory = control =>
+			{
+				var host = (ContentControl)control;
+				var presenter = new ContentPresenter { Content = host.Content };
+				host.RegisterTemplateBinding(Control.ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
+				var border = new Border { Child = presenter };
+				var emphasis = new VisualStateGroup { Name = "Emphasis" };
+				emphasis.States.Add(new VisualState
+				{
+					Name = "Lit",
+					Storyboard = new Storyboard
+					{
+						Children =
+						{
+							new ColorAnimation
+							{
+								To = lit, Duration = TimeSpan.FromSeconds(0.2), Target = presenter,
+								TargetProperty = new PropertyPath(ContentPresenter.ForegroundProperty, SolidColorBrush.ColorProperty),
+							},
+						},
+					},
+				});
+				VisualStateManager.SetVisualStateGroups(border, [emphasis]);
+				return border;
+			},
+		};
+		var button = new Button { Content = "Go", Template = template };
+		var other = new Button { Content = "Stay", Template = template };
+		var panel = new StackPanel();
+		panel.Children.Add(button);
+		panel.Children.Add(other);
+		var host = Hosted(panel);
+		var label = TextOf(PresenterOf(button));
+		label.ShownColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
+
+		VisualStateManager.GoToState(button, "Lit", useTransitions).ShouldBeTrue();
+		for (var i = 0; i < 4; i++)
+			host.Tick(0.1, 0f, new Vector2(300f, 300f));
+
+		ShouldBeNear(label.ShownColor(), lit);
+		ShouldBeNear(button.Foreground.SolidColor(), lit); // the button's own brush, recoloured in place
+		TextOf(PresenterOf(other)).ShownColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
+		other.Foreground.SolidColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
+		new Button().Foreground.SolidColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
 	}
 
 	[Test]

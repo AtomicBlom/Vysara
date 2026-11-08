@@ -98,8 +98,7 @@ public sealed class MenuBarItem : ButtonBase
 			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty);
 			host.RegisterTemplateBinding(BorderThicknessProperty, border, Border.BorderThicknessProperty);
 			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
-			presenter.Content = host.Content;
-			host.ContentChanged += (_, _) => presenter.Content = host.Content;
+			host.RegisterContentTemplateBinding(content => presenter.Content = content);
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
 			common.States.Add(new VisualState { Name = "Normal" });

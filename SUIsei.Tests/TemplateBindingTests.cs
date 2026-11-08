@@ -3,6 +3,7 @@ using SUIsei.Animation;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Media;
+using SUIsei.Tests.Sample;
 
 namespace SUIsei.Tests;
 
@@ -38,7 +39,8 @@ public sealed class TemplateBindingTests
 		var border = (Border)button.GetTemplateRoot()!;
 		var presenter = (ContentPresenter)border.Child!;
 		border.ShownColor().ShouldBe(HdrColor.FromRgb(60, 60, 70)); // the built-in look
-		TextOf(presenter).Foreground.ShouldBeSameAs(InheritedText.BuiltInForeground); // the built-in look's white
+		TextOf(presenter).Foreground.ShouldBeSameAs(button.Foreground);
+		TextOf(presenter).Foreground.SolidColor().ShouldBe(InheritedText.BuiltInForeground); // the built-in look's white
 
 		button.Background = Red;
 		button.BorderBrush = Gold;
@@ -52,6 +54,64 @@ public sealed class TemplateBindingTests
 
 		button.Background = null;
 		border.Background.SolidColor().ShouldBe(HdrColor.FromRgb(60, 60, 70));
+	}
+
+	/// <summary>
+	/// A template's <c>{TemplateBinding Content}</c> is dropped with the template, as its other template bindings are: once a
+	/// control is re-templated, its content reaches the new template's presenter and not the old one, built in or generated.
+	/// </summary>
+	[Test]
+	public void Replacing_a_template_drops_its_content_wire()
+	{
+		var button = new Button { Content = "one" };
+		var host = Hosted(button);
+		var old = (ContentPresenter)((Border)button.GetTemplateRoot()!).Child!;
+		old.Content.ShouldBe("one");
+
+		button.Template = new ControlTemplate
+		{
+			Factory = static control =>
+			{
+				var presenter = new ContentPresenter();
+				((ContentControl)control).RegisterContentTemplateBinding(content => presenter.Content = content);
+				return presenter;
+			},
+		};
+		host.Tick(0, 0f, new Vector2(300f, 200f));
+		button.Content = "two";
+
+		old.Content.ShouldBe("one"); // the detached presenter hears nothing more
+		button.GetTemplateRoot().ShouldBeOfType<ContentPresenter>().Content.ShouldBe("two");
+
+		// A generated template's {TemplateBinding Content} goes the same way.
+		var view = new InheritedTextView();
+		view.InitializeComponent();
+		Hosted(view.Root);
+		var generated = ((Border)view.Tab.GetTemplateRoot()!).Child.ShouldBeOfType<ContentPresenter>();
+		generated.Content.ShouldBe("Track");
+		view.Tab.Template = view.StyledTab.Template;
+		view.Tab.Content = "Laps";
+		generated.Content.ShouldBe("Track");
+		view.Tab.GetTemplateRoot().ShouldBeOfType<ContentPresenter>().Content.ShouldBe("Laps");
+	}
+
+	/// <summary>As WinUI's default style does, a slider's look gives it its own text size and a foreground of its fill's
+	/// colour, so a page's foreground no longer recolours the fill; set on the slider, it does.</summary>
+	[Test]
+	public void A_slider_keeps_its_own_fill_under_a_page_s_foreground()
+	{
+		var slider = new Slider { Width = 100f, Value = 50d };
+		var page = new ContentControl { Content = slider, Foreground = Gold, FontSize = 22f };
+		var host = Hosted(page);
+		var fill = (Border)((Panel)slider.GetTemplateRoot()!).Children[1];
+
+		slider.FontSize.ShouldBe(14f);
+		slider.Foreground.SolidColor().ShouldBe(HdrColor.FromRgb(76, 140, 224));
+		fill.Background.SolidColor().ShouldBe(HdrColor.FromRgb(76, 140, 224));
+
+		slider.Foreground = Red;
+		host.Tick(0, 0f, new Vector2(300f, 200f));
+		fill.Background.ShouldBeSameAs(Red);
 	}
 
 	[Test]

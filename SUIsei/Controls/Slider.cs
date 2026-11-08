@@ -52,7 +52,12 @@ public sealed class Slider : Control
 				PropertyChanged = static (s, _, _) => s.OnValueChanged(),
 			});
 
-	public Slider() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
+	public Slider()
+	{
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		// As WinUI's default style does (SliderTrackValueFill): the fill takes the slider's Foreground, the look's accent.
+		InheritedText.GiveBuiltInLook(this, FillColor.Color);
+	}
 
 	/// <summary>The low end of the range (default 0).</summary>
 	public double Minimum { get => GetValue(MinimumProperty); set => SetValue(MinimumProperty, value); }

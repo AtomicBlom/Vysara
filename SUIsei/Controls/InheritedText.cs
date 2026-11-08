@@ -37,18 +37,22 @@ internal static class InheritedText
 				"An image brush cannot paint text: glyphs are drawn from the font atlas, and a glyph prim samples one texture.", "value");
 	}
 
-	/// <summary>The text brush the built-in looks give their controls: white, SUIsei's default text colour.</summary>
-	public static readonly SolidColorBrush BuiltInForeground = Brush.Sealed(HdrColor.FromRgb(255, 255, 255));
+	/// <summary>The colour of the text brush the built-in looks give their controls: white, SUIsei's default text colour.</summary>
+	public static readonly HdrColor BuiltInForeground = HdrColor.FromRgb(255, 255, 255);
 
 	/// <summary>
 	/// Give <paramref name="control"/> the text its built-in look sets, at the BuiltInStyle level, as WinUI's default styles
 	/// set a Button's or a TextBox's <c>FontSize</c> and <c>Foreground</c> with setters: those outrank inheritance, so a
-	/// page's text properties reach its text blocks but not its controls, which keep their own unless set on them.
+	/// page's text properties reach its text blocks but not its controls, which keep their own unless set on them. The
+	/// foreground is a brush of <paramref name="foreground"/> (<see cref="BuiltInForeground"/> when omitted) made for this
+	/// control alone, rather than one sealed and shared: its template's text takes it, and a visual state that animates
+	/// <c>(ContentPresenter.Foreground).(SolidColorBrush.Color)</c> recolours it in place, as WinUI templates do, without
+	/// recolouring any other control.
 	/// </summary>
-	public static void GiveBuiltInLook(Control control)
+	public static void GiveBuiltInLook(Control control, HdrColor? foreground = null)
 	{
 		control.SetBuiltInValue(Control.FontSizeProperty, 14f);
-		control.SetBuiltInValue(Control.ForegroundProperty, BuiltInForeground);
+		control.SetBuiltInValue(Control.ForegroundProperty, new SolidColorBrush(foreground ?? BuiltInForeground));
 	}
 
 	/// <summary><paramref name="child"/> joined <paramref name="parent"/>: it takes the text properties the parent passes

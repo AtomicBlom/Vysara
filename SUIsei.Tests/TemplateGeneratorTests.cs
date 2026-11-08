@@ -49,14 +49,14 @@ public sealed class TemplateGeneratorTests
 	}
 
 	[Test]
-	public void Template_binding_content_wires_initial_value_and_the_changed_event()
+	public void Template_binding_content_wires_the_control_s_content_template_binding()
 	{
 		var code = XamlGeneratorHarness.Run(ControlTemplateXaml, Vm).AllGeneratedText();
 
-		// {TemplateBinding Content}: ContentControl.Content is a CLR property with a ContentChanged event, so the
-		// presenter is seeded and then kept live through that event (not a dependency-property push).
-		code.ShouldContain(".Content = ((global::SUIsei.Controls.ContentControl)__tc).Content;");
-		code.ShouldContain("((global::SUIsei.Controls.ContentControl)__tc).ContentChanged += (_, _) =>");
+		// {TemplateBinding Content}: ContentControl.Content is a CLR property, so the presenter is wired through the
+		// control's content template binding, which seeds it and keeps it live until the template is replaced.
+		code.ShouldContain("((global::SUIsei.Controls.ContentControl)__tc).RegisterContentTemplateBinding(__v =>");
+		code.ShouldNotContain("ContentChanged");
 	}
 
 	private const string DependencyTemplateBindingXaml = """

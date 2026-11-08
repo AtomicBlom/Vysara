@@ -45,8 +45,7 @@ public sealed class Button : ButtonBase
 			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty);
 			host.RegisterTemplateBinding(BorderThicknessProperty, border, Border.BorderThicknessProperty);
 			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
-			presenter.Content = host.Content;                        // {TemplateBinding Content} — initial
-			host.ContentChanged += (_, _) => presenter.Content = host.Content; // live
+			host.RegisterContentTemplateBinding(content => presenter.Content = content); // {TemplateBinding Content}
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
 			common.States.Add(new VisualState { Name = "Normal" });
