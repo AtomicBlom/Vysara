@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace SUIsei;
@@ -36,7 +34,9 @@ public static partial class Diagnostics
 
 	// The switch as the runtime config sets it, read once since it is fixed for the life of the process. The trimmer
 	// substitutes this property, not Enabled, so Enabled's dynamic-code check survives an app that sets the switch: a
-	// NativeAOT app that turns it on still reads Enabled as false and keeps none of the code it guards.
+	// NativeAOT app that turns it on still reads Enabled as false and keeps none of the code it guards. Enabled reads this
+	// first, so a trimmed app that leaves the switch off folds Enabled to false on it alone; the trimmer knows
+	// IsDynamicCodeSupported only under NativeAOT, and a branch on it anywhere else would keep the guarded code.
 	[FeatureSwitchDefinition(SwitchName)]
 	private static bool SwitchOn { get; } = AppContext.TryGetSwitch(SwitchName, out var on) && on;
 
@@ -54,7 +54,7 @@ public static partial class Diagnostics
 		Justification = "The analyzer accepts only a bare feature check as a guard's body, and this one also reads the switch. "
 			+ "It is false wherever dynamic code is not, which covers NativeAOT; a trimmed JIT app that sets the switch has "
 			+ "asked for the code it guards, and its trimmer substitutes SwitchOn with the value it set.")]
-	public static bool Enabled => RuntimeFeature.IsDynamicCodeSupported && SwitchOn;
+	public static bool Enabled => SwitchOn && RuntimeFeature.IsDynamicCodeSupported;
 
 	/// <summary>The live hosts, in the order they were built.</summary>
 	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
@@ -111,6 +111,11 @@ public static partial class Diagnostics
 	/// <summary>
 	/// Run <paramref name="action"/> at the start of <paramref name="host"/>'s next <see cref="UIHost.Tick"/>, on the
 	/// thread that ticks it, as <see cref="Post(Action)"/> does for any host. Safe to call from any thread.
+	/// <para>
+	/// The work waits with the host until it ticks, so work posted to a host that never ticks again, one the game has
+	/// stopped ticking or let go of, never runs, and nothing says so. A tool that waits for the work to finish waits with
+	/// a timeout.
+	/// </para>
 	/// </summary>
 	/// <exception cref="InvalidOperationException">Diagnostics are off.</exception>
 	public static void Post(UIHost host, Action action)
