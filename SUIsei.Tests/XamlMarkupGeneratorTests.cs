@@ -34,7 +34,7 @@ public sealed class XamlMarkupGeneratorTests
 		namespace SUIsei.Documents { public sealed class Page : SUIsei.Controls.ContentControl { } }
 		namespace Demo
 		{
-			public partial class V { }
+			public partial class V { public string? Caption { get; set; } }
 			public sealed class Caption : SUIsei.Controls.ContentControl { }
 			public static class Palette
 			{
@@ -351,4 +351,120 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<StackPanel.Resources><Style x:Key=\"S\" TargetType=\"Border\" BasedOn=\"Base\" /></StackPanel.Resources>", "SUISEI007")]
 	public void A_bad_resource_form_is_an_error(string body, string id) =>
 		Fails(body).Id.ShouldBe(id);
+
+	// --- Directives ---
+
+	[Test]
+	public void X_FieldModifier_sets_the_named_elements_field_as_WinUI_reads_it()
+	{
+		var code = Generates("""
+			<TextBlock x:Name="A" x:FieldModifier="Public" />
+			<TextBlock x:Name="B" x:FieldModifier="private" Text="{x:Bind Caption, Mode=OneWay}" />
+			<TextBlock x:Name="C" x:FieldModifier="Friend" />
+			<TextBlock x:Name="D" x:FieldModifier="protected" />
+			<TextBlock x:Name="E" />
+			""");
+		code.ShouldContain("public SUIsei.Controls.TextBlock A = null!;");
+		code.ShouldContain("private SUIsei.Controls.TextBlock B = null!;");
+		code.ShouldContain("internal SUIsei.Controls.TextBlock C = null!;");
+		code.ShouldContain("protected SUIsei.Controls.TextBlock D = null!;");
+		code.ShouldContain("internal SUIsei.Controls.TextBlock E = null!;");
+	}
+
+	[Test]
+	public void An_x_FieldModifier_WinUI_does_not_take_is_SUISEI017_at_its_line()
+	{
+		var diagnostic = Fails("""<TextBlock x:Name="A" x:FieldModifier="sealed" />""");
+		diagnostic.Id.ShouldBe("SUISEI017");
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
+	public void X_Uid_is_ignored_with_a_warning_and_the_text_shows()
+	{
+		var xaml = View("""<TextBlock x:Uid="Greeting" Text="hi" />""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		var diagnostic = result.Diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("SUISEI013");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Warning);
+		diagnostic.GetMessage().ShouldContain("x:Uid 'Greeting'");
+		Line(diagnostic).ShouldBe(BodyLine);
+		result.AllGeneratedText().ShouldContain(".Text = \"hi\";");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:DataType=\"local:Caption\" x:DefaultBindMode=\"OneWay\"><TextBlock /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>", "SUISEI025")]
+	[Arguments("<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:Phase=\"1\"><TextBlock /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>", "SUISEI025")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate x:DataType=\"local:Caption\"><Border /></ControlTemplate></ContentControl.Template></ContentControl>", "SUISEI025")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate Width=\"4\"><Border /></ControlTemplate></ContentControl.Template></ContentControl>", "SUISEI025")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate><ControlTemplate.Resources /><Border /></ControlTemplate></ContentControl.Template></ContentControl>", "SUISEI020")]
+	[Arguments("<StackPanel.Resources><ControlTemplate x:Key=\"T\" x:DefaultBindMode=\"OneWay\"><Border /></ControlTemplate></StackPanel.Resources>", "SUISEI025")]
+	public void What_a_template_element_carries_and_does_not_build_is_an_error_at_its_line(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	// --- Ignorable markup and extra children in the forms that take one ---
+
+	[Test]
+	public void Design_time_markup_beside_a_template_a_panel_or_a_storyboard_is_skipped()
+	{
+		var code = Generates("""
+			<ItemsControl>
+			  <ItemsControl.ItemsPanel><d:ItemsPanelTemplate /><ItemsPanelTemplate><d:Border /><VirtualizingStackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+			  <ItemsControl.ItemTemplate><d:DataTemplate /><DataTemplate><TextBlock /></DataTemplate></ItemsControl.ItemTemplate>
+			</ItemsControl>
+			<Border x:Name="Fade" />
+			<ContentControl>
+			  <VisualStateManager.VisualStateGroups>
+			    <VisualStateGroup x:Name="G">
+			      <VisualState x:Name="A">
+			        <VisualState.Storyboard><d:Storyboard /><Storyboard><DoubleAnimation Storyboard.TargetName="Fade" Storyboard.TargetProperty="Opacity" To="0" /></Storyboard></VisualState.Storyboard>
+			      </VisualState>
+			    </VisualStateGroup>
+			  </VisualStateManager.VisualStateGroups>
+			</ContentControl>
+			""");
+		code.ShouldContain("new SUIsei.Controls.VirtualizingStackPanel()");
+		code.ShouldContain("new global::SUIsei.Animation.DoubleAnimation");
+	}
+
+	[Test]
+	[Arguments("<ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>")]
+	[Arguments("<ItemsControl><ItemsControl.ItemsPanel><Border /><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>")]
+	[Arguments("<ItemsControl><ItemsControl.ItemTemplate><DataTemplate><TextBlock /></DataTemplate><DataTemplate><TextBlock /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate><Border /></ControlTemplate><Border /></ContentControl.Template></ContentControl>")]
+	[Arguments("<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name=\"G\"><VisualState x:Name=\"A\"><VisualState.Storyboard><Storyboard /><Storyboard /></VisualState.Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>")]
+	[Arguments("<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name=\"G\"><VisualState x:Name=\"A\"><VisualState.Storyboard /></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>")]
+	public void A_second_child_where_one_is_taken_is_SUISEI020_at_its_line(string body)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI020");
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	// --- Grid definitions ---
+
+	[Test]
+	public void A_definitions_size_is_read_from_a_property_element()
+	{
+		var code = Generates("""<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.Height>Auto</RowDefinition.Height></RowDefinition></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition><ColumnDefinition.Width>2*</ColumnDefinition.Width></ColumnDefinition></Grid.ColumnDefinitions></Grid>""");
+		code.ShouldContain(".RowDefinitions.Add(global::SUIsei.GridLength.Auto);");
+		code.ShouldContain(".ColumnDefinitions.Add(global::SUIsei.GridLength.Stars(2f));");
+	}
+
+	[Test]
+	[Arguments("<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.MinHeight>40</RowDefinition.MinHeight></RowDefinition></Grid.RowDefinitions></Grid>", "SUISEI025")]
+	[Arguments("<Grid><Grid.ColumnDefinitions><ColumnDefinition Width=\"*\"><ColumnDefinition.Width>Auto</ColumnDefinition.Width></ColumnDefinition></Grid.ColumnDefinitions></Grid>", "SUISEI025")]
+	[Arguments("<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.Height><Border /></RowDefinition.Height></RowDefinition></Grid.RowDefinitions></Grid>", "SUISEI020")]
+	[Arguments("<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.Height>tall</RowDefinition.Height></RowDefinition></Grid.RowDefinitions></Grid>", "SUISEI012")]
+	public void A_definition_property_element_other_than_its_size_is_reported_not_dropped(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
 }

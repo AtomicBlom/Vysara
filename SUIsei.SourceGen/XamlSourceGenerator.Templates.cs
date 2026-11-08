@@ -189,6 +189,33 @@ partial class XamlSourceGenerator
 		return text.Length > 0 ? text : null;
 	}
 
+	// The one `kind` element a property element holds (<X.Template><ControlTemplate>, <VisualState.Storyboard><Storyboard>),
+	// skipping design-time and other ignorable markup. Anything else in it, a second one or text, is reported rather than
+	// dropped, and so is an empty one; null when it holds no `kind`.
+	private static XElement? SingleChild(Gen gen, XElement propEl, string kind)
+	{
+		XElement? found = null;
+		var reported = false;
+		foreach (var child in ObjectChildren(propEl))
+		{
+			if (child.Name.LocalName == kind && found is null)
+			{
+				found = child;
+				continue;
+			}
+			gen.Report(BadPropertyElement, child, $"{propEl.Name.LocalName} holding a {child.Name.LocalName} (it takes one {kind})");
+			reported = true;
+		}
+		if (TextContent(propEl) is not null)
+		{
+			gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (it takes one {kind}, not text)");
+			reported = true;
+		}
+		if (found is null && !reported)
+			gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (it takes one {kind})");
+		return found;
+	}
+
 	// Whether an object element would be a value of `type` (so it is assigned rather than added to a collection).
 	private static bool ChildFits(Gen gen, XElement child, ITypeSymbol type)
 	{
@@ -224,8 +251,10 @@ partial class XamlSourceGenerator
 				{
 					if (IsIgnorable(child, child.Name.Namespace))
 						continue;
-					if (child.Name.LocalName is "Storyboard" or "VisualState.Storyboard" && sbEl is null)
-						sbEl = child.Name.LocalName == "Storyboard" ? child : child.Elements().FirstOrDefault();
+					if (child.Name.LocalName == "Storyboard" && sbEl is null)
+						sbEl = child;
+					else if (child.Name.LocalName == "VisualState.Storyboard" && sbEl is null)
+						sbEl = SingleChild(gen, child, "Storyboard");
 					else
 						gen.Report(OutsideSubset, child, $"<{child.Name.LocalName}> in a VisualState", child.Name.LocalName switch
 						{
@@ -260,9 +289,7 @@ partial class XamlSourceGenerator
 
 	private static void EmitControlTemplateProperty(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
 	{
-		var templateEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ControlTemplate");
-		if (templateEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
-		if (ControlTemplateValue(gen, templateEl, ownerType) is { } template)
+		if (SingleChild(gen, propEl, "ControlTemplate") is { } templateEl && ControlTemplateValue(gen, templateEl, ownerType) is { } template)
 			scope.Emit($"{ownerVar}.Template = {template};");
 	}
 
@@ -280,8 +307,8 @@ partial class XamlSourceGenerator
 
 	private static void EmitDataTemplateProperty(Gen gen, Scope scope, string ownerVar, string targetProp, XElement propEl)
 	{
-		var templateEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "DataTemplate");
-		if (templateEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
+		if (SingleChild(gen, propEl, "DataTemplate") is not { } templateEl)
+			return;
 
 		// x:DataType types the item so the template's {x:Bind}s resolve; without it, an {x:Bind} inside diagnoses.
 		var dataType = ResolveTypeName(gen, templateEl, templateEl.Attribute(X + "DataType")?.Value);
@@ -297,17 +324,19 @@ partial class XamlSourceGenerator
 	// the panel with its attributes, as any template root is built.
 	private static void EmitItemsPanelProperty(Gen gen, Scope scope, string ownerVar, XElement propEl)
 	{
-		var tmplEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ItemsPanelTemplate");
-		var panelEl = tmplEl?.Elements().FirstOrDefault(e => !e.Name.LocalName.Contains('.'));
-		if (panelEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
-		var panelType = ResolveType(gen.Compilation, panelEl.Name.Namespace, panelEl.Name.LocalName);
-		if (panelType is null) { gen.Report(UnknownElement, panelEl, panelEl.Name.LocalName); return; }
-		if (gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Panel") is not { } panel || !IsAssignableTo(panelType, panel))
-		{
-			gen.Report(BadPropertyElement, panelEl, $"ItemsPanelTemplate (its root must be a Panel; '{panelType.Name}' is not)");
+		if (SingleChild(gen, propEl, "ItemsPanelTemplate") is not { } tmplEl)
 			return;
+		if (TemplateRoots(tmplEl).FirstOrDefault() is { } panelEl)
+		{
+			var panelType = ResolveType(gen.Compilation, panelEl.Name.Namespace, panelEl.Name.LocalName);
+			if (panelType is null) { gen.Report(UnknownElement, panelEl, panelEl.Name.LocalName); return; }
+			if (gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Panel") is not { } panel || !IsAssignableTo(panelType, panel))
+			{
+				gen.Report(BadPropertyElement, panelEl, $"ItemsPanelTemplate (its root must be a Panel; '{panelType.Name}' is not)");
+				return;
+			}
 		}
-		var method = EmitTemplateFactory(gen, tmplEl!, isControlTemplate: false,
+		var method = EmitTemplateFactory(gen, tmplEl, isControlTemplate: false,
 			paramDecl: "", castLocal: null, dataRootExpr: "", dataRootType: null, returnType: "global::SUIsei.Controls.Panel");
 		if (method is not null)
 			scope.Emit($"{ownerVar}.ItemsPanel = new global::SUIsei.Controls.ItemsPanelTemplate {{ Factory = {method} }};");
@@ -318,7 +347,8 @@ partial class XamlSourceGenerator
 	private static string? EmitTemplateFactory(Gen gen, XElement templateEl, bool isControlTemplate, string paramDecl, string? castLocal, string dataRootExpr, INamedTypeSymbol? dataRootType,
 		string returnType = "global::SUIsei.FrameworkElement")
 	{
-		var roots = templateEl.Elements().Where(e => !e.Name.LocalName.Contains('.') && !IsIgnorable(e, e.Name.Namespace)).ToList();
+		ReportTemplateMarkup(gen, templateEl, isControlTemplate);
+		var roots = TemplateRoots(templateEl);
 		var rootChild = roots.FirstOrDefault();
 		if (rootChild is null) { gen.Report(BadPropertyElement, templateEl, templateEl.Name.LocalName); return null; }
 		for (var i = 1; i < roots.Count; i++)
@@ -350,6 +380,34 @@ partial class XamlSourceGenerator
 		gen.Methods.AppendLine($"\t\treturn {rootVar};");
 		gen.Methods.AppendLine("\t}");
 		return method;
+	}
+
+	// A template's object elements, which it builds the first of, skipping design-time and other ignorable markup.
+	private static List<XElement> TemplateRoots(XElement templateEl) =>
+		templateEl.Elements().Where(e => !e.Name.LocalName.Contains('.') && !IsIgnorable(e, e.Name.Namespace)).ToList();
+
+	// Report what the template element itself carries that it doesn't build: a directive it doesn't take (x:DataType
+	// anywhere but a DataTemplate, x:DefaultBindMode, …), any attribute but a ControlTemplate's TargetType, and a property
+	// element. x:Key and x:DataType are read by the code that keeps or types the template.
+	private static void ReportTemplateMarkup(Gen gen, XElement templateEl, bool isControlTemplate)
+	{
+		foreach (var attr in templateEl.Attributes())
+		{
+			var ns = attr.Name.Namespace;
+			if (attr.IsNamespaceDeclaration || IsIgnorable(templateEl, ns) || IsDirective(gen, templateEl, attr)
+				|| (isControlTemplate && ns == XNamespace.None && attr.Name.LocalName == "TargetType"))
+				continue;
+			if (ns != XNamespace.None)
+				gen.Report(IgnoredContent, attr, $"attribute '{attr.Name.LocalName}' in XML namespace '{ns.NamespaceName}'");
+			else
+				gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a {templateEl.Name.LocalName}",
+					isControlTemplate ? " (a ControlTemplate takes a TargetType)" : "");
+		}
+		foreach (var child in templateEl.Elements())
+		{
+			if (child.Name.LocalName.Contains('.') && !IsIgnorable(child, child.Name.Namespace))
+				gen.Report(BadPropertyElement, child, child.Name.LocalName);
+		}
 	}
 
 	// A template-scoped {x:Bind} — a OneTime read against the template's data root (the item is fixed for the
@@ -587,12 +645,15 @@ partial class XamlSourceGenerator
 	}
 
 	// <Grid.ColumnDefinitions>/<Grid.RowDefinitions> → grid.<collection>.Add(GridLength …) per ColumnDefinition/
-	// RowDefinition child, reading its Width/Height as a GridLength. A definition with neither is "*".
+	// RowDefinition child, reading its Width/Height as a GridLength, written as an attribute or a property element
+	// (<RowDefinition.Height>Auto</RowDefinition.Height>). A definition with neither is "*". Anything else on a definition,
+	// its limits among them, is reported, since a definition takes its size alone.
 	private static void EmitGridDefinitions(Gen gen, Scope scope, string ownerVar, XElement propEl, string collection)
 	{
 		var gridLength = gen.Compilation.GetTypeByMetadataName("SUIsei.GridLength")!;
 		var definition = collection == "RowDefinitions" ? "RowDefinition" : "ColumnDefinition";
 		var sizeName = collection == "RowDefinitions" ? "Height" : "Width";
+		var sizeElementName = $"{definition}.{sizeName}";
 		foreach (var def in propEl.Elements())
 		{
 			if (IsIgnorable(def, def.Name.Namespace))
@@ -609,7 +670,30 @@ partial class XamlSourceGenerator
 				gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a {definition}", $" (a {definition} takes its {sizeName} alone)");
 			}
 			var size = def.Attribute(sizeName);
-			var code = size is null ? "global::SUIsei.GridLength.Star" : ConvertOrReport(gen, size, gridLength, size.Value, size.Name.LocalName);
+			XElement? sizeEl = null;
+			foreach (var child in ObjectChildren(def))
+			{
+				if (child.Name.LocalName == sizeElementName && size is null && sizeEl is null)
+					sizeEl = child;
+				else
+					gen.Report(OutsideSubset, child, $"<{child.Name.LocalName}> in a {definition}", child.Name.LocalName == sizeElementName
+						? $" (its {sizeName} is given already)" : $" (a {definition} takes its {sizeName} alone)");
+			}
+			if (TextContent(def) is not null)
+				gen.Report(OutsideSubset, def, $"Text in a {definition}", $" (write its {sizeName} as an attribute)");
+
+			string? code;
+			if (size is not null)
+				code = ConvertOrReport(gen, size, gridLength, size.Value, sizeName);
+			else if (sizeEl is null)
+				code = "global::SUIsei.GridLength.Star";
+			else if (ObjectChildren(sizeEl).Count == 0 && TextContent(sizeEl) is { } text)
+				code = ConvertOrReport(gen, sizeEl, gridLength, text, sizeName);
+			else
+			{
+				gen.Report(BadPropertyElement, sizeEl, $"{sizeElementName} (takes a length as text, such as Auto, * or 40)");
+				code = null;
+			}
 			if (code is not null)
 				scope.Emit($"{ownerVar}.{collection}.Add({code});");
 		}

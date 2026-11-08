@@ -102,14 +102,26 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor WrongChildType = new("SUISEI026", "Child of the wrong type",
 		"'{0}' cannot hold a {1}: its {2} takes a {3}", "SUIsei", DiagnosticSeverity.Error, true);
 
-	// The x: directives SUIsei reads, and where: x:Name on any element (and on a visual state or group), x:Key on a
-	// resource, x:Class on the root and x:DataType on a DataTemplate. Every other directive (x:Uid, x:Load, x:Phase,
-	// x:DeferLoadStrategy, x:FieldModifier, …) is reported where it is written, not skipped, since skipping it changes
-	// what the view does: an x:Load="False" element would be loaded.
+	// The x: directives SUIsei reads, and where: x:Name on any element (and on a visual state or group), x:FieldModifier
+	// beside it, x:Key on a resource, x:Class on the root and x:DataType on a DataTemplate. x:Uid is ignored with a
+	// warning, since with no localization resources the text the markup writes is the text WinUI would show without a
+	// resource for it. Every other directive (x:Load, x:Phase, x:DeferLoadStrategy, x:DefaultBindMode, …) is reported
+	// where it is written, not skipped, since skipping it changes what the view does: an x:Load="False" element would be
+	// loaded.
 	private static bool IsDirective(Gen gen, XElement el, XAttribute attr, bool isRoot = false)
 	{
 		if (attr.Name.Namespace != X)
 			return false;
+		switch (attr.Name.LocalName)
+		{
+			case "Uid":
+				gen.Report(IgnoredContent, attr, $"x:Uid '{attr.Value}' on {el.Name.LocalName}, so its text is what the markup writes");
+				return true;
+			case "FieldModifier":
+				if (!TryFieldModifier(attr.Value, out _))
+					gen.Report(BadLiteralValue, attr, attr.Value, "x:FieldModifier (public, internal, protected, private, or Friend for internal, in any case)");
+				return true;
+		}
 		var allowed = attr.Name.LocalName switch
 		{
 			"Name" or "Key" => true,
@@ -121,15 +133,38 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		{
 			gen.Report(OutsideSubset, attr, $"The directive 'x:{attr.Name.LocalName}' on {el.Name.LocalName}", attr.Name.LocalName switch
 			{
-				"Uid" => " (SUIsei has no localization resources)",
 				"Load" or "DeferLoadStrategy" => " (every element is loaded)",
 				"Phase" => " (every element is built at once)",
+				"DefaultBindMode" => " (write the Mode on each {x:Bind})",
 				"Class" => " (only the root element names the class)",
 				"DataType" => " (only a DataTemplate takes one)",
 				_ => "",
 			});
 		}
 		return true;
+	}
+
+	// An x:FieldModifier as WinUI's XAML compiler takes one: public, private, protected, internal, or Friend (Visual Basic's
+	// internal), in any case. `modifier` is the C# modifier for it.
+	private static bool TryFieldModifier(string text, out string modifier)
+	{
+		modifier = text.Trim().ToLowerInvariant() switch
+		{
+			"public" => "public",
+			"private" => "private",
+			"protected" => "protected",
+			"internal" or "friend" => "internal",
+			_ => "",
+		};
+		return modifier.Length > 0;
+	}
+
+	// The field a named element (or a sealed root) is kept in: its x:FieldModifier, internal where it has none, and a value
+	// type's default where a class starts null.
+	private static string FieldDeclaration(XElement el, ITypeSymbol type, string name)
+	{
+		var modifier = el.Attribute(X + "FieldModifier") is { } attr && TryFieldModifier(attr.Value, out var given) ? given : "internal";
+		return $"{modifier} {type.ToDisplayString()} {name} = {(type.IsValueType ? "default" : "null!")};";
 	}
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -419,19 +454,19 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		else if (isRoot) // sealed root: use composition (Root field or named field)
 		{
 			var = hasName ? nameAttr!.Value : "Root";
-			gen.Fields.Add($"internal {typeName} {var} = null!;");
+			gen.Fields.Add(FieldDeclaration(el, type, var));
 			scope.Emit($"{var} = new {typeName}();");
 		}
 		else if (hasName)
 		{
 			var = nameAttr!.Value;
-			gen.Fields.Add($"internal {typeName} {var} = null!;");
+			gen.Fields.Add(FieldDeclaration(el, type, var));
 			scope.Emit($"{var} = new {typeName}();");
 		}
 		else if (NeedsField(type, el))
 		{
 			var = NewName(gen, "__b");
-			gen.Fields.Add($"internal {typeName} {var} = null!;");
+			gen.Fields.Add($"internal {typeName} {var} = {(type.IsValueType ? "default" : "null!")};");
 			scope.Emit($"{var} = new {typeName}();");
 		}
 		else

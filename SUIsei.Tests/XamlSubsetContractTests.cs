@@ -5,8 +5,9 @@ namespace SUIsei.Tests;
 /// <summary>
 /// The published XAML subset, the contract in Planning.md, as a test. Every form it lists as <b>In</b> appears here as
 /// markup that must generate with no diagnostic at all and compile. Every form it lists as <b>planned</b>, and every WinUI
-/// form it lists as <b>Out</b>, must be reported as an error, so no form can pass by being silently dropped. A form added
-/// to the contract belongs in one of the three tables.
+/// form it lists as <b>Out</b>, must be reported as an error, so no form can pass by being silently dropped. A WinUI form
+/// that is ignored because ignoring it changes nothing the view shows (<c>x:Uid</c>) builds with exactly one warning. A
+/// form added to the contract belongs in one of the four tables.
 /// </summary>
 public sealed class XamlSubsetContractTests
 {
@@ -74,6 +75,7 @@ public sealed class XamlSubsetContractTests
 	[
 		("elements and attributes", """<Border Width="10" Background="#FF0000" HorizontalAlignment="Left" />"""),
 		("x:Class and x:Name", """<TextBlock x:Name="Named" Text="hi" />"""),
+		("x:FieldModifier", """<TextBlock x:Name="Shown" x:FieldModifier="Public" /><TextBlock x:Name="Kept" x:FieldModifier="private" Text="{x:Bind ViewModel.Caption, Mode=OneWay}" />"""),
 		("x:Key", """<StackPanel.Resources><Style x:Key="K" TargetType="Border" /></StackPanel.Resources>"""),
 		("x:DataType", """<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:DataType="local:Item"><TextBlock Text="{x:Bind Title}" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>"""),
 		("property element: value", """<Border><Border.Padding>1,2</Border.Padding></Border>"""),
@@ -99,7 +101,7 @@ public sealed class XamlSubsetContractTests
 		("inherited text properties and TextAlignment", """<ContentControl FontSize="18" Foreground="Gold"><TextBlock TextAlignment="Center" Text="a&#10;b" /></ContentControl><ContentPresenter FontSize="12" Foreground="Teal" /><TextBox FontSize="16" />"""),
 		("ItemsPanelTemplate", """<ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>"""),
 		("ResourceDictionary with inline merged dictionaries", """<StackPanel.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary><Style x:Key="M" TargetType="Border" /></ResourceDictionary></ResourceDictionary.MergedDictionaries></ResourceDictionary></StackPanel.Resources>"""),
-		("Grid row and column definitions", """<Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="2*" /></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="40" /></Grid.ColumnDefinitions></Grid>"""),
+		("Grid row and column definitions", """<Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="2*" /></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition><ColumnDefinition.Width>Auto</ColumnDefinition.Width></ColumnDefinition></Grid.ColumnDefinitions></Grid>"""),
 		("DoubleAnimation", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:0:1" />""")),
 		("ColorAnimation", States("""<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="Blue" />""")),
 		("DoubleAnimationUsingKeyFrames", States("""<DoubleAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)"><LinearDoubleKeyFrame KeyTime="0:0:0" Value="1" /><DiscreteDoubleKeyFrame KeyTime="0:0:0.5" Value="0.5" /><EasingDoubleKeyFrame KeyTime="0:0:1" Value="0"><EasingDoubleKeyFrame.EasingFunction><QuadraticEase /></EasingDoubleKeyFrame.EasingFunction></EasingDoubleKeyFrame></DoubleAnimationUsingKeyFrames>""")),
@@ -144,12 +146,14 @@ public sealed class XamlSubsetContractTests
 	// line, never skipped.
 	private static readonly (string Form, string Body, string Id)[] OutForms =
 	[
-		("x:Uid", """<TextBlock x:Uid="Greeting" Text="hi" />""", "SUISEI025"),
 		("x:Phase", """<TextBlock x:Phase="2" Text="hi" />""", "SUISEI025"),
 		("x:Load", """<TextBlock x:Load="False" Text="hi" />""", "SUISEI025"),
 		("x:DeferLoadStrategy", """<TextBlock x:DeferLoadStrategy="Lazy" Text="hi" />""", "SUISEI025"),
 		("x:Class on an element other than the root", """<TextBlock x:Class="Demo.Other" />""", "SUISEI025"),
-		("x: directive on an animation", States("""<DoubleAnimation x:Uid="Fade" Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" />"""), "SUISEI025"),
+		("x: directive on an animation", States("""<DoubleAnimation x:Phase="1" Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" />"""), "SUISEI025"),
+		("x:DefaultBindMode on a DataTemplate", """<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:DataType="local:Item" x:DefaultBindMode="OneWay"><TextBlock Text="{x:Bind Title}" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>""", "SUISEI025"),
+		("x:DataType on a ControlTemplate", """<ContentControl><ContentControl.Template><ControlTemplate x:DataType="local:Item"><Border /></ControlTemplate></ContentControl.Template></ContentControl>""", "SUISEI025"),
+		("an x:FieldModifier WinUI doesn't take", """<TextBlock x:Name="Named" x:FieldModifier="sealed" />""", "SUISEI017"),
 		("Name= on a visual state", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState Name="A" /></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
 		("Name= on a visual state group", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup Name="G"><VisualState x:Name="A" /></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
 		("VisualState.Setters", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A"><VisualState.Setters><Setter Target="X.Opacity" Value="0" /></VisualState.Setters></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
@@ -157,7 +161,10 @@ public sealed class XamlSubsetContractTests
 		("VisualStateGroup.Transitions", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualStateGroup.Transitions><VisualTransition /></VisualStateGroup.Transitions><VisualState x:Name="A" /></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
 		("timing on a Storyboard", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A"><Storyboard RepeatBehavior="Forever" /></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
 		("RowDefinition MinHeight", """<Grid><Grid.RowDefinitions><RowDefinition Height="*" MinHeight="40" /></Grid.RowDefinitions></Grid>""", "SUISEI025"),
+		("RowDefinition MinHeight as a property element", """<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.MinHeight>40</RowDefinition.MinHeight></RowDefinition></Grid.RowDefinitions></Grid>""", "SUISEI025"),
 		("a second root in a template", """<ContentControl><ContentControl.Template><ControlTemplate><Border /><Border /></ControlTemplate></ContentControl.Template></ContentControl>""", "SUISEI025"),
+		("a second template in a template property", """<ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>""", "SUISEI020"),
+		("a second storyboard in VisualState.Storyboard", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A"><VisualState.Storyboard><Storyboard /><Storyboard /></VisualState.Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI020"),
 		("a duration as a bare number (days in WinUI)", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="2" />"""), "SUISEI012"),
 		("a duration as m:s (hours and minutes in WinUI)", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:30" />"""), "SUISEI012"),
 		("a duration in .NET's d:h:m:s form, which WinUI doesn't read", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="1:02:03:04" />"""), "SUISEI012"),
@@ -169,6 +176,29 @@ public sealed class XamlSubsetContractTests
 		("an element with no public parameterless constructor", """<Image><Image.Source><suisei:HostImageSource /></Image.Source></Image>""", "SUISEI025"),
 		("a property with no public setter", """<ListView SelectedIndex="2" />""", "SUISEI004"),
 	];
+
+	// WinUI forms that build with one warning, since ignoring them changes nothing the view shows.
+	private static readonly (string Form, string Body, string Id)[] WarnedForms =
+	[
+		("x:Uid, whose text shows as the markup writes it", """<TextBlock x:Uid="Greeting" Text="hi" />""", "SUISEI013"),
+		("x:Uid on an animation", States("""<DoubleAnimation x:Uid="Fade" Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" />"""), "SUISEI013"),
+	];
+
+	[Test]
+	public void Every_warned_form_builds_with_one_warning()
+	{
+		var failures = new List<string>();
+		foreach (var (form, body, id) in WarnedForms)
+		{
+			var xaml = View(body);
+			var diagnostics = XamlGeneratorHarness.Run(xaml, CodeBehind).Diagnostics;
+			if (diagnostics.Select(d => d.Id).ToArray() is not [var only] || only != id || diagnostics[0].Severity != DiagnosticSeverity.Warning)
+				failures.Add($"{form}: expected one {id} warning, got {string.Join("; ", diagnostics.Select(d => $"{d.Id} {d.GetMessage()}"))}");
+			else if (XamlGeneratorHarness.CompileErrors(xaml, CodeBehind) is { Length: > 0 } errors)
+				failures.Add($"{form}: does not compile: {string.Join("; ", errors.Select(e => e.GetMessage()))}");
+		}
+		failures.ShouldBeEmpty();
+	}
 
 	[Test]
 	public void Every_out_form_is_an_error_at_its_line()
