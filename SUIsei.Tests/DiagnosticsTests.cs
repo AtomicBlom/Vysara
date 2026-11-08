@@ -538,6 +538,26 @@ public sealed class DiagnosticsTests
 		((DoubleCollection)dashes!).ShouldBe([2.0, 1.0]);
 	}
 
+	/// <summary>A dash array reads as the doubles the generator writes, each number's round-trip text as a double literal,
+	/// not as a float widened; empty text clears a point or dash list, as it does in markup; and a matrix reads as six
+	/// numbers in WinUI's order.</summary>
+	[Test]
+	public void TryParseValue_reads_number_lists_and_matrices_as_the_generator_writes_them()
+	{
+		Diagnostics.TryParseValue(typeof(DoubleCollection), "0.1 0.3", out var dashes).ShouldBeTrue();
+		((DoubleCollection)dashes!).ShouldBe([0.1, 0.3]);
+
+		Diagnostics.TryParseValue(typeof(DoubleCollection), "", out var noDashes).ShouldBeTrue();
+		((DoubleCollection)noDashes!).Count.ShouldBe(0);
+		Diagnostics.TryParseValue(typeof(PointCollection), "  ", out var noPoints).ShouldBeTrue();
+		((PointCollection)noPoints!).Count.ShouldBe(0);
+
+		Diagnostics.CanParseValue(typeof(Matrix3x2)).ShouldBeTrue();
+		Diagnostics.TryParseValue(typeof(Matrix3x2), "1,0.5 0,2 10,-4", out var matrix).ShouldBeTrue();
+		matrix.ShouldBe(new Matrix3x2(1f, 0.5f, 0f, 2f, 10f, -4f));
+		Diagnostics.TryParseValue(typeof(Matrix3x2), "1,0,0,1,0", out _).ShouldBeFalse();
+	}
+
 	/// <summary>A property's value type and default, read without reflecting over its generic type.</summary>
 	[Test]
 	public void A_propertys_value_type_and_default_are_readable()

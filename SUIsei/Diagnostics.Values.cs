@@ -12,11 +12,14 @@ public static partial class Diagnostics
 	/// Convert attribute text to a value of <paramref name="type"/> as the XAML generator does at compile time: a number,
 	/// <c>true</c> or <c>false</c>, an enum member by name, a string, and the structured syntaxes — colours
 	/// (<c>#RRGGBB</c>, <c>#AARRGGBB</c> or a named colour), a <see cref="Brush"/> from a colour (a new
-	/// <see cref="SolidColorBrush"/> of it), <see cref="Thickness"/> (one, two or four numbers),
-	/// <see cref="Point"/>, <see cref="Vector2"/> and <see cref="Vector3"/>, <see cref="GridLength"/> (<c>Auto</c>,
-	/// <c>*</c>, <c>N*</c> or a number), <see cref="TimeSpan"/> (WinUI's grammar, as <c>0:0:0.25</c>, with the forms the
-	/// generator refuses refused here too) and <see cref="RepeatBehavior"/>.
-	/// A nullable type takes what its underlying type does, and <c>{x:Null}</c> where null is allowed. False, with
+	/// <see cref="SolidColorBrush"/> of it), <see cref="Thickness"/> (one, two or four numbers), <see cref="CornerRadius"/>
+	/// (one number, or four equal ones), <see cref="Point"/>, <see cref="Size"/>, <see cref="Vector2"/> and
+	/// <see cref="Vector3"/>, <see cref="Rect"/> (<c>x,y,width,height</c>), <see cref="Matrix3x2"/> (six numbers,
+	/// <c>M11,M12,M21,M22,OffsetX,OffsetY</c>), a <see cref="Geometry"/> from path markup, a <see cref="PointCollection"/>
+	/// (pairs of numbers) and a <see cref="DoubleCollection"/> (numbers), each empty for empty text, <see cref="GridLength"/>
+	/// (<c>Auto</c>, <c>*</c>, <c>N*</c> or a number), <see cref="TimeSpan"/> (WinUI's grammar, as <c>0:0:0.25</c>, with the
+	/// forms the generator refuses refused here too) and <see cref="RepeatBehavior"/> (<c>Forever</c> or a count such as
+	/// <c>3x</c>). A nullable type takes what its underlying type does, and <c>{x:Null}</c> where null is allowed. False, with
 	/// <paramref name="value"/> null, for text the type does not accept or a type outside these. Text one property alone
 	/// takes, such as <c>Auto</c> for a <see cref="FrameworkElement.Width"/>, needs the property:
 	/// <see cref="TryParseValue(DependencyProperty, string, out object?)"/>.
@@ -80,6 +83,9 @@ public static partial class Diagnostics
 			_ when target == typeof(Geometry) => PathMarkup.TryParse(s, null, out _) ? Geometry.Parse(s) : null,
 			_ when target == typeof(PointCollection) => Points(s),
 			_ when target == typeof(DoubleCollection) => Doubles(s),
+			_ when target == typeof(Matrix3x2) => XamlValueSyntax.ParseNumbers(s) is [var m11, var m12, var m21, var m22, var dx, var dy]
+				? new Matrix3x2(m11, m12, m21, m22, dx, dy)
+				: null,
 			_ when target == typeof(Point) => XamlValueSyntax.ParseNumbers(s) is [var x, var y] ? new Point(x, y) : null,
 			_ when target == typeof(Vector2) => XamlValueSyntax.ParseNumbers(s) is [var x, var y] ? new Vector2(x, y) : null,
 			_ when target == typeof(Vector3) => XamlValueSyntax.ParseNumbers(s) is [var x, var y, var z] ? new Vector3(x, y, z) : null,
@@ -138,12 +144,15 @@ public static partial class Diagnostics
 		|| target == typeof(SolidColorBrush) || target == typeof(Thickness)
 		|| target == typeof(Point) || target == typeof(Vector2) || target == typeof(Vector3) || target == typeof(GridLength)
 		|| target == typeof(TimeSpan) || target == typeof(RepeatBehavior) || target == typeof(CornerRadius) || target == typeof(Size)
-		|| target == typeof(Rect) || target == typeof(Geometry) || target == typeof(PointCollection) || target == typeof(DoubleCollection);
+		|| target == typeof(Rect) || target == typeof(Matrix3x2) || target == typeof(Geometry)
+		|| target == typeof(PointCollection) || target == typeof(DoubleCollection);
 
-	// Pairs of numbers, "x1,y1 x2,y2 …", as the generator reads a point list.
+	// Pairs of numbers, "x1,y1 x2,y2 …", as the generator reads a point list; empty text is an empty list, as it is there.
 	private static PointCollection? Points(string s)
 	{
-		if (XamlValueSyntax.ParseNumbers(s) is not { Length: > 0 } numbers || numbers.Length % 2 != 0)
+		if (s.Length == 0)
+			return [];
+		if (XamlValueSyntax.ParseNumbers(s) is not { } numbers || numbers.Length % 2 != 0)
 			return null;
 		var points = new PointCollection();
 		for (var i = 0; i < numbers.Length; i += 2)
@@ -151,14 +160,18 @@ public static partial class Diagnostics
 		return points;
 	}
 
-	// Numbers separated by commas or spaces, as the generator reads a dash array.
+	// Numbers separated by commas or spaces, as the generator reads a dash array; empty text is an empty list, as it is
+	// there. The generator writes each number it read as a double literal of its round-trip text, so each is read back
+	// from that text here: the double a widened float would give differs (0.1 reads as 0.1, not 0.10000000149011612).
 	private static DoubleCollection? Doubles(string s)
 	{
+		if (s.Length == 0)
+			return [];
 		if (XamlValueSyntax.ParseNumbers(s) is not { } numbers)
 			return null;
 		var doubles = new DoubleCollection();
 		foreach (var n in numbers)
-			doubles.Add(n);
+			doubles.Add(double.Parse(n.ToString("R", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture));
 		return doubles;
 	}
 }
