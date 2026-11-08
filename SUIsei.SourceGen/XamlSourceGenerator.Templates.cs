@@ -79,15 +79,49 @@ partial class XamlSourceGenerator
 
 	// Set a property the markup gives a value. Inside a ControlTemplate a dependency property takes it on its Template rung,
 	// as WinUI puts every value a template sets on its parts at the templated-parent level: below Local, so a value the app
-	// sets on a part wins, and ClearValue on the part reverts to the template's value. Elsewhere, and for a CLR property, the
-	// value goes through the property's setter.
-	private static void EmitSet(Scope scope, INamedTypeSymbol ownerType, string ownerVar, IPropertySymbol prop, string code)
+	// sets on a part wins, and ClearValue on the part reverts to the template's value. A CLR property whose type differs from
+	// its dependency property's takes the value converted, where the conversion is implicit, and is reported (SUISEI027)
+	// where it is not, since the value then goes through the CLR setter and is the part's own. Elsewhere, and for a CLR
+	// property with no dependency property, which has no levels, the value goes through the property's setter.
+	private static void EmitSet(Gen gen, Scope scope, XObject at, INamedTypeSymbol ownerType, string ownerVar, IPropertySymbol prop, string code)
 	{
-		if (scope.IsControlTemplate && FindDependencyProperty(ownerType, prop.Name) is { } dp && DependencyValueType(dp) is { } valueType
-			&& SymbolEqualityComparer.Default.Equals(valueType, prop.Type))
-			scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({ownerVar}, {Fq(dp.ContainingType!)}.{dp.Name}, {code});");
-		else
-			scope.Emit($"{ownerVar}.{prop.Name} = {code};");
+		if (scope.IsControlTemplate && FindDependencyProperty(ownerType, prop.Name) is { } dp && DependencyValueType(dp) is { } valueType)
+		{
+			if (SymbolEqualityComparer.Default.Equals(valueType, prop.Type))
+			{
+				scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({ownerVar}, {Fq(dp.ContainingType!)}.{dp.Name}, {code});");
+				return;
+			}
+			if (gen.Compilation.ClassifyConversion(prop.Type, valueType).IsImplicit)
+			{
+				scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({ownerVar}, {Fq(dp.ContainingType!)}.{dp.Name}, ({Fq(valueType)})({code}));");
+				return;
+			}
+			gen.Report(TemplateValueOnLocal, at, $"{ownerType.Name}.{prop.Name}",
+				$"its type, {prop.Type.ToDisplayString()}, does not convert implicitly to its dependency property's, {valueType.ToDisplayString()}");
+		}
+		scope.Emit($"{ownerVar}.{prop.Name} = {code};");
+	}
+
+	// Set an attached property through its owner's static setter. Inside a ControlTemplate, where the owner declares the
+	// dependency property the setter sets (<Prop>Property, of the setter's value type), it goes on the part's Template rung
+	// instead, as every other value a template gives its parts; one with no such dependency property is reported
+	// (SUISEI027), since the setter makes it the part's own.
+	private static void EmitAttachedSet(Gen gen, Scope scope, XObject at, INamedTypeSymbol owner, IMethodSymbol setter, string targetVar, string code)
+	{
+		if (scope.IsControlTemplate)
+		{
+			var property = setter.Name.Substring("Set".Length);
+			if (FindDependencyProperty(owner, property) is { } dp && DependencyValueType(dp) is { } valueType
+				&& SymbolEqualityComparer.Default.Equals(valueType, setter.Parameters[1].Type))
+			{
+				scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({targetVar}, {Fq(dp.ContainingType!)}.{dp.Name}, {code});");
+				return;
+			}
+			gen.Report(TemplateValueOnLocal, at, $"{owner.Name}.{property}",
+				$"{owner.Name} declares no dependency property {property}Property of the setter's value type");
+		}
+		scope.Emit($"{Fq(owner)}.{setter.Name}({targetVar}, {code});");
 	}
 
 	// <Owner.Prop> for a property of the element: text is converted for the property's type, one object is assigned, and
@@ -101,7 +135,7 @@ partial class XamlSourceGenerator
 			if (text is null || member.SetMethod is null)
 				gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (needs a value, or objects for a collection)");
 			else if (ConvertOrReport(gen, propEl, member.Type, text, member.Name, member) is { } code)
-				EmitSet(scope, member.ContainingType, ownerVar, member, code);
+				EmitSet(gen, scope, propEl, member.ContainingType, ownerVar, member, code);
 			return;
 		}
 		if (text is not null)
@@ -113,7 +147,7 @@ partial class XamlSourceGenerator
 		if (children.Count == 1 && member.SetMethod is not null && ChildFits(gen, children[0], member.Type))
 		{
 			if (EmitElement(gen, scope, children[0]) is { } childVar)
-				EmitSet(scope, member.ContainingType, ownerVar, member, childVar);
+				EmitSet(gen, scope, propEl, member.ContainingType, ownerVar, member, childVar);
 			return;
 		}
 		if (!IsAddable(member.Type))
@@ -141,7 +175,7 @@ partial class XamlSourceGenerator
 		else
 			gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (takes one value)");
 		if (code is not null)
-			scope.Emit($"{Fq(owner)}.{setter.Name}({ownerVar}, {code});");
+			EmitAttachedSet(gen, scope, propEl, owner, setter, ownerVar, code);
 	}
 
 	// A property element's object children, skipping design-time and other ignorable markup.

@@ -95,6 +95,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"'{0}' is not a member of the SUIsei extension namespace (SUIsei.Extensions)", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor InvalidPathMarkup = new("SUISEI024", "Invalid path markup",
 		"'{0}' is not valid path markup for property '{1}', {2}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor TemplateValueOnLocal = new("SUISEI027", "Template value set as the part's own",
+		"In a ControlTemplate, {0} is set through its setter as the part's local value, not as the template's: {1}", "SUIsei", DiagnosticSeverity.Warning, true);
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -446,7 +448,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			{
 				// Plain text, converted for the property's type.
 				if (ConvertOrReport(gen, attr, prop.Type, value, name, prop) is { } code)
-					EmitSet(scope, type, var, prop, code);
+					EmitSet(gen, scope, attr, type, var, prop, code);
 				continue;
 			}
 
@@ -493,7 +495,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			if (TryMarkupValue(gen, scope, attr, var, inner, prop.Type, name, out var markupCode))
 			{
 				if (markupCode is not null)
-					EmitSet(scope, type, var, prop, markupCode);
+					EmitSet(gen, scope, attr, type, var, prop, markupCode);
 				continue;
 			}
 

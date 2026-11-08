@@ -427,7 +427,7 @@ partial class XamlSourceGenerator
 			return;
 		}
 		if (code is not null)
-			scope.Emit($"{Fq(owner!)}.{setter.Name}({targetVar}, {code});");
+			EmitAttachedSet(gen, scope, attr, owner!, setter, targetVar, code);
 	}
 
 	// Whether an attached property set through `setter` can be set on an object of `target`: the setter's first
