@@ -7,10 +7,13 @@ namespace SUIsei.Composition;
 /// </summary>
 public enum CompositionTextAlignment
 {
-	/// <summary>Each line is centred in the width.</summary>
+	/// <summary>
+	/// Each line is centred in the width. It is 0, as in XAML, so <c>default</c> is centred: a glyph
+	/// run starts at <see cref="Left"/>, which it sets itself.
+	/// </summary>
 	Center = 0,
 
-	/// <summary>Each line starts at the left edge; the default.</summary>
+	/// <summary>Each line starts at the left edge; what a glyph run starts with.</summary>
 	Left = 1,
 
 	/// <summary>Each line starts at the edge the text starts from: the left, as text is laid out left to right.</summary>

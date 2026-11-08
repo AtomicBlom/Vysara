@@ -15,6 +15,14 @@ public interface IDrawListSource
 	/// The list the last successful composite of <paramref name="surface"/> produced, or <see cref="DrawListData.Empty"/>
 	/// before the first. A surface whose composite throws keeps showing it. Its <see cref="DrawListData.Damage"/> is what
 	/// changed since the list handed out before it, and empty when the same list is handed out again unchanged.
+	/// <para>
+	/// The list names no <see cref="TextureSource"/> whose <see cref="TextureSource.IsDisposed"/> is true once a composite
+	/// after the disposal has run. A host finds a disposed source its surfaces still draw at the start of the next
+	/// <see cref="UIHost.Render"/> and marks the root visual of each of those surfaces dirty, moving its
+	/// <see cref="Visual.Version"/>; it reports the source in <see cref="UIHost.ReleasedTextures"/> only when the lists of
+	/// that render leave it out. So a compositor that keeps output per visual composites the whole tree again when the root's
+	/// version moves, and leaves disposed sources out as it does.
+	/// </para>
 	/// </summary>
 	DrawListData LastDraw(DrawListId surface);
 }

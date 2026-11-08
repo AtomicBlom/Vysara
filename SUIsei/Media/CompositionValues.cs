@@ -4,9 +4,11 @@ namespace SUIsei.Media;
 
 /// <summary>
 /// The element layer's values as the composition layer takes them, where an element or a brush pushes them into its
-/// retained composition objects. The composition enums mirror WinUI's <c>Microsoft.UI.Composition</c> ones rather than
-/// the XAML enums, so the composition contract names no element-layer type. A value outside its enum maps to the
-/// composition default.
+/// retained composition objects. The composition layer has enums of its own, so its contract names no element-layer type:
+/// <see cref="CompositionStrokeCap"/>, <see cref="CompositionStrokeLineJoin"/> and <see cref="CompositionStretch"/> mirror
+/// WinUI's <c>Microsoft.UI.Composition</c> ones, and <see cref="CompositionFillRule"/>,
+/// <see cref="CompositionSweepDirection"/> and <see cref="CompositionTextAlignment"/>, which have no counterpart there,
+/// take their members from the XAML enums. A value outside its enum maps to the value the composition object starts with.
 /// </summary>
 internal static class CompositionValues
 {

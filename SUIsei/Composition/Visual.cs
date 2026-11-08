@@ -43,6 +43,13 @@ public abstract class Visual
 	/// children cleared, different content, or <see cref="MarkDirty"/> from whoever changed the content in place or a
 	/// paint it shows. Never 0, so a compositor can use 0 for "not seen yet", and never cleared, so each compositor
 	/// keeps the last version it composited and compares. A change to a child moves the child's version, not this one's.
+	/// <para>
+	/// The root visual's version moving asks for the whole tree to be composited again, whatever the root's own properties
+	/// did. A <see cref="UIHost"/> marks the root, and only the root, when a <see cref="Drawing.TextureSource"/> the tree
+	/// draws is disposed, which the tree's next list must leave out; <see cref="DrawListCompositor"/> marks it after a
+	/// composite of the tree throws. A compositor that keeps output per visual treats the root's version moving as every
+	/// visual's having moved.
+	/// </para>
 	/// </summary>
 	public uint Version { get; private set; } = 1;
 
