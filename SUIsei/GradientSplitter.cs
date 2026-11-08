@@ -79,7 +79,7 @@ internal static class GradientSplitter
 		if (degenerate || !(tMax > tMin))
 		{
 			var solid = degenerate
-				? gradient.ColorStops[^1].Color.ToPremultipliedVector(opacity)
+				? gradient.StopColor(gradient.ColorStops[^1], opacity)
 				: gradient.EvaluateAbove(tMin, opacity);
 			colors[..n].Fill(solid);
 			Emit(list, local, uv, custom, colors[..n], matrix, kind, @params, clip, slot);

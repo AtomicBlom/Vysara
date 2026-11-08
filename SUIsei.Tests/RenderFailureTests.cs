@@ -52,6 +52,41 @@ public sealed class RenderFailureTests
 		over.ShouldBe(white);
 	}
 
+	/// <summary>Where an sRGB gradient holds a stop's colour (before its first stop, past its last, and throughout one with
+	/// no length) the stop is clamped to paper white as it is between stops, so there is no step where the stops begin.</summary>
+	[Test]
+	[Arguments(false)]
+	[Arguments(true)]
+	public void An_srgb_gradient_clamps_a_stop_above_paper_white_outside_its_stops_too(bool degenerate)
+	{
+		LinearGradientBrush Inset(HdrColor bright)
+		{
+			var brush = new LinearGradientBrush
+			{
+				StartPoint = new Point(0f, 0f),
+				EndPoint = degenerate ? new Point(0f, 0f) : new Point(1f, 0f),
+				GradientStops =
+				{
+					new GradientStop { Color = bright, Offset = 0.25f },
+					new GradientStop { Color = new HdrColor(0f, 0f, 0f, 1f), Offset = 0.75f },
+				},
+			};
+			if (degenerate)
+				brush.GradientStops.Add(new GradientStop { Color = bright, Offset = 1f });
+			return brush;
+		}
+
+		var (overHost, _) = Hosted(Inset(new HdrColor(2f, 2f, 2f, 1f)));
+		var (whiteHost, _) = Hosted(Inset(new HdrColor(1f, 1f, 1f, 1f)));
+		overHost.Render();
+		whiteHost.Render();
+
+		var over = overHost.DrawLists[0].Data.Vertices.ToArray().Select(v => v.Color).ToArray();
+		var white = whiteHost.DrawLists[0].Data.Vertices.ToArray().Select(v => v.Color).ToArray();
+		over.Max(c => (float)c.R).ShouldBe(1f); // the rect's edge, before the first stop, is drawn at paper white
+		over.ShouldBe(white);
+	}
+
 	/// <summary>A linear-light gradient keeps a stop above paper white: that is what it is for.</summary>
 	[Test]
 	public void A_linear_light_gradient_keeps_a_stop_above_paper_white()

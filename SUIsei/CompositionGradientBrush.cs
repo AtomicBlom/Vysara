@@ -184,12 +184,12 @@ public abstract class CompositionGradientBrush : CompositionBrush
 		if (stops.Length == 0)
 			return Vector4.Zero;
 		if (u < stops[0].Offset)
-			return stops[0].Color.ToPremultipliedVector(opacity);
+			return StopColor(stops[0], opacity);
 		var i = stops.Length - 1;
 		while (stops[i].Offset > u)
 			i--;
 		if (i == stops.Length - 1)
-			return stops[i].Color.ToPremultipliedVector(opacity);
+			return StopColor(stops[i], opacity);
 		return Interpolate(stops[i], stops[i + 1], u, opacity);
 	}
 
@@ -200,13 +200,24 @@ public abstract class CompositionGradientBrush : CompositionBrush
 		if (stops.Length == 0)
 			return Vector4.Zero;
 		if (u > stops[^1].Offset)
-			return stops[^1].Color.ToPremultipliedVector(opacity);
+			return StopColor(stops[^1], opacity);
 		var j = 0;
 		while (stops[j].Offset < u)
 			j++;
 		if (j == 0)
-			return stops[0].Color.ToPremultipliedVector(opacity);
+			return StopColor(stops[0], opacity);
 		return Interpolate(stops[j - 1], stops[j], u, opacity);
+	}
+
+	/// <summary>The colour of <paramref name="stop"/> where the gradient holds it unchanged (before the first stop, past the
+	/// last, or throughout one with no direction to vary along): in sRGB clamped to paper white as an interpolated colour is,
+	/// so the colour runs on into the stops without a step.</summary>
+	internal Vector4 StopColor(in CompositionColorGradientStop stop, float opacity)
+	{
+		var c = stop.Color;
+		if (InterpolationSpace == CompositionColorSpace.Rgb)
+			c = new HdrColor(MathF.Min(c.R, 1f), MathF.Min(c.G, 1f), MathF.Min(c.B, 1f), c.A);
+		return c.ToPremultipliedVector(opacity);
 	}
 
 	// Between two stops with a.Offset <= u <= b.Offset and a.Offset < b.Offset. Written as a·(1−s) + b·s, which is exact
