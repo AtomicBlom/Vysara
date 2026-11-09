@@ -76,6 +76,14 @@ public sealed class UIHost
 	/// <summary>The roots this host owns.</summary>
 	public IReadOnlyList<UIView> Views => _views;
 
+	/// <summary>
+	/// Whether a press at <paramref name="surfacePoint"/> would land on UI content: an element of an interactive view that
+	/// draws there and is hit-test visible, as of the last <see cref="Tick"/>'s layout. Asked as a pointer comes down, it
+	/// lets a host give that pointer to the UI or to what lies beneath for as long as it is held, rather than waiting a
+	/// tick for <see cref="WantsPointer"/> (a touch on a button, and another finger on the game, at once).
+	/// </summary>
+	public bool HitsContent(Vector2 surfacePoint) => InputManager.HitTest(surfacePoint, _views) is not null;
+
 	/// <summary>The last <see cref="Render"/> output — the draw lists handed to the Loom backend.</summary>
 	public IReadOnlyList<(DrawListId Id, DrawListData Data)> DrawLists => _drawLists;
 

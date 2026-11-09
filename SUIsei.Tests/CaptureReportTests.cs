@@ -61,6 +61,40 @@ public sealed class CaptureReportTests
 	}
 
 	[Test]
+	public void A_lifted_touch_leaves_what_it_was_over_and_stops_wanting_the_pointer()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		var button = new Button { Width = 100f, Height = 40f };
+		view.Root.Content = button;
+		int exits = 0;
+		button.PointerExited += (_, _) => exits++;
+		var at = new Vector2(100f, 100f);
+
+		host.QueuePointer(PointerInput.Press(at, pointerId: 5, device: PointerDeviceType.Touch));
+		host.Tick(0.016, 0f, Surface);
+		host.WantsPointer.ShouldBeTrue();
+
+		// A mouse lifted would still hover; a finger lifted is gone
+		host.QueuePointer(PointerInput.Release(at, pointerId: 5, device: PointerDeviceType.Touch));
+		host.Tick(0.016, 0f, Surface);
+		exits.ShouldBe(1);
+		host.WantsPointer.ShouldBeFalse();
+	}
+
+	[Test]
+	public void HitsContent_says_whether_a_press_would_land_on_the_UI()
+	{
+		var host = new UIHost();
+		var view = host.CreateRoot(UILayer.Default);
+		view.Root.Content = new Button { Width = 100f, Height = 40f };
+		host.Tick(0.016, 0f, Surface);
+
+		host.HitsContent(new Vector2(100f, 100f)).ShouldBeTrue();
+		host.HitsContent(new Vector2(5f, 5f)).ShouldBeFalse();
+	}
+
+	[Test]
 	public void Explicit_capture_wants_the_pointer_even_over_empty_space()
 	{
 		var host = new UIHost();
