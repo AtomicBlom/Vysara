@@ -46,7 +46,9 @@ public abstract class TextureSource
 	public TextureColorSpace ColorSpace { get; }
 
 	/// <summary>Moves each time the texels change (<see cref="Media.Imaging.WriteableBitmap.Invalidate"/>). A host
-	/// holding an upload of an older version replaces it: it uploads the new texels and releases the old texture.</summary>
+	/// holding an upload of an older version brings it up to date: it writes the new texels into the texture it has, where it
+	/// can update one in place, or uploads them as a new texture and releases the old one. The source's size and format do
+	/// not change, so either works.</summary>
 	public uint Version { get; private set; }
 
 	/// <summary>True once the source has been disposed. A composite made after it draws nothing with the source; a host
