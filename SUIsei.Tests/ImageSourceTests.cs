@@ -183,7 +183,7 @@ public sealed class ImageSourceTests
 		var steady = Frame(host);
 		steady.TextureRevision.ShouldBe(textureRevision + 1);
 
-		// The rasterizer copies the next version over the texels it kept, as a host replaces its texture.
+		// The rasterizer copies the next version over the texels it kept, as a host updates its texture in place.
 		var cached = raster.CachedTextureCount;
 		Fill(bitmap, 0, 0, 255);
 		bitmap.Invalidate();
