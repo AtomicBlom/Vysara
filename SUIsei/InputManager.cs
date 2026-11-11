@@ -161,6 +161,8 @@ public sealed class InputManager
 	{
 		_args.Pointer = new PointerPoint(e.Position, e.Buttons, e.Pressure);
 		_args.Device = e.Device;
+		_args.PointerId = e.PointerId;
+		_args.Wheel = Vector2.Zero;
 
 		var preview = PreviewOf(evt);
 		if (preview is not null)
@@ -177,6 +179,7 @@ public sealed class InputManager
 	{
 		_args.Pointer = new PointerPoint(e.Position, e.Buttons, e.Pressure);
 		_args.Device = e.Device;
+		_args.PointerId = e.PointerId;
 		_args.Wheel = e.Wheel;
 		target.RaiseEvent(UIElement.PreviewPointerWheelChangedEvent, _args);
 		if (_args.Handled)
@@ -189,6 +192,8 @@ public sealed class InputManager
 	{
 		_args.Pointer = new PointerPoint(e.Position, e.Buttons, e.Pressure);
 		_args.Device = e.Device;
+		_args.PointerId = e.PointerId;
+		_args.Wheel = Vector2.Zero;
 		target.RaiseEvent(evt, _args);
 	}
 

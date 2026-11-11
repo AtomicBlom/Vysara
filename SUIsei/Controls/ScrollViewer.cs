@@ -44,6 +44,14 @@ public sealed class ScrollViewer : FrameworkElement
 	// shrinks under it (an on-screen keyboard opening over the page).
 	private UIElement? _focused;
 	private bool _bringFocusedIntoView;
+	// Touch panning: a finger down on the content, and whether it has travelled far enough (PanSlop, in DIPs) to be a pan
+	// rather than a tap; once it has, the viewer holds the pointer and the content follows the finger.
+	private const float PanSlop = 8f;
+	private bool _panPressed;
+	private bool _panning;
+	private uint _panPointer;
+	private float _panStartY;
+	private float _panStartOffset;
 
 	public ScrollViewer()
 	{
@@ -54,6 +62,12 @@ public sealed class ScrollViewer : FrameworkElement
 		AddHandler(KeyDownEvent, OnKeyDown);
 		AddHandler(GotFocusEvent, OnDescendantGotFocus);
 		AddHandler(LostFocusEvent, OnDescendantLostFocus);
+		// The previews tunnel through the viewer before they reach the content, so a drag becomes a pan before the control
+		// under the finger takes it as its own.
+		AddHandler(PreviewPointerPressedEvent, OnPanPressed, handledEventsToo: true);
+		AddHandler(PreviewPointerMovedEvent, OnPanMoved, handledEventsToo: true);
+		AddHandler(PreviewPointerReleasedEvent, OnPanReleased, handledEventsToo: true);
+		AddHandler(PointerCaptureLostEvent, OnPanCaptureLost);
 
 		// The thumb is a grab handle: hovering/grabbing it lights it up, a press starts a drag (capturing the pointer
 		// so it tracks past the thumb's edges), and the drag maps pointer travel onto the scroll range.
@@ -286,6 +300,60 @@ public sealed class ScrollViewer : FrameworkElement
 	{
 		if (ReferenceEquals(e.OriginalSource, _focused))
 			_focused = null;
+	}
+
+	// A finger down on the content may be the start of a pan. A mouse scrolls with its wheel and the thumb instead, and a
+	// finger on the thumb drags the thumb.
+	private void OnPanPressed(object sender, RoutedEventArgs e)
+	{
+		if (e is not PointerRoutedEventArgs p || p.Device != PointerDeviceType.Touch || ScrollableHeight <= 0f
+			|| ReferenceEquals(e.OriginalSource, _vThumb))
+			return;
+		_panPressed = true;
+		_panning = false;
+		_panPointer = p.PointerId;
+		_panStartY = p.GetCurrentPoint(this).Position.Y;
+		_panStartOffset = VerticalOffset;
+	}
+
+	// Past the slop, the press becomes a pan: the viewer takes the pointer, which ends the press on the control under the
+	// finger without a click, and from then on the content follows the finger.
+	private void OnPanMoved(object sender, RoutedEventArgs e)
+	{
+		if (!_panPressed || e is not PointerRoutedEventArgs p || p.PointerId != _panPointer)
+			return;
+		var y = p.GetCurrentPoint(this).Position.Y;
+		if (!_panning)
+		{
+			if (MathF.Abs(y - _panStartY) < PanSlop)
+				return;
+			_panning = true;
+			// Follow the finger from the slop's edge, so the content neither jumps by the slop nor loses travel past it that a
+			// coalesced move already carries.
+			_panStartY += MathF.CopySign(PanSlop, y - _panStartY);
+			_panStartOffset = VerticalOffset;
+			CapturePointer(_panPointer);
+		}
+		SetVerticalOffset(_panStartOffset + (_panStartY - y));
+		e.Handled = true;
+	}
+
+	private void OnPanReleased(object sender, RoutedEventArgs e)
+	{
+		if (!_panPressed || e is not PointerRoutedEventArgs p || p.PointerId != _panPointer)
+			return;
+		_panPressed = false;
+		if (!_panning)
+			return; // a tap: the control under the finger has it
+		_panning = false;
+		ReleasePointerCapture(_panPointer);
+		e.Handled = true;
+	}
+
+	private void OnPanCaptureLost(object sender, RoutedEventArgs e)
+	{
+		if (ReferenceEquals(e.OriginalSource, this))
+			_panPressed = _panning = false;
 	}
 
 	// The vertical offset that brings `element` wholly into the viewport (its top, when it is taller than the viewport) with

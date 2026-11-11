@@ -186,4 +186,69 @@ public sealed class ScrollViewerTests
 		viewer.ViewportHeight.ShouldBe(200f);
 		viewer.VerticalOffset.ShouldBe(140f); // the box's bottom, 340, at the viewport's new bottom, 200
 	}
+
+	// A 100-tall viewer over a 500-tall button, ticked once: a press-drag-release by `device` from y=80 up to y=30.
+	private static (ScrollViewer Viewer, int Clicks) DragUp(PointerDeviceType device)
+	{
+		var button = new Button { Width = 80f, Height = 500f };
+		var clicks = 0;
+		button.Click += (_, _) => clicks++;
+		var viewer = new ScrollViewer { Content = button, Width = 80f, Height = 100f };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
+		var surface = new Vector2(80f, 100f);
+		var t = 0f;
+		void Step(PointerInput input)
+		{
+			host.QueuePointer(input);
+			host.Tick(0.016, t += 0.016f, surface);
+		}
+
+		host.Tick(0.016, t, surface);
+		Step(PointerInput.Move(new Vector2(40f, 80f), PointerButtons.None, 0, device));
+		Step(PointerInput.Press(new Vector2(40f, 80f), PointerUpdateKind.LeftButtonPressed, PointerButtons.Left, 0, device));
+		Step(PointerInput.Move(new Vector2(40f, 60f), PointerButtons.Left, 0, device));
+		Step(PointerInput.Move(new Vector2(40f, 30f), PointerButtons.Left, 0, device));
+		Step(PointerInput.Release(new Vector2(40f, 30f), PointerUpdateKind.LeftButtonReleased, PointerButtons.None, 0, device));
+		return (viewer, clicks);
+	}
+
+	[Test]
+	public void A_finger_dragging_the_content_pans_it_and_clicks_nothing()
+	{
+		var (viewer, clicks) = DragUp(PointerDeviceType.Touch);
+
+		viewer.VerticalOffset.ShouldBe(42f); // 50 travelled, less the 8 of slop before the drag became a pan
+		clicks.ShouldBe(0);
+	}
+
+	[Test]
+	public void A_mouse_dragging_the_content_does_not_pan_it()
+	{
+		var (viewer, _) = DragUp(PointerDeviceType.Mouse);
+
+		viewer.VerticalOffset.ShouldBe(0f);
+	}
+
+	[Test]
+	public void A_finger_tap_without_travel_still_clicks()
+	{
+		var button = new Button { Width = 80f, Height = 500f };
+		var clicks = 0;
+		button.Click += (_, _) => clicks++;
+		var viewer = new ScrollViewer { Content = button, Width = 80f, Height = 100f };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
+		var surface = new Vector2(80f, 100f);
+		host.Tick(0.016, 0f, surface);
+		host.QueuePointer(PointerInput.Move(new Vector2(40f, 50f), PointerButtons.None, 0, PointerDeviceType.Touch));
+		host.QueuePointer(PointerInput.Press(new Vector2(40f, 50f), PointerUpdateKind.LeftButtonPressed, PointerButtons.Left, 0, PointerDeviceType.Touch));
+		host.Tick(0.016, 0.016f, surface);
+		host.QueuePointer(PointerInput.Move(new Vector2(40f, 53f), PointerButtons.Left, 0, PointerDeviceType.Touch));
+		host.QueuePointer(PointerInput.Release(new Vector2(40f, 53f), PointerUpdateKind.LeftButtonReleased, PointerButtons.None, 0, PointerDeviceType.Touch));
+		host.Tick(0.016, 0.032f, surface);
+
+		viewer.VerticalOffset.ShouldBe(0f);
+		clicks.ShouldBe(1);
+	}
 }

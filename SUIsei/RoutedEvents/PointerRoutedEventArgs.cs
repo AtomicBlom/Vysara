@@ -15,6 +15,9 @@ public sealed class PointerRoutedEventArgs : RoutedEventArgs
 	/// <summary>Mouse / pen / touch.</summary>
 	public PointerDeviceType Device { get; internal set; }
 
+	/// <summary>The pointer the event is for: the one to pass to <see cref="UIElement.CapturePointer"/>.</summary>
+	public uint PointerId { get; internal set; }
+
 	/// <summary>Scroll-wheel delta for a <see cref="UIElement.PointerWheelChanged"/> event (x horizontal,
 	/// y vertical); zero otherwise.</summary>
 	public Vector2 Wheel { get; internal set; }
