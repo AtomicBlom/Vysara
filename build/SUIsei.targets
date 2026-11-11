@@ -47,6 +47,15 @@
                       UndefineProperties="PublishAot;RuntimeIdentifier;SelfContained" />
   </ItemGroup>
 
+  <!-- No diagnostics in a browser: the endpoint listens on a named pipe and loads a tap's assembly by name, neither of
+       which a page can do. The switch is set false there whatever the app asked for, and set at all so the trimmer
+       can see it is off and remove the code it guards (Diagnostics.Enabled), and the endpoint's trim warning with it;
+       left unset, the trimmer has to keep that code. -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
+    <RuntimeHostConfigurationOption Remove="SUIsei.Diagnostics.Enabled" />
+    <RuntimeHostConfigurationOption Include="SUIsei.Diagnostics.Enabled" Value="false" Trim="true" />
+  </ItemGroup>
+
   <Target Name="_SUIseiWarnMissingXamlGen"
           BeforeTargets="ResolveProjectReferences"
           Condition="'$(SUIseiXamlEnable)' == 'true' And !Exists('$(_SUIseiUISourceGen)')">
