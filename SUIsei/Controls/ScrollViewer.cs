@@ -40,6 +40,10 @@ public sealed class ScrollViewer : FrameworkElement
 	private bool _draggingThumb;
 	private float _dragStartPointerY;
 	private float _dragStartOffset;
+	// The descendant holding keyboard focus, kept in view: scrolled to when it takes focus and again whenever the viewport
+	// shrinks under it (an on-screen keyboard opening over the page).
+	private UIElement? _focused;
+	private bool _bringFocusedIntoView;
 
 	public ScrollViewer()
 	{
@@ -48,6 +52,8 @@ public sealed class ScrollViewer : FrameworkElement
 		AdoptChild(_vThumb);
 		AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged);
 		AddHandler(KeyDownEvent, OnKeyDown);
+		AddHandler(GotFocusEvent, OnDescendantGotFocus);
+		AddHandler(LostFocusEvent, OnDescendantLostFocus);
 
 		// The thumb is a grab handle: hovering/grabbing it lights it up, a press starts a drag (capturing the pointer
 		// so it tracks past the thumb's edges), and the drag maps pointer travel onto the scroll range.
@@ -135,6 +141,7 @@ public sealed class ScrollViewer : FrameworkElement
 
 	protected override Size ArrangeOverride(Size finalSize)
 	{
+		var shrank = finalSize.Height < ViewportHeight;
 		ViewportWidth = finalSize.Width;
 		ViewportHeight = finalSize.Height;
 		VerticalOffset = Math.Clamp(VerticalOffset, 0f, ScrollableHeight);
@@ -145,6 +152,18 @@ public sealed class ScrollViewer : FrameworkElement
 			var contentWidth = MathF.Max(ExtentWidth, finalSize.Width);
 			var contentHeight = MathF.Max(ExtentHeight, finalSize.Height);
 			content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
+
+			// Keep the focused descendant in view as it takes focus and as the viewport shrinks under it: its place is only
+			// known once the content is arranged, so scroll then and arrange the content again at the new offset.
+			if (_focused is not null && (_bringFocusedIntoView || shrank))
+			{
+				_bringFocusedIntoView = false;
+				if (OffsetShowing(_focused) is { } offset && offset != VerticalOffset)
+				{
+					VerticalOffset = offset;
+					content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
+				}
+			}
 		}
 
 		ArrangeThumb(finalSize);
@@ -252,5 +271,44 @@ public sealed class ScrollViewer : FrameworkElement
 			case VirtualKey.Down: SetVerticalOffset(VerticalOffset + Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
 			case VirtualKey.Up: SetVerticalOffset(VerticalOffset - Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
 		}
+	}
+
+	private void OnDescendantGotFocus(object sender, RoutedEventArgs e)
+	{
+		if (e.OriginalSource is not UIElement element || ReferenceEquals(element, this))
+			return;
+		_focused = element;
+		_bringFocusedIntoView = true;
+		InvalidateArrange();
+	}
+
+	private void OnDescendantLostFocus(object sender, RoutedEventArgs e)
+	{
+		if (ReferenceEquals(e.OriginalSource, _focused))
+			_focused = null;
+	}
+
+	// The vertical offset that brings `element` wholly into the viewport (its top, when it is taller than the viewport) with
+	// the least scrolling; null when it is no longer under this scroll viewer.
+	private float? OffsetShowing(UIElement element)
+	{
+		// Its arranged places, up to the content, add up to its top in viewport space: the content sits at minus the offset.
+		var top = 0f;
+		var node = element;
+		for (; node is not null && !ReferenceEquals(node, this); node = node.Parent)
+			top += node.LayoutRect.Y;
+		if (node is null)
+		{
+			_focused = null;
+			return null;
+		}
+
+		var bottom = top + element.LayoutRect.Height;
+		var offset = VerticalOffset;
+		if (bottom > ViewportHeight)
+			offset += bottom - ViewportHeight;
+		if (top - (offset - VerticalOffset) < 0f)
+			offset = VerticalOffset + top;
+		return Math.Clamp(offset, 0f, ScrollableHeight);
 	}
 }

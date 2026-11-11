@@ -295,6 +295,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		if (!ArrangeDirty && _lastFinal == finalRect)
 			return;
 		_lastFinal = finalRect;
+		finalRect = Extensions.InputPane.Avoid(this, finalRect);
 		if (Visibility == Visibility.Collapsed)
 			LayoutRect = new Rect(finalRect.X, finalRect.Y, 0, 0);
 		else
@@ -348,6 +349,16 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		var children = VisualChildren;
 		for (var i = 0; i < children.Count; i++)
 			children[i].InvalidateMeasureTree();
+	}
+
+	/// <summary>Invalidate the arrange of this element and of everything under it, for a change any element's placement
+	/// may read, such as the root's on-screen keyboard.</summary>
+	internal void InvalidateArrangeTree()
+	{
+		InvalidateArrange();
+		var children = VisualChildren;
+		for (var i = 0; i < children.Count; i++)
+			children[i].InvalidateArrangeTree();
 	}
 
 	/// <summary>The font this element's text measures and draws with: its root's <see cref="UIRoot.Font"/>, or

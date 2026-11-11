@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Controls;
+using SUIsei.Extensions;
 using SUIsei.Input;
 using SUIsei.Media;
 
@@ -136,5 +137,53 @@ public sealed class ScrollViewerTests
 		host.QueuePointer(PointerInput.Move(new Vector2(10f, 50f)));
 		host.Tick(0.016, 0f, surface);
 		viewer.ThumbStateColor.R.ShouldBe(rest.R);
+	}
+
+	// A 300-tall block above a 40-tall text box, so the box spans 300 to 340 in the content.
+	private static (StackPanel Content, TextBox Box) BlockOverTextBox()
+	{
+		var box = new TextBox { Height = 40f };
+		var content = new StackPanel();
+		content.Children.Add(new Border { Height = 300f });
+		content.Children.Add(box);
+		return (content, box);
+	}
+
+	[Test]
+	public void Focusing_a_descendant_below_the_viewport_scrolls_it_into_view()
+	{
+		var (content, box) = BlockOverTextBox();
+		var viewer = new ScrollViewer { Content = content, Width = 80f, Height = 100f };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
+		var surface = new Vector2(80f, 100f);
+		host.Tick(0.016, 0f, surface);
+		viewer.VerticalOffset.ShouldBe(0f);
+
+		host.Focus.TrySetFocus(box, FocusState.Programmatic).ShouldBeTrue();
+		host.Tick(0.016, 0.016f, surface);
+
+		viewer.VerticalOffset.ShouldBe(240f); // the box's bottom, 340, at the viewport's bottom, 100
+	}
+
+	[Test]
+	public void The_focused_element_is_scrolled_back_into_view_when_a_keyboard_shrinks_the_viewport()
+	{
+		var (content, box) = BlockOverTextBox();
+		var viewer = new ScrollViewer { Content = content };
+		InputPane.SetAvoidsKeyboard(viewer, true);
+		var host = new UIHost();
+		var root = host.CreateRoot(UILayer.Default).Root;
+		root.Content = viewer;
+		var surface = new Vector2(80f, 400f);
+		host.Focus.TrySetFocus(box, FocusState.Programmatic).ShouldBeTrue();
+		host.Tick(0.016, 0f, surface);
+		viewer.VerticalOffset.ShouldBe(0f); // all of it fits
+
+		root.InputPaneHeight = 200f; // the keyboard covers the bottom half, so the viewport is 200 tall
+		host.Tick(0.016, 0.016f, surface);
+
+		viewer.ViewportHeight.ShouldBe(200f);
+		viewer.VerticalOffset.ShouldBe(140f); // the box's bottom, 340, at the viewport's new bottom, 200
 	}
 }
