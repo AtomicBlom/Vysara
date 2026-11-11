@@ -81,6 +81,19 @@ public sealed class UIRoot
 	public float LayoutScale { get; set; } = 1f;
 
 	/// <summary>
+	/// How much of the bottom of the surface an on-screen keyboard covers, in surface pixels: zero (the default) while no
+	/// keyboard is up. The host or app sets it as the keyboard comes and goes; the next layout pass arranges the elements
+	/// marked <see cref="Extensions.InputPane.AvoidsKeyboardProperty"/> clear of it.
+	/// </summary>
+	public float InputPaneHeight { get; set => field = MathF.Max(0f, value); }
+
+	/// <summary>
+	/// The top edge of the on-screen keyboard in layout units (DIPs) as of the last layout pass, or null while there is no
+	/// keyboard.
+	/// </summary>
+	internal float? InputPaneTop { get; private set; }
+
+	/// <summary>
 	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
 	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
 	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
@@ -202,6 +215,14 @@ public sealed class UIRoot
 		}
 
 		var availDip = new Size(availablePixels.Width / LayoutScale, availablePixels.Height / LayoutScale);
+		var inputPaneTop = InputPaneHeight > 0f ? (float?)((availablePixels.Height - InputPaneHeight) / LayoutScale) : null;
+		if (inputPaneTop != InputPaneTop)
+		{
+			InputPaneTop = inputPaneTop;
+			Content?.InvalidateArrangeTree();
+			foreach (var (element, _, _) in _overlays)
+				element.InvalidateArrangeTree();
+		}
 
 		Content?.Measure(availDip);
 		Content?.Arrange(new Rect(0f, 0f, availDip.Width, availDip.Height));
