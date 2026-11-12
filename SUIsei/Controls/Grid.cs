@@ -67,17 +67,19 @@ public sealed class Grid : Panel
 		var rows = Rows;
 
 		// Measure each child exactly once, against a cell constraint derived from the track types it spans: a Pixel
-		// track contributes its fixed extent; an Auto or Star track is left unconstrained, so the child reports its
-		// content size (which sizes Auto/Star tracks, with Star taking its proportional share only at arrange). One
-		// measure per child — no second resolved-size pass — so constraint-dependent content cannot desire one size
-		// for the track and a different one for its final cell.
+		// track contributes its fixed extent; a Star track, where its dimension has no Auto track and the grid is
+		// offered a finite extent, its proportional share of what the Pixel tracks leave, as WinUI measures it (so text
+		// in a plain grid wraps at the grid's width); otherwise an Auto or Star track is left unconstrained, so the child
+		// reports its content size (which sizes Auto/Star tracks, with Star taking its proportional share only at
+		// arrange). One measure per child — no second resolved-size pass — so constraint-dependent content cannot
+		// desire one size for the track and a different one for its final cell.
 		foreach (var child in Children.Items)
 		{
 			var ci = ClampIndex(GetColumn(child), cols.Length);
 			var ri = ClampIndex(GetRow(child), rows.Length);
 			child.Measure(new Size(
-				CellConstraint(cols, ci, GetColumnSpan(child)),
-				CellConstraint(rows, ri, GetRowSpan(child))));
+				CellConstraint(cols, ci, GetColumnSpan(child), available.Width),
+				CellConstraint(rows, ri, GetRowSpan(child), available.Height)));
 		}
 
 		ResolveTracks(cols, available.Width, horizontal: true, ref _colSizes);
@@ -192,15 +194,27 @@ public sealed class Grid : Panel
 
 	// The measure constraint for a child's cell: the summed extent of the Pixel tracks it spans, or unbounded if any
 	// spanned track is Auto/Star (so the child reports its content size for that track's sizing).
-	private static float CellConstraint(ReadOnlySpan<GridLength> defs, int start, int span)
+	private static float CellConstraint(ReadOnlySpan<GridLength> defs, int start, int span, float available)
 	{
+		// What a Star track's share is out of: the extent the Pixel tracks leave, when no Auto track takes some first
+		float pixels = 0f, stars = 0f;
+		var shares = float.IsFinite(available);
+		foreach (var d in defs)
+		{
+			if (d.IsPixel) pixels += d.Value;
+			else if (d.IsStar) stars += d.Value;
+			else shares = false;
+		}
 		var end = Math.Min(defs.Length, start + Math.Max(1, span));
 		var sum = 0f;
 		for (var i = start; i < end; i++)
 		{
-			if (!defs[i].IsPixel)
+			if (defs[i].IsPixel)
+				sum += defs[i].Value;
+			else if (defs[i].IsStar && shares && stars > 0f)
+				sum += MathF.Max(0f, available - pixels) * defs[i].Value / stars;
+			else
 				return float.PositiveInfinity;
-			sum += defs[i].Value;
 		}
 		return sum;
 	}
