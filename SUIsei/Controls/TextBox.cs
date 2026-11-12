@@ -1,4 +1,5 @@
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Input;
 using SUIsei.Media;
 using SUIsei.RoutedEvents;
@@ -27,6 +28,7 @@ public sealed class TextBox : Control
 	private static readonly CompositionColorBrush FocusBorder = new(HdrColor.FromRgb(80, 150, 240));
 	private static readonly CompositionColorBrush FocusBackground = new(HdrColor.FromRgb(36, 38, 48));
 	private static readonly SolidColorBrush TextForeground = Brush.Sealed(HdrColor.FromRgb(235, 235, 240));
+	private static readonly SolidColorBrush NoText = Brush.Sealed(new HdrColor(0f, 0f, 0f, 0f));
 
 	// The Windows caret cadence: solid through a half-period, then hidden through the next, repeating. The short ramp
 	// keeps it an effectively hard on/off (a fade would read as a pulse, not a caret).
@@ -59,6 +61,7 @@ public sealed class TextBox : Control
 		AdoptChild(_selectionHighlight);
 		AdoptChild(_textBlock);
 		AdoptChild(_caretVisual);
+		InheritedText.GiveBuiltInLook(this); // once its text is a child, which takes it
 		_caretVisual.Visibility = Visibility.Collapsed;
 		_caretBlink = BuildCaretBlink();
 		ClipToBounds = true; // long text scrolls within the field instead of spilling past its border
@@ -183,10 +186,26 @@ public sealed class TextBox : Control
 	/// <summary>The caret's arranged rect within the field (test seam).</summary>
 	internal Rect CaretRect => _caretVisual.LayoutRect;
 
-	private protected override void OnForegroundChanged(Brush? foreground) => _textBlock.Foreground = foreground ?? TextForeground;
+	private protected override void OnForegroundChanged(Brush? foreground) => ShowTextForeground();
 
+	// The text is the box's Foreground, or the built-in look's where it is unset, and the disabled text brush while the box
+	// is disabled, whatever is set. An image brush can't paint glyphs, so the text draws nothing with one, as inherited
+	// text does.
+	private void ShowTextForeground() =>
+		_textBlock.Foreground = !CanHandleInput ? TemplateStates.DisabledForeground : Foreground is TileBrush ? NoText : Foreground ?? TextForeground;
+
+	private protected override void OnIsEnabledChanged(bool isEnabled)
+	{
+		ShowTextForeground();
+		InvalidateContent();
+	}
+
+	// Disabled shows the built-in looks' disabled fill and border over whatever is set, as WinUI's TextBox shows
+	// TextControlBackgroundDisabled; a disabled box has no focus, and its hover is not shown.
 	private protected override VisualContent? UpdateContent()
 	{
+		if (!CanHandleInput)
+			return RetainedRect(TemplateStates.DisabledBackground.CompositionBrush, 3f, TemplateStates.DisabledBorder.CompositionBrush, 1f);
 		var brush = _focused ? FocusBorder : _pointerOver ? HoverBorder : BorderBrush?.CompositionBrush ?? RestBorder;
 		var fill = _focused ? FocusBackground : Background?.CompositionBrush ?? RestBackground;
 		var thickness = _focused ? 1.5f : 1f;
@@ -215,14 +234,22 @@ public sealed class TextBox : Control
 	private void RestartCaretBlink()
 	{
 		if (_focused && Clock is { } clock)
+		{
 			clock.Begin(_caretBlink);
+			_caretClock = clock;
+		}
 	}
 
+	// Stopped on the clock it was begun on, which a box that has left its tree (and its root's clock with it) still has.
 	private void StopCaretBlink()
 	{
-		Clock?.Stop(_caretBlink);
+		(_caretClock ?? Clock)?.Stop(_caretBlink);
+		_caretClock = null;
 		_caretVisual.ClearAnimatedValue(OpacityProperty);
 	}
+
+	// The clock the caret's blink runs on, while it runs.
+	private AnimationClock? _caretClock;
 
 	// The x pixel of the caret/selection edge before character index `i`.
 	private float OffsetOf(int index)

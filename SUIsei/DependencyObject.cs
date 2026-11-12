@@ -5,8 +5,9 @@ namespace SUIsei;
 /// <summary>
 /// The base of everything that carries dependency properties. Holds a sparse, int-keyed
 /// effective-value store and resolves the WinUI value-precedence ladder:
-/// <para><c>Animation &gt; Local &gt; Template &gt; Style &gt; BuiltInStyle &gt; Inherited &gt; Default</c></para>
-/// The Template rung holds what a <c>{TemplateBinding}</c> pushes onto a template part, so a Local value an app sets
+/// <para><c>Animation &gt; Transition &gt; Local &gt; Template &gt; Style &gt; BuiltInStyle &gt; Inherited &gt; Default</c></para>
+/// The Transition rung holds what a tween shows on its way to the local value it set, as a WinUI property transition
+/// shows it; a local change ends it. The Template rung holds what a <c>{TemplateBinding}</c> pushes onto a template part, so a Local value an app sets
 /// on that part wins over the template, as in WinUI. The BuiltInStyle rung holds what a control gives itself, the way
 /// WinUI's default style does: its built-in template, and that a control is a tab stop. An app's style or its own
 /// value overrides either, and a diagnostics read can tell them from the app's markup.
@@ -28,8 +29,10 @@ namespace SUIsei;
 /// </summary>
 public abstract class DependencyObject
 {
-	/// <summary>A rung of the precedence ladder below the default, highest first.</summary>
-	internal enum ValueRung { Animation = 0, Local = 1, Template = 2, Style = 3, BuiltInStyle = 4, Inherited = 5 }
+	/// <summary>A rung of the precedence ladder below the default, highest first. <see cref="Transition"/> holds what a
+	/// tween shows on its way to the local value it set, as a WinUI property transition shows: below a storyboard's value,
+	/// above every value set.</summary>
+	internal enum ValueRung { Animation = 0, Transition = 1, Local = 2, Template = 3, Style = 4, BuiltInStyle = 5, Inherited = 6 }
 
 	// One property's value on each rung, with a bitmask of the rungs that hold one.
 	private abstract class ValueSlot
@@ -41,13 +44,15 @@ public abstract class DependencyObject
 
 	private sealed class ValueSlot<T> : ValueSlot
 	{
-		private T _animation = default!, _local = default!, _template = default!, _style = default!, _builtInStyle = default!, _inherited = default!;
+		private T _animation = default!, _transition = default!, _local = default!, _template = default!, _style = default!, _builtInStyle = default!,
+			_inherited = default!;
 
 		public void Put(ValueRung r, T value, bool has)
 		{
 			switch (r)
 			{
 				case ValueRung.Animation: _animation = value; break;
+				case ValueRung.Transition: _transition = value; break;
 				case ValueRung.Local: _local = value; break;
 				case ValueRung.Template: _template = value; break;
 				case ValueRung.Style: _style = value; break;
@@ -58,9 +63,10 @@ public abstract class DependencyObject
 			else Set &= (byte)~(1 << (int)r);
 		}
 
-		public bool TryResolve(out T value)
+		public bool TryResolve(out T value, bool belowAnimation = false)
 		{
-			if (Has(ValueRung.Animation)) { value = _animation; return true; }
+			if (!belowAnimation && Has(ValueRung.Animation)) { value = _animation; return true; }
+			if (Has(ValueRung.Transition)) { value = _transition; return true; }
 			if (Has(ValueRung.Local)) { value = _local; return true; }
 			if (Has(ValueRung.Template)) { value = _template; return true; }
 			if (Has(ValueRung.Style)) { value = _style; return true; }
@@ -102,6 +108,40 @@ public abstract class DependencyObject
 
 	/// <summary>Clear the animation rung (FillBehavior.Stop / storyboard end) — reverts to Local/Style/Inherited/Default.</summary>
 	internal void ClearAnimatedValue(DependencyProperty dp) => dp.ClearRung(this, ValueRung.Animation);
+
+	/// <summary>The value a tween of <paramref name="dp"/> starts from: what is shown below any storyboard holding it (a
+	/// running tween's value, else the property's own).</summary>
+	internal TValue GetTransitionStart<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
+		Slot(dp) is { } slot ? Effective(dp, slot, belowAnimation: true) : GetValue(dp);
+
+	/// <summary>Start a tween's transition: <paramref name="target"/> becomes the <b>Local</b> value now, checked as any
+	/// set is, and the <b>Transition</b> rung above it holds <paramref name="shown"/>, what is on screen, so nothing moves
+	/// until the tween writes its first value.</summary>
+	internal void BeginTransition<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, TValue shown, TValue target) where TOwner : DependencyObject
+	{
+		if (dp.Metadata.Validate is { } validate)
+			validate((TOwner)this, target); // before anything changes
+		SetRung(dp, ValueRung.Transition, shown, hasValue: true);
+		SetRung(dp, ValueRung.Local, target, hasValue: true, keepTransition: true);
+	}
+
+	/// <summary>Write the <b>Transition</b> rung: a tween's value on its way to the local value. Never checked, so an easing
+	/// that overshoots the property's range never throws.</summary>
+	internal void SetTransitionValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, TValue value) where TOwner : DependencyObject =>
+		SetRung(dp, ValueRung.Transition, value, hasValue: true);
+
+	/// <summary>Clear the <b>Transition</b> rung: the tween has ended, and the property shows its local value (or a
+	/// storyboard's above it).</summary>
+	internal void ClearTransitionValue(DependencyProperty dp) => dp.ClearRung(this, ValueRung.Transition);
+
+	/// <summary>Whether a tween's value is on the <b>Transition</b> rung: false once a local change has ended it.</summary>
+	internal bool HasTransitionValue(DependencyProperty dp) =>
+		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Has(ValueRung.Transition);
+
+	/// <summary>Read the property's value as it resolves with no animated value, coerced: what it shows once its animation
+	/// is released (<see cref="ClearAnimatedValue"/>), a running tween's Transition value included.</summary>
+	internal TValue GetUnanimatedValue<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
+		Slot(dp) is { } slot ? Effective(dp, slot, belowAnimation: true) : GetValue(dp);
 
 	/// <summary>Push the <b>Style</b> rung (applied by a Style; below Local). The setter's value arrives boxed and is
 	/// unboxed once into the typed store.</summary>
@@ -162,16 +202,21 @@ public abstract class DependencyObject
 		|| (_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) && s.Set != 0);
 
 	/// <summary>Write (or, with <paramref name="hasValue"/> false, clear) one rung, then raise the change if the
-	/// coerced resolved value moved.</summary>
-	internal void SetRung<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueRung rung, TValue value, bool hasValue)
+	/// coerced resolved value moved. A change to the local value ends a tween in progress on the property, so it shows at
+	/// once, as a set without a transition does; <paramref name="keepTransition"/> is for the tween setting it.</summary>
+	internal void SetRung<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueRung rung, TValue value, bool hasValue,
+		bool keepTransition = false)
 		where TOwner : DependencyObject
 	{
 		if (IsSealed)
 			throw new InvalidOperationException(
 				$"This {GetType().Name} is part of SUIsei's built-in look, shared by every control that shows it, and cannot change; " +
 				$"give the element one of its own to change its {dp.Name}.");
-		if (hasValue && rung != ValueRung.Animation && dp.Metadata.Validate is { } validate)
-			validate((TOwner)this, value); // an animation's values are checked as it begins, never frame by frame
+		// Only a value set on this object is checked. An animation's values are checked as it begins, never frame by frame;
+		// an inherited or template-bound value comes from another property, checked where it was set there, and an object
+		// that can't draw it draws what it can.
+		if (hasValue && rung is (ValueRung.Local or ValueRung.Style or ValueRung.BuiltInStyle) && dp.Metadata.Validate is { } validate)
+			validate((TOwner)this, value);
 		var slot = Slot(dp);
 		if (slot is null)
 		{
@@ -194,6 +239,8 @@ public abstract class DependencyObject
 
 		var oldValue = Effective(dp, slot);
 		slot.Put(rung, value, hasValue); // store the raw base value; coercion is applied to the resolved value
+		if (rung == ValueRung.Local && !keepTransition && slot.Has(ValueRung.Transition))
+			slot.Put(ValueRung.Transition, default!, false);
 		var newValue = Effective(dp, slot);
 
 		if (EqualityComparer<TValue>.Default.Equals(oldValue, newValue))
@@ -279,17 +326,21 @@ public abstract class DependencyObject
 		where TTargetOwner : DependencyObject =>
 		RegisterTemplateBinding(source, value => target.SetTemplateValue(targetProperty, convert(value)));
 
+	// Drop every template binding registered on this object: its template is being replaced, and the parts they push to
+	// with it. A type with a template binding of another kind (ContentControl's content) drops that too.
+	internal virtual void ClearTemplateBindings() => _templateTargets = null;
+
 	private ValueSlot<TValue>? Slot<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp) where TOwner : DependencyObject =>
 		_slots is not null && _slots.TryGetValue(dp.GlobalIndex, out var s) ? (ValueSlot<TValue>)s : null;
 
 	// The coerced effective value: resolve the precedence ladder (else the default, this object's own where its type
 	// sets one), then coerce. Coercion applies to the resolved value, not per rung at write time — so a coercion that
 	// depends on another property reflects that property's current value on every read.
-	private TValue Effective<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueSlot<TValue>? slot)
+	private TValue Effective<TOwner, TValue>(DependencyProperty<TOwner, TValue> dp, ValueSlot<TValue>? slot, bool belowAnimation = false)
 		where TOwner : DependencyObject
 	{
 		var metadata = dp.Metadata;
-		var baseValue = slot is not null && slot.TryResolve(out var v) ? v
+		var baseValue = slot is not null && slot.TryResolve(out var v, belowAnimation) ? v
 			: metadata.DefaultValueFor is { } defaultFor ? defaultFor((TOwner)this) : metadata.DefaultValue;
 		return metadata.Coerce is { } coerce ? coerce((TOwner)this, baseValue) : baseValue;
 	}

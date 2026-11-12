@@ -20,6 +20,7 @@ namespace SUIsei.Tests;
 /// </para>
 /// </summary>
 [NotInParallel(TestIsolation.HotReload)]
+[SkipWithoutDynamicCode]
 public sealed class HotReloadTests
 {
 	private static readonly Vector2 Viewport = new(400f, 300f);

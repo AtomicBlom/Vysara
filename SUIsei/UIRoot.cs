@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 
 namespace SUIsei;
@@ -43,8 +44,6 @@ public sealed class UIRoot
 		set
 		{
 			if (ReferenceEquals(field, value)) return;
-			if (value is not null)
-				Extensions.TextEffects.ValidateTree(value, Font);
 			field?.SetAttachedRoot(null);
 			field = value;
 			field?.SetAttachedRoot(this);
@@ -59,6 +58,18 @@ public sealed class UIRoot
 	/// storyboards (e.g. <see cref="VisualStateManager"/>). Null for a root used standalone in tests.</summary>
 	internal AnimationClock? Clock { get; set; }
 
+	/// <summary>The host's <see cref="FocusManager"/>, set by <see cref="UIHost"/>, so a subtree leaving the root gives up
+	/// focus. Null for a root used standalone in tests.</summary>
+	internal FocusManager? FocusManager { get; set; }
+
+	// A subtree left this root: let go of the focus and pointer state held for any element in it. The events that tell those
+	// elements so are raised by the host once layout is done.
+	internal void ReleaseWithin(UIElement subtree)
+	{
+		FocusManager?.ReleaseWithin(subtree);
+		InputManager?.ReleaseWithin(subtree);
+	}
+
 	/// <summary>The composition tree this root renders.</summary>
 	public RootVisual Visual { get; } = new();
 
@@ -70,12 +81,37 @@ public sealed class UIRoot
 	public float LayoutScale { get; set; } = 1f;
 
 	/// <summary>
+	/// How much of the bottom of the surface an on-screen keyboard covers, in surface pixels: zero (the default) while no
+	/// keyboard is up. The host or app sets it as the keyboard comes and goes; the next layout pass arranges the elements
+	/// marked <see cref="Extensions.InputPane.AvoidsKeyboardProperty"/> clear of it.
+	/// </summary>
+	public float InputPaneHeight { get; set => field = MathF.Max(0f, value); }
+
+	/// <summary>
+	/// The top edge of the on-screen keyboard in layout units (DIPs) as of the last layout pass, or null while there is no
+	/// keyboard.
+	/// </summary>
+	internal float? InputPaneTop { get; private set; }
+
+	/// <summary>
+	/// How far in from each edge of the surface the screen hides content, in surface pixels: a phone's camera cutout or
+	/// rounded corners. Zero (the default) on a display that hides none. The host or app sets it; the next layout pass
+	/// arranges the elements marked <see cref="Extensions.SafeArea.EdgesProperty"/> clear of it.
+	/// </summary>
+	public Thickness SafeAreaInsets { get; set; }
+
+	/// <summary>
+	/// The part of the surface the screen hides nothing of, in layout units (DIPs), as of the last layout pass, or null
+	/// while the whole surface is safe.
+	/// </summary>
+	internal Rect? SafeRect { get; private set; }
+
+	/// <summary>
 	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
 	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
 	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
-	/// everything under the root. It is the whole surface's font until elements choose their own. The text effects under
-	/// the root are checked against a new font first (<see cref="Extensions.TextEffects"/>): one its distance field cannot
-	/// hold throws, and the root keeps its font.
+	/// everything under the root. It is the whole surface's font until elements choose their own. A text effect the new
+	/// font's distance field cannot hold is drawn clamped to it (<see cref="Extensions.TextEffects"/>).
 	/// </summary>
 	public FontAtlas Font
 	{
@@ -85,10 +121,6 @@ public sealed class UIRoot
 			ArgumentNullException.ThrowIfNull(value);
 			if (ReferenceEquals(field, value))
 				return;
-			if (Content is { } content)
-				Extensions.TextEffects.ValidateTree(content, value);
-			foreach (var (element, _, _) in _overlays)
-				Extensions.TextEffects.ValidateTree(element, value);
 			field = value;
 			Content?.InvalidateMeasureTree();
 			foreach (var (element, _, _) in _overlays)
@@ -101,8 +133,6 @@ public sealed class UIRoot
 	/// stays top-most. Marks the tree dirty so the next composite shows it.</summary>
 	internal void AddOverlay(UIElement element, Vector2 position, bool fullSurface = false)
 	{
-		Extensions.TextEffects.ValidateTree(element, Font);
-
 		element.SetAttachedRoot(this);
 		_overlays.Insert(_overlays.Count - _diagnosticOverlays, (element, position, fullSurface));
 		Visual.MarkDirty();
@@ -198,6 +228,21 @@ public sealed class UIRoot
 		}
 
 		var availDip = new Size(availablePixels.Width / LayoutScale, availablePixels.Height / LayoutScale);
+		var inputPaneTop = InputPaneHeight > 0f ? (float?)((availablePixels.Height - InputPaneHeight) / LayoutScale) : null;
+		var insets = SafeAreaInsets;
+		var safeRect = insets == default
+			? (Rect?)null
+			: new Rect(insets.Left / LayoutScale, insets.Top / LayoutScale,
+				MathF.Max(0f, availDip.Width - (insets.Left + insets.Right) / LayoutScale),
+				MathF.Max(0f, availDip.Height - (insets.Top + insets.Bottom) / LayoutScale));
+		if (inputPaneTop != InputPaneTop || safeRect != SafeRect)
+		{
+			InputPaneTop = inputPaneTop;
+			SafeRect = safeRect;
+			Content?.InvalidateArrangeTree();
+			foreach (var (element, _, _) in _overlays)
+				element.InvalidateArrangeTree();
+		}
 
 		Content?.Measure(availDip);
 		Content?.Arrange(new Rect(0f, 0f, availDip.Width, availDip.Height));
@@ -239,13 +284,18 @@ public sealed class UIRoot
 		Visual.MarkDirty();
 	}
 
-	/// <summary>Composite the current visual tree to a neutral <see cref="DrawListData"/> (default-path convenience —
-	/// returns <see cref="DrawListData.Empty"/> when a foreign compositor is in use).</summary>
+	/// <summary>Composite the current visual tree and return the list it produced: the compositor's
+	/// <see cref="IDrawListSource.LastDraw"/>, or <see cref="DrawListData.Empty"/> when the compositor is not an
+	/// <see cref="IDrawListSource"/>.</summary>
 	public DrawListData Render()
 	{
 		_compositor.Composite(Visual, Surface);
-		return _compositor is DrawListCompositor d ? d.LastDraw(Surface) : DrawListData.Empty;
+		return LastDraw();
 	}
+
+	// The list the last successful composite produced: what a surface keeps showing when its composite fails. A compositor
+	// that produces no draw lists hands out the empty one.
+	internal DrawListData LastDraw() => _compositor is IDrawListSource source ? source.LastDraw(Surface) : DrawListData.Empty;
 
 	/// <summary>The element tree annotated with <c>DesiredSize</c>/<c>LayoutRect</c> after a layout pass — the
 	/// layout-test snapshot.</summary>

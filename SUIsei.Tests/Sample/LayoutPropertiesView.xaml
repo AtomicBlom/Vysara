@@ -35,9 +35,9 @@
 	<Border x:Name="Grower" Width="100" Height="10" HorizontalAlignment="Left" />
 	<ContentControl x:Name="Host">
 		<VisualStateManager.VisualStateGroups>
-			<VisualStateGroup Name="Size">
-				<VisualState Name="Narrow" />
-				<VisualState Name="Wide">
+			<VisualStateGroup x:Name="Size">
+				<VisualState x:Name="Narrow" />
+				<VisualState x:Name="Wide">
 					<Storyboard>
 						<DoubleAnimation Storyboard.TargetName="Grower" Storyboard.TargetProperty="(FrameworkElement.Width)"
 										 To="200" Duration="0:0:1" />

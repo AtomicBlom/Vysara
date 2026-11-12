@@ -18,7 +18,9 @@ partial class XamlSourceGenerator
 		if (ns is not null)
 			sb.AppendLine($"namespace {ns};");
 		sb.AppendLine();
-		sb.AppendLine($"internal sealed class {cls}_Bindings");
+		// The helper is nested in the view's class, so it reaches a named element's field whatever x:FieldModifier gave it.
+		var classStart = sb.Length;
+		sb.AppendLine($"private sealed class {cls}_Bindings");
 		sb.AppendLine("{");
 		sb.AppendLine($"\tprivate readonly {cls} _root;");
 		sb.AppendLine("\tprivate readonly List<INotifyPropertyChanged> _tracked = new();");
@@ -167,6 +169,16 @@ partial class XamlSourceGenerator
 		sb.AppendLine("\t\t\tcase null: case \"\": Subscribe(); Update(); break;");
 		sb.AppendLine("\t\t}");
 		sb.AppendLine("\t}");
+		sb.AppendLine("}");
+
+		var helper = sb.ToString(classStart, sb.Length - classStart);
+		sb.Length = classStart;
+		sb.AppendLine($"partial class {cls}");
+		sb.AppendLine("{");
+		// The helper's text ends with a line break, so its last entry is empty.
+		var lines = helper.Split(["\r\n", "\n"], StringSplitOptions.None);
+		for (var i = 0; i < lines.Length - 1; i++)
+			sb.AppendLine(lines[i].Length > 0 ? "\t" + lines[i] : "");
 		sb.AppendLine("}");
 
 		return new GeneratedSource(MakeHintName(fullClass, ".Bindings"), sb.ToString());

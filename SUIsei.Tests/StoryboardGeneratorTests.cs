@@ -16,9 +16,9 @@ public sealed class StoryboardGeneratorTests
 		        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		        x:Class="T.StatesView" x:Name="Bg">
 		  <VisualStateManager.VisualStateGroups>
-		    <VisualStateGroup Name="CommonStates">
-		      <VisualState Name="Normal" />
-		      <VisualState Name="Highlighted">
+		    <VisualStateGroup x:Name="CommonStates">
+		      <VisualState x:Name="Normal" />
+		      <VisualState x:Name="Highlighted">
 		        <Storyboard>
 		          <ColorAnimation Storyboard.TargetName="Bg" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
 		                          To="#5060A0" Duration="0:0:0.12" FillBehavior="HoldEnd" />
@@ -41,8 +41,8 @@ public sealed class StoryboardGeneratorTests
 		  <TextBlock x:Name="Label" Text="Hi" />
 		  <ContentControl x:Name="Host">
 		    <VisualStateManager.VisualStateGroups>
-		      <VisualStateGroup Name="G">
-		        <VisualState Name="S">
+		      <VisualStateGroup x:Name="G">
+		        <VisualState x:Name="S">
 		          <Storyboard>
 		            {{animations}}
 		          </Storyboard>
@@ -219,6 +219,41 @@ public sealed class StoryboardGeneratorTests
 		XamlGeneratorHarness.Run(View(animation), CodeBehind).DiagnosticIds().ShouldBe([id]);
 
 	[Test]
+	[Arguments("0:0:0.25", "0.25")]
+	[Arguments("00:01:02.5", "62.5")]
+	[Arguments("1.02:03", "93780")]
+	[Arguments("1.02:03:04.5", "93784.5")]
+	[Arguments("0:00", "0")]
+	[Arguments(" 0 ", "0")]
+	public void Durations_read_in_WinUIs_grammar(string duration, string seconds)
+	{
+		var xaml = View($"""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="1" Duration="{duration}" />""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		result.DiagnosticIds().ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain($".Duration = global::System.TimeSpan.FromSeconds({seconds});");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("2", true)]
+	[Arguments("0:30", true)]
+	[Arguments("1.5", false)]
+	[Arguments("1:02:03:04", false)]
+	[Arguments("0:30.5", false)]
+	[Arguments("0:0:60", false)]
+	[Arguments("24:00:00", false)]
+	[Arguments("1.", false)]
+	[Arguments("-0:0:1", false)]
+	public void A_duration_outside_the_grammar_is_SUISEI012_saying_how_to_write_one_WinUI_reads_otherwise(string duration, bool readOtherwise)
+	{
+		var diagnostic = XamlGeneratorHarness.Run(View($"""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="1" Duration="{duration}" />"""),
+			CodeBehind).Diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("SUISEI012");
+		diagnostic.GetMessage().ShouldContain("h:m:s[.f] or d.h:m[:s[.f]]");
+		diagnostic.GetMessage().Contains("WinUI reads a bare number as days").ShouldBe(readOtherwise);
+	}
+
+	[Test]
 	public void Keyframes_and_easing_functions_are_emitted()
 	{
 		var xaml = View("""
@@ -253,6 +288,7 @@ public sealed class StoryboardGeneratorTests
 
 	[Test]
 	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><LinearDoubleKeyFrame KeyTime=\"soon\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI012")]
+	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><LinearDoubleKeyFrame KeyTime=\"0:30\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI012")]
 	[Arguments("<DoubleAnimationUsingKeyFrames Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\"><SplineDoubleKeyFrame KeyTime=\"0:0:1\" Value=\"1\" /></DoubleAnimationUsingKeyFrames>", "SUISEI020")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><WobbleEase /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI003")]
 	[Arguments("<DoubleAnimation Storyboard.TargetName=\"Box\" Storyboard.TargetProperty=\"Opacity\" To=\"1\"><DoubleAnimation.EasingFunction><CubicEase EasingMode=\"Sideways\" /></DoubleAnimation.EasingFunction></DoubleAnimation>", "SUISEI012")]
@@ -325,8 +361,8 @@ public sealed class StoryboardGeneratorTests
 			      <SolidColorBrush x:Key="Accent" Color="#00FF00" />
 			    </ContentControl.Resources>
 			    <VisualStateManager.VisualStateGroups>
-			      <VisualStateGroup Name="G">
-			        <VisualState Name="S">
+			      <VisualStateGroup x:Name="G">
+			        <VisualState x:Name="S">
 			          <Storyboard>
 			            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background)">
 			              <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource Accent}" />

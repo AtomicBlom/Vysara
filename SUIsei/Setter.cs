@@ -13,5 +13,8 @@ public sealed class Setter
 	public required object? Value { get; init; }
 
 	internal void Apply(DependencyObject target) => target.SetStyleValue(Property, Value);
+
+	internal void Validate(DependencyObject target) => Property.ValidateBoxed(target, Value);
+
 	internal void Clear(DependencyObject target) => target.ClearStyleValue(Property);
 }

@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Documents;
 using SUIsei.Extensions;
 using SUIsei.Media;
@@ -37,6 +38,7 @@ public sealed class TextBlock : FrameworkElement
 			new PropertyMetadata<TextBlock, Brush?>
 			{
 				Inherits = InheritedText.Foreground,
+				Validate = static (_, brush) => InheritedText.ValidateForeground(brush),
 				PropertyChanged = static (t, old, @new) => t.OnBrushChanged(old, @new),
 			});
 
@@ -65,23 +67,25 @@ public sealed class TextBlock : FrameworkElement
 	/// <summary>How each line sits across the width the text block is arranged at.</summary>
 	public TextAlignment TextAlignment { get => GetValue(TextAlignmentProperty); set => SetValue(TextAlignmentProperty, value); }
 
-	// As wide as the widest line, and a line height per line.
+	// Measured from the run's shaping: each line's width in EM, which a size doesn't change, times the size. So an animated
+	// FontSize, or one inherited from above, re-measures without shaping anything, and the same shaping draws the run.
 	protected override Size MeasureOverride(Size available)
 	{
 		var font = TextFont;
-		var fontSize = FontSize;
-		var features = Typography.FeaturesOf(this);
-		var text = Text.AsSpan();
-		var widest = 0f;
-		var lines = 0;
-		for (var start = 0; start >= 0; lines++)
-		{
-			var line = text.Slice(start, TextLines.Next(text, start, out var next));
-			if (!line.IsEmpty)
-				widest = MathF.Max(widest, font.MeasureWidth(line, features));
-			start = next;
-		}
-		return new Size(MathF.Min(widest * fontSize, available.Width), lines * font.LineHeight * fontSize);
+		var shaped = Shaped(Text, font, Typography.FeaturesOf(this));
+		return new Size(MathF.Min(shaped.Width * FontSize, available.Width), shaped.Lines.Count * font.LineHeight * FontSize);
+	}
+
+	// The text shaped, kept across measures and handed to the run this element draws, so measuring and drawing shape once
+	// between them: shaped again only when the text, the font, its shaper or the features change.
+	private ShapedGlyphRun? _shaped;
+
+	private ShapedGlyphRun Shaped(string text, FontAtlas font, FontFeatureSet features)
+	{
+		var shaped = _shaped ??= new ShapedGlyphRun();
+		if (!shaped.IsShapingOf(text, font, features))
+			shaped.Reshape(text, font, features);
+		return shaped;
 	}
 
 	// The run this element draws, kept across updates so a recolour or re-arrange allocates nothing.
@@ -106,9 +110,12 @@ public sealed class TextBlock : FrameworkElement
 		var content = _glyphRun ??= new GlyphRunContent();
 		content.Update(text, FontSize, Foreground?.CompositionBrush ?? DefaultForeground, new Vector2(LayoutRect.Width, LayoutRect.Height),
 			TextFont, Typography.FeaturesOf(this));
-		content.TextAlignment = TextAlignment;
+		content.TextAlignment = TextAlignment.ToComposition();
 		content.UpdateEffects(TextEffects.GetOutlineThickness(this), TextEffects.GetOutlineBrush(this)?.CompositionBrush,
 			TextEffects.GetShadowOffset(this).ToVector2(), TextEffects.GetShadowSoftness(this), TextEffects.GetShadowBrush(this)?.CompositionBrush);
+		// The run draws from the shaping its measure made, rather than shaping the same text again.
+		if (_shaped is { } shaped && shaped.IsShapingOf(text, content.Font, content.Features))
+			content.SetDerived(shaped);
 		return content;
 	}
 

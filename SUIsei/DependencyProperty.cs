@@ -120,6 +120,11 @@ public abstract class DependencyProperty
 	internal abstract void SetRungBoxed(DependencyObject target, DependencyObject.ValueRung rung, object? value);
 	internal abstract void ClearRung(DependencyObject target, DependencyObject.ValueRung rung);
 
+	/// <summary>Check a boxed <paramref name="value"/> for <paramref name="target"/>, storing nothing: throws
+	/// <see cref="ArgumentException"/> if it is not of the property's type or its validator refuses it, so a caller writing
+	/// several values can check them all before it writes any.</summary>
+	internal abstract void ValidateBoxed(DependencyObject target, object? value);
+
 	/// <summary>The property's value on <paramref name="target"/> as a <see cref="DependencyObject"/>, or null when it
 	/// holds none (or holds a value type) — how a property path steps from one object to the next.</summary>
 	internal abstract DependencyObject? GetObjectValue(DependencyObject target);
@@ -127,6 +132,9 @@ public abstract class DependencyProperty
 	/// <summary>The property's resolved value on <paramref name="target"/>, boxed — the diagnostics read, never the
 	/// typed path.</summary>
 	internal abstract object? GetBoxedValue(DependencyObject target);
+
+	/// <summary>The property's default, boxed: what an object that holds no value for it reads. The diagnostics read.</summary>
+	internal abstract object? BoxedDefaultValue { get; }
 
 	/// <summary>Whether <paramref name="value"/> can be stored in this property: an instance of its value type, or null
 	/// where the value type admits null.</summary>
@@ -162,6 +170,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 	/// <summary>The typed default.</summary>
 	public TValue DefaultValue => Metadata.DefaultValue;
 
+	internal override object? BoxedDefaultValue => Metadata.DefaultValue;
+
 	/// <summary>How the property interpolates when animated: the metadata's, else the standard one for its type, else
 	/// null (not animatable).</summary>
 	public Lerp<TValue>? Lerp { get; }
@@ -173,6 +183,13 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 
 	internal override void ClearRung(DependencyObject target, DependencyObject.ValueRung rung) =>
 		target.SetRung(this, rung, default!, hasValue: false);
+
+	internal override void ValidateBoxed(DependencyObject target, object? value)
+	{
+		if (!Accepts(value))
+			throw new ArgumentException($"{Name} holds a {typeof(TValue).Name}, so it can't be set to {value?.GetType().Name ?? "null"}.", nameof(value));
+		Metadata.Validate?.Invoke((TOwner)target, (TValue)value!);
+	}
 
 	internal override DependencyObject? GetObjectValue(DependencyObject target) =>
 		typeof(TValue).IsValueType ? null : target.GetValue(this) as DependencyObject;
@@ -186,6 +203,8 @@ public sealed class DependencyProperty<TOwner, TValue> : DependencyProperty, IAn
 	string IAnimationTarget.ValueTypeName => typeof(TValue).Name;
 
 	TValue IAnimationTarget<TValue>.Read(DependencyObject target) => target.GetValue(this);
+
+	TValue IAnimationTarget<TValue>.ReadUnanimated(DependencyObject target) => target.GetUnanimatedValue(this);
 
 	void IAnimationTarget<TValue>.Write(DependencyObject target, TValue value) => target.SetAnimatedValue(this, value);
 

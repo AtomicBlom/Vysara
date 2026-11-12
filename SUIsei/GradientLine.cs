@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 
 namespace SUIsei;
 

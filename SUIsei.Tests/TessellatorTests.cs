@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 using SUIsei.Media;
 
@@ -207,22 +208,22 @@ public sealed class TessellatorTests
 	// --- Strokes ---
 
 	[Test]
-	[Arguments(PenLineCap.Flat, 0f)]
-	[Arguments(PenLineCap.Square, 5f)]
-	[Arguments(PenLineCap.Round, 5f)]
-	[Arguments(PenLineCap.Triangle, 5f)]
-	public void A_cap_reaches_its_length_past_the_end_plus_the_margin(PenLineCap cap, float reach)
+	[Arguments(CompositionStrokeCap.Flat, 0f)]
+	[Arguments(CompositionStrokeCap.Square, 5f)]
+	[Arguments(CompositionStrokeCap.Round, 5f)]
+	[Arguments(CompositionStrokeCap.Triangle, 5f)]
+	public void A_cap_reaches_its_length_past_the_end_plus_the_margin(CompositionStrokeCap cap, float reach)
 	{
 		var path = Stroke("M 0,0 L 100,0", s => { s.Thickness = 10; s.StartCap = cap; s.EndCap = cap; });
 		var b = path.Bounds;
 
 		// A triangle cap antialiases 45° edges, whose margin reaches √2 half pixels along both axes. A round cap is a
 		// polygon of tangents, whose corners stand out from the circle by up to the flattening tolerance's angle.
-		var margin = cap == PenLineCap.Triangle ? MathF.Sqrt(2f) * M : M;
-		var slack = cap == PenLineCap.Round ? 0.25f : 0.01f;
+		var margin = cap == CompositionStrokeCap.Triangle ? MathF.Sqrt(2f) * M : M;
+		var slack = cap == CompositionStrokeCap.Round ? 0.25f : 0.01f;
 		b.Right.ShouldBeInRange(100 + reach + margin - 0.01f, 100 + reach + margin + slack);
 		b.X.ShouldBeInRange(-reach - margin - slack, -reach - margin + 0.01f);
-		var side = cap == PenLineCap.Triangle ? 5 + margin : 5 + M;
+		var side = cap == CompositionStrokeCap.Triangle ? 5 + margin : 5 + M;
 		b.Y.ShouldBeInRange(-side - slack, -side + 0.01f);
 		b.Bottom.ShouldBeInRange(side - 0.01f, side + slack);
 		path.Length.ShouldBe(100f);
@@ -250,17 +251,17 @@ public sealed class TessellatorTests
 	}
 
 	[Test]
-	[Arguments(PenLineJoin.Miter, 5.5f * 1.41421356f)]   // the miter tip, w / cos 45°
-	[Arguments(PenLineJoin.Bevel, 5f * 0.70710678f + M)] // the bevel line, h cos 45°, plus the margin
-	[Arguments(PenLineJoin.Round, 5.5f)]                 // the round join's tangent polygon, at h plus the margin
-	public void A_right_angle_join_reaches_as_its_kind_says(PenLineJoin join, float reach)
+	[Arguments(CompositionStrokeLineJoin.Miter, 5.5f * 1.41421356f)]   // the miter tip, w / cos 45°
+	[Arguments(CompositionStrokeLineJoin.Bevel, 5f * 0.70710678f + M)] // the bevel line, h cos 45°, plus the margin
+	[Arguments(CompositionStrokeLineJoin.Round, 5.5f)]                 // the round join's tangent polygon, at h plus the margin
+	public void A_right_angle_join_reaches_as_its_kind_says(CompositionStrokeLineJoin join, float reach)
 	{
 		var path = Stroke("M 0,0 L 50,0 L 50,50", s => { s.Thickness = 10; s.LineJoin = join; });
 
 		// The outer corner is towards (+x, -y) from (50, 0); measure the reach along that diagonal.
 		var diagonal = Vector2.Normalize(new Vector2(1, -1));
 		var furthest = path.Vertices.ToArray().Max(v => Vector2.Dot(v.Position - new Vector2(50, 0), diagonal));
-		furthest.ShouldBe(reach, join == PenLineJoin.Round ? 0.3f : 1e-3f);
+		furthest.ShouldBe(reach, join == CompositionStrokeLineJoin.Round ? 0.3f : 1e-3f);
 		path.SegmentCount.ShouldBe(2);
 	}
 
@@ -269,7 +270,7 @@ public sealed class TessellatorTests
 	{
 		// Each wedge's last rim point is the next wedge's first. Computed once per wedge, the two copies rounded apart and
 		// left a hairline gap along the spoke: Loom's GPU, snapping vertices to 1/256 pixel, drew over it; the oracle did not.
-		var path = Stroke("M 480,190 L 560,70", s => { s.Thickness = 18; s.StartCap = PenLineCap.Round; });
+		var path = Stroke("M 480,190 L 560,70", s => { s.Thickness = 18; s.StartCap = CompositionStrokeCap.Round; });
 		var v = path.Vertices.ToArray();
 		var wedges = Enumerable.Range(0, v.Length / 3).Where(t => v[3 * t].Position == new Vector2(480, 190)).ToArray();
 
@@ -294,7 +295,7 @@ public sealed class TessellatorTests
 	[Test]
 	public void Every_vertex_carries_its_arc_length_along_the_whole_geometry()
 	{
-		var line = Stroke("M 0,0 L 100,0", s => { s.Thickness = 2; s.StartCap = s.EndCap = PenLineCap.Round; });
+		var line = Stroke("M 0,0 L 100,0", s => { s.Thickness = 2; s.StartCap = s.EndCap = CompositionStrokeCap.Round; });
 		foreach (var v in line.Vertices)
 			v.ArcLength.ShouldBe(Math.Clamp(v.Position.X, 0, 100), 1e-4f);
 
@@ -319,10 +320,10 @@ public sealed class TessellatorTests
 	/// vertex. A polyline turning both ways and a curve (whose flattened points are joined too) cover every join and cap.
 	/// </summary>
 	[Test]
-	[Arguments(PenLineJoin.Miter, PenLineCap.Round)]
-	[Arguments(PenLineJoin.Bevel, PenLineCap.Triangle)]
-	[Arguments(PenLineJoin.Round, PenLineCap.Round)]
-	public void Pieces_overlap_where_they_meet_so_no_seam_can_open(PenLineJoin join, PenLineCap cap)
+	[Arguments(CompositionStrokeLineJoin.Miter, CompositionStrokeCap.Round)]
+	[Arguments(CompositionStrokeLineJoin.Bevel, CompositionStrokeCap.Triangle)]
+	[Arguments(CompositionStrokeLineJoin.Round, CompositionStrokeCap.Round)]
+	public void Pieces_overlap_where_they_meet_so_no_seam_can_open(CompositionStrokeLineJoin join, CompositionStrokeCap cap)
 	{
 		var path = Stroke("M 10,80 L 60,20 L 110,80 L 160,30 C 200,0 240,60 280,30",
 			s => { s.Thickness = 9; s.LineJoin = join; s.StartCap = s.EndCap = cap; });
@@ -400,14 +401,14 @@ public sealed class TessellatorTests
 		{
 			s.Thickness = 2;
 			s.SetDashArray([2, 1]);
-			s.StartCap = PenLineCap.Round;
-			s.EndCap = PenLineCap.Triangle;
-			s.DashCap = PenLineCap.Square;
+			s.StartCap = CompositionStrokeCap.Round;
+			s.EndCap = CompositionStrokeCap.Triangle;
+			s.DashCap = CompositionStrokeCap.Square;
 		});
 		var runs = path.Runs.Span.ToArray();
 
-		(runs[0].StartCap, runs[0].EndCap).ShouldBe((PenLineCap.Round, PenLineCap.Square));
-		(runs[^1].StartCap, runs[^1].EndCap).ShouldBe((PenLineCap.Square, PenLineCap.Square));
+		(runs[0].StartCap, runs[0].EndCap).ShouldBe((CompositionStrokeCap.Round, CompositionStrokeCap.Square));
+		(runs[^1].StartCap, runs[^1].EndCap).ShouldBe((CompositionStrokeCap.Square, CompositionStrokeCap.Square));
 	}
 
 	[Test]
@@ -426,18 +427,18 @@ public sealed class TessellatorTests
 	[Test]
 	public void A_dot_draws_its_caps_back_to_back_and_a_flat_dot_nothing()
 	{
-		Stroke("M 5,5 L 5,5", s => { s.Thickness = 4; s.StartCap = s.EndCap = PenLineCap.Flat; }).TriangleCount.ShouldBe(0);
-		var round = Stroke("M 5,5 L 5,5", s => { s.Thickness = 4; s.StartCap = s.EndCap = PenLineCap.Round; });
+		Stroke("M 5,5 L 5,5", s => { s.Thickness = 4; s.StartCap = s.EndCap = CompositionStrokeCap.Flat; }).TriangleCount.ShouldBe(0);
+		var round = Stroke("M 5,5 L 5,5", s => { s.Thickness = 4; s.StartCap = s.EndCap = CompositionStrokeCap.Round; });
 		round.Bounds.ShouldBeNear(new Rect(5 - 2.5f, 5 - 2.5f, 5, 5), 0.25f);
-		var square = Stroke("M 5,5 L 5,5", s => { s.Thickness = 4; s.StartCap = s.EndCap = PenLineCap.Square; });
+		var square = Stroke("M 5,5 L 5,5", s => { s.Thickness = 4; s.StartCap = s.EndCap = CompositionStrokeCap.Square; });
 		square.Bounds.ShouldBeNear(new Rect(5 - 2.5f, 5 - 2.5f, 5, 5), 1e-4f);
-		Stroke("M 5,5", s => s.StartCap = PenLineCap.Round).TriangleCount.ShouldBe(0); // a lone move draws nothing
+		Stroke("M 5,5", s => s.StartCap = CompositionStrokeCap.Round).TriangleCount.ShouldBe(0); // a lone move draws nothing
 	}
 
 	[Test]
 	public void A_closed_figure_has_no_caps_and_a_closing_join()
 	{
-		var path = Stroke("M 0,0 L 10,0 10,10 0,10 Z", s => { s.Thickness = 2; s.StartCap = s.EndCap = PenLineCap.Round; });
+		var path = Stroke("M 0,0 L 10,0 10,10 0,10 Z", s => { s.Thickness = 2; s.StartCap = s.EndCap = CompositionStrokeCap.Round; });
 
 		var run = path.Runs.Span.ToArray().ShouldHaveSingleItem();
 		run.Loop.ShouldBeTrue();
@@ -455,11 +456,65 @@ public sealed class TessellatorTests
 		Stroke("M 0,0 L 10,0", s => s.Thickness = -1).TriangleCount.ShouldBe(0);
 	}
 
+	/// <summary>Past the limit the rest of the stroke is drawn solid, rather than the tessellation throwing out of a
+	/// frame; the path says the pattern was limited.</summary>
 	[Test]
-	public void A_dash_pattern_finer_than_the_limit_throws()
+	public void A_dash_pattern_finer_than_the_limit_draws_the_rest_solid()
 	{
-		Should.Throw<InvalidOperationException>(() =>
-			Stroke("M 0,0 L 1000000,0", s => { s.Thickness = 0.01f; s.SetDashArray([0.5f, 0.5f]); }));
+		var path = Stroke("M 0,0 L 1000000,0", s => { s.Thickness = 0.01f; s.SetDashArray([0.5f, 0.5f]); });
+
+		path.DashesLimited.ShouldBeTrue();
+		path.Runs.Count.ShouldBe(Tessellator.MaxDashes + 1); // the dashes, then the rest as one
+		path.Runs[path.Runs.Count - 1].R1.ShouldBe(path.Length);
+		Stroke("M 0,0 L 100,0", s => s.SetDashArray([1f, 1f])).DashesLimited.ShouldBeFalse();
+	}
+
+	/// <summary>
+	/// A dash walks the segments it covers and no more: every join it draws lies inside the dash, an open figure's dash
+	/// never wraps to draw a join at the figure's start, and a dash takes at most one body per segment and one more. Float
+	/// sums aren't exact off integer coordinates, which is where a walk that compared running sums went wrong.
+	/// </summary>
+	[Test]
+	public void Dashes_on_non_integer_polylines_draw_nothing_past_their_ends()
+	{
+		var random = new Random(7);
+		for (var trial = 0; trial < 300; trial++)
+		{
+			var sb = new System.Text.StringBuilder(FormattableString.Invariant($"M {random.NextSingle() * 50f},{random.NextSingle() * 50f}"));
+			var points = random.Next(2, 12);
+			for (var p = 0; p < points; p++)
+				sb.Append(FormattableString.Invariant($" L {random.NextSingle() * 400f - 100f},{random.NextSingle() * 400f - 100f}"));
+			var closed = trial % 3 == 0;
+			if (closed)
+				sb.Append(" Z");
+			var dash = 0.37f + random.NextSingle() * 3f;
+			var path = Stroke(sb.ToString(), s => { s.Thickness = 1.3f; s.SetDashArray([dash, dash * 0.71f]); });
+
+			var pieces = path.Pieces.Span;
+			var segments = path.Segments.Span;
+			foreach (var run in path.Runs.Span)
+			{
+				var bodies = 0;
+				for (var i = run.FirstPiece; i < run.FirstPiece + run.PieceCount; i++)
+				{
+					var piece = pieces[i];
+					if (piece.Kind == TessellatedPath.PieceKind.Body)
+						bodies++;
+					if (piece.Kind != TessellatedPath.PieceKind.Join)
+						continue;
+					// A join stands at a vertex: the body before it must reach its segment's end, and the body after it
+					// start the next segment, which on an open figure is never the first.
+					var before = pieces[i - 1];
+					var after = pieces[i + 1];
+					var reached = before.X0 + (before.R1 - before.R0);
+					reached.ShouldBeGreaterThan(segments[before.Segment].Length - 0.01f,
+						$"trial {trial}: a join at a vertex the dash stops {segments[before.Segment].Length - reached} short of");
+					if (!run.ClosedFigure)
+						after.Segment.ShouldBe(before.Segment + 1, $"trial {trial}: an open figure's dash wrapped to its start");
+				}
+				bodies.ShouldBeLessThanOrEqualTo(run.SegmentCount + 1, $"trial {trial}");
+			}
+		}
 	}
 
 	[Test]
@@ -493,7 +548,7 @@ public sealed class TessellatorTests
 	public void Re_tessellating_a_path_of_a_steady_size_allocates_nothing()
 	{
 		var path = Geometry.Parse("M 0,0 C 0,100 100,100 100,0 L 50,-50 Z M 20,20 L 30,20 30,30 Z").CompositionPath;
-		var style = new CompositionStrokeStyle { Thickness = 3, LineJoin = PenLineJoin.Round, StartCap = PenLineCap.Round };
+		var style = new CompositionStrokeStyle { Thickness = 3, LineJoin = CompositionStrokeLineJoin.Round, StartCap = CompositionStrokeCap.Round };
 		style.SetDashArray([4, 2]);
 		var tessellator = new Tessellator();
 		var fill = new TessellatedPath();
@@ -524,7 +579,7 @@ public sealed class TessellatorTests
 		var transform = Matrix3x2.CreateScale(3f, 2f) * Matrix3x2.CreateRotation(0.5f) * Matrix3x2.CreateTranslation(4f, 7f);
 		var mapped = new CompositionPath();
 		mapped.Append(path, transform);
-		var style = new CompositionStrokeStyle { Thickness = 2, LineJoin = PenLineJoin.Round };
+		var style = new CompositionStrokeStyle { Thickness = 2, LineJoin = CompositionStrokeLineJoin.Round };
 		var tessellator = new Tessellator();
 		var throughTransform = new TessellatedPath();
 		var premapped = new TessellatedPath();

@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Drawing;
 using SUIsei.Extensions;
@@ -194,19 +195,41 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 
 	internal void SetAttachedRoot(UIRoot? root)
 	{
+		var previous = AttachedRoot;
+		AttachTree(root);
+		// Once the whole subtree has left, what the root it left held for any of it is let go: focus, pointer capture,
+		// over-chains.
+		if (previous is not null && !ReferenceEquals(previous, root))
+			previous.ReleaseWithin(this);
+	}
+
+	private void AttachTree(UIRoot? root)
+	{
 		var wasAttached = AttachedRoot is not null;
 		AttachedRoot = root;
 		if (wasAttached != root is not null)
 			OnLiveTreeChanged(root is not null);
 		foreach (var child in VisualChildren)
-			child.SetAttachedRoot(root);
+			child.AttachTree(root);
+	}
+
+	/// <summary>Whether this element is <paramref name="subtree"/> or lies beneath it.</summary>
+	internal bool IsWithin(UIElement subtree)
+	{
+		for (var e = this; e is not null; e = e.Parent)
+		{
+			if (ReferenceEquals(e, subtree))
+				return true;
+		}
+		return false;
 	}
 
 	/// <summary>
 	/// The element joined (<paramref name="attached"/>) or left a live tree: start or stop listening to the brushes,
 	/// transform and clip geometry it shows. An override registers its own brush properties through
-	/// <see cref="Listen(Brush, bool)"/> and calls the base. Joining also re-applies the clip and marks the visual dirty,
-	/// since a shared brush or geometry may have changed while the element was away.
+	/// <see cref="Listen(Brush, bool)"/> and calls the base. Joining also re-applies the transform and the clip and marks the
+	/// visual dirty, since a shared brush, transform or geometry may have changed while the element was away, and a layout
+	/// pass that finds the element where it was arranges nothing.
 	/// </summary>
 	private protected virtual void OnLiveTreeChanged(bool attached)
 	{
@@ -214,7 +237,8 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		Listen(Clip, attached);
 		if (attached)
 		{
-			ApplyClip(); // the clip geometry may have changed while the element was away
+			ApplyTransform();
+			ApplyClip();
 			Visual.MarkDirty();
 		}
 	}
@@ -308,6 +332,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		if (!ArrangeDirty && _lastFinal == finalRect)
 			return;
 		_lastFinal = finalRect;
+		finalRect = Extensions.SafeArea.Inset(this, Extensions.InputPane.Avoid(this, finalRect));
 		if (Visibility == Visibility.Collapsed)
 			LayoutRect = new Rect(finalRect.X, finalRect.Y, 0, 0);
 		else
@@ -361,6 +386,16 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		var children = VisualChildren;
 		for (var i = 0; i < children.Count; i++)
 			children[i].InvalidateMeasureTree();
+	}
+
+	/// <summary>Invalidate the arrange of this element and of everything under it, for a change any element's placement
+	/// may read, such as the root's on-screen keyboard.</summary>
+	internal void InvalidateArrangeTree()
+	{
+		InvalidateArrange();
+		var children = VisualChildren;
+		for (var i = 0; i < children.Count; i++)
+			children[i].InvalidateArrangeTree();
 	}
 
 	/// <summary>The font this element's text measures and draws with: its root's <see cref="UIRoot.Font"/>, or
@@ -549,7 +584,8 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	private RectContent? _rectContent;
 
 	/// <summary>This element's retained <see cref="RectContent"/>, updated to its layout size and the given paint.</summary>
-	private protected RectContent RetainedRect(CompositionBrush? fill, float cornerRadius = 0f, CompositionBrush? borderBrush = null, float borderThickness = 0f)
+	private protected RectContent RetainedRect(CompositionBrush? fill, CompositionCornerRadius cornerRadius = default, CompositionBrush? borderBrush = null,
+		float borderThickness = 0f)
 	{
 		var content = _rectContent ??= new RectContent();
 		content.Update(new Vector2(LayoutRect.Width, LayoutRect.Height), fill, cornerRadius, borderBrush, borderThickness);
@@ -657,7 +693,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 
 	/// <summary>
 	/// Return the top-most element of this subtree drawn at <paramref name="surfacePoint"/> (surface pixels). The walk
-	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Visual.Transform"/>
+	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Composition.Visual.Transform"/>
 	/// is composed onto <paramref name="parentWorld"/>, so render transforms, animated translates and layout scale all
 	/// count, and each visual's clip is intersected into <paramref name="clip"/> as its surface-space bounds, the same
 	/// bound the compositor clips with, so a point is hittable exactly where something can be seen. Children are tested

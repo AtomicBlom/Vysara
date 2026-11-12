@@ -1,3 +1,4 @@
+using SUIsei.Composition;
 using SUIsei.Media;
 
 namespace SUIsei.Shapes;
@@ -21,7 +22,7 @@ internal sealed class PointOutline(bool closed)
 			return _path;
 		_built = source;
 		_path.Clear();
-		_path.FillRule = fillRule;
+		_path.FillRule = fillRule.ToComposition();
 		var span = points is null ? default : points.AsSpan();
 		if (span.Length > 0)
 		{

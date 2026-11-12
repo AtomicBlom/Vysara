@@ -24,6 +24,22 @@ A retained-mode, WinUI-inspired UI framework for .NET 10, designed for NativeAOT
 
 XAML files are automatically picked up as `AdditionalFiles` by the bundled `SUIsei.SourceGen` source generator — no extra configuration needed.
 
+## The gallery
+
+`SUIsei.Gallery` shows SUIsei's features a page each, drawn by the CPU rasterizer into a Win32 window with no GPU:
+
+```
+dotnet run --project SUIsei.Gallery -c Release                          # the window, at its first page
+dotnet run --project SUIsei.Gallery -c Release -- --page controls       # the window, at a page
+dotnet run --project SUIsei.Gallery -c Release -- --capture-pages out   # every page as a PNG, as the tests draw it
+dotnet run --project SUIsei.Gallery -c Release -- --capture shell.png --page layout
+```
+
+The pages live in `SUIsei.Gallery.Pages`, one XAML file each, and reload under `dotnet watch run`. `SUIsei.Tests` draws each
+page and the shell and compares them with their golden images in `SUIsei.Tests/Goldens/Gallery/`; after changing a page
+on purpose, write its golden again with `SUISEI_GOLDEN_UPDATE=1 dotnet run --project SUIsei.Tests -c Release` and look at
+the new image before committing it.
+
 ## Integration with Loom
 
 Use `Loom.UI.SUIsei` (from the [Loom](https://github.com/AtomicBlom/Loom) package) to render SUIsei draw lists through the Loom render graph.

@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Shapes;
 
 /// <summary>

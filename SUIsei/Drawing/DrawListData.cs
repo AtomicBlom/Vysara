@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using SUIsei.Composition;
 
 namespace SUIsei.Drawing;
 
@@ -32,6 +33,7 @@ public sealed class DrawListData
 	private Vector2 _coordinateSize;
 	private bool _isHdrTarget;
 	private uint _revision;
+	private Rect _damage;
 
 	/// <summary>An empty list — the no-op a clean or disabled producer hands the channel.</summary>
 	public static DrawListData Empty { get; } = new();
@@ -114,12 +116,35 @@ public sealed class DrawListData
 	public uint Revision { get => _revision; init => _revision = value; }
 
 	/// <summary>
-	/// The region (in surface pixels) that changed versus the previous revision — the union of the bounds of every
-	/// vertex that differs, expanded to the whole surface on a structural change (commands added/removed/reordered),
+	/// The region (in surface pixels) that changed since the list this surface handed out before — the union of the bounds
+	/// of every vertex that differs, expanded to the whole surface on a structural change (commands added/removed/reordered),
 	/// when group-opacity layers are present, or on the first build. Lets a host repaint only the dirty rectangle.
-	/// The compositor stamps it; <see cref="Rect.IsEmpty"/> means nothing changed.
+	/// The compositor stamps it each time it hands the list out; <see cref="Rect.IsEmpty"/> means nothing changed. The same
+	/// list handed out again unchanged has empty damage, unless a source it samples has changed its texels, when it covers the
+	/// pixels drawn with that source (the whole surface when the list has group layers). A list from a
+	/// <see cref="DrawListBuilder"/> damages the whole surface unless its build says otherwise. A foreign
+	/// <see cref="IDrawListSource"/> sets it on the lists it makes.
+	/// <para>
+	/// A <see cref="UIHost.Render"/> that throws may leave its lists undrawn, so the damage they carried is carried again by
+	/// the lists of the next render, unioned with their own. A host that skips drawing the lists of a render that returned
+	/// repaints the whole of each surface the next time it draws: those lists' damage is measured from the ones it skipped.
+	/// Comparing <see cref="Revision"/> with the last list drawn does not show the skip, because a list handed out again
+	/// keeps its revision while its damage becomes empty.
+	/// </para>
 	/// </summary>
-	public Rect Damage { get; internal set; }
+	public Rect Damage { get => _damage; init => _damage = value; }
+
+	/// <summary>Stamp the damage of the list the compositor is handing out.</summary>
+	internal void StampDamage(Rect damage) => _damage = damage;
+
+	/// <summary>A copy of this list with <paramref name="damage"/> in place of its own, reading the same streams and going
+	/// stale with them, so a list its producer still hands out is left as it is.</summary>
+	internal DrawListData WithDamage(Rect damage)
+	{
+		var copy = (DrawListData)MemberwiseClone();
+		copy._damage = damage;
+		return copy;
+	}
 
 	/// <summary>
 	/// Point this list at <paramref name="source"/>'s current contents, as the list of the composite that filled it.
@@ -137,7 +162,7 @@ public sealed class DrawListData
 		_coordinateSize = coordinateSize;
 		_isHdrTarget = isHdrTarget;
 		_textureRevision = textureRevision;
-		Damage = default;
+		_damage = default;
 	}
 
 	/// <summary>Move the texture revision of the list the compositor is re-submitting unchanged, when a source it

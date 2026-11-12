@@ -101,7 +101,7 @@ public sealed class HarfBuzzTextShaper : ITextShaper, IDisposable
 			return converted;
 		converted = new Feature[features.Features.Length];
 		for (var i = 0; i < converted.Length; i++)
-			converted[i] = Feature.Parse(features.Features[i].ToString());
+			converted[i] = new Feature(features.Features[i].Tag, features.Features[i].Value);
 		_features[features] = converted;
 		return converted;
 	}

@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Documents;
 using SUIsei.Drawing;
@@ -96,6 +97,56 @@ public sealed class ShapedRunCacheTests
 			host.Tick(1.0 / 60.0, 0f, new Vector2(200f, 100f));
 			host.Render();
 		}
+	}
+
+	/// <summary>
+	/// A line's width in EM doesn't depend on the size, so an animated FontSize passed down from a control re-measures and
+	/// redraws the text below it without calling the shaper at all. And measuring and drawing share one shaping: a text
+	/// block laid out and drawn shapes each of its lines once between them.
+	/// </summary>
+	[Test]
+	public void An_animated_font_size_re_measures_the_text_below_it_without_shaping()
+	{
+		var shaper = new CountingShaper();
+		var first = new TextBlock { Text = "Lap 1:23.456" };
+		var second = new TextBlock { Text = "Best\n1:21.002" };
+		var panel = new StackPanel();
+		panel.Children.Add(first);
+		panel.Children.Add(second);
+		var card = new ContentControl { Content = panel };
+		var host = new UIHost();
+		var root = host.CreateRoot(UILayer.Default).Root;
+		root.Font = StandaloneAtlas(shaper);
+		root.Content = card;
+		host.Tick(0.016, 0f, new Vector2(400f, 300f));
+		host.Render();
+		shaper.Shapes.ShouldBe(3); // three lines, each shaped once for both measure and draw
+		var height = second.DesiredSize.Height;
+
+		host.Clock.Tween(card, Control.FontSizeProperty, 28f, TimeSpan.FromSeconds(2));
+		var frame = 0;
+		void Frame()
+		{
+			frame++;
+			host.Tick(1.0 / 60, frame / 60f, new Vector2(400f, 300f));
+			host.Render();
+		}
+		for (var i = 0; i < 5; i++)
+			Frame();
+		// Re-measuring at each new size, and drawing it, allocates nothing either.
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 5; i++)
+				Frame();
+		});
+		while (frame < 130)
+			Frame();
+
+
+		second.FontSize.ShouldBe(28f);
+		second.DesiredSize.Height.ShouldBe(height * 2f, 1e-3f); // re-measured at the new size
+		shaper.Shapes.ShouldBe(3);
+		shaper.Measures.ShouldBe(0);
 	}
 
 	[Test]

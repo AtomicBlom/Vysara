@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Media;
 
 /// <summary>
@@ -12,6 +14,13 @@ public sealed class GeometryGroup : Geometry
 	public static readonly DependencyProperty<GeometryGroup, GeometryCollection?> ChildrenProperty =
 		DependencyProperty.Register(nameof(Children), new PropertyMetadata<GeometryGroup, GeometryCollection?>
 		{
+			// Checked before the group listens to them: children that hold the group, directly or through a group inside
+			// them, would put it inside itself, and building or notifying it would never end.
+			Validate = static (group, children) =>
+			{
+				if (children is { Count: > 0 } && GeometryCollection.Reaches(children, group, null, []))
+					throw new ArgumentException("A GeometryGroup can't hold itself, directly or through a group inside it.", nameof(Children));
+			},
 			PropertyChanged = static (group, oldValue, newValue) =>
 			{
 				oldValue?.RemoveListener(group);
@@ -42,7 +51,7 @@ public sealed class GeometryGroup : Geometry
 
 	private protected override void BuildPath(CompositionPath path)
 	{
-		path.FillRule = FillRule;
+		path.FillRule = FillRule.ToComposition();
 		if (GetValue(ChildrenProperty) is not { } children)
 			return;
 		for (var i = 0; i < children.Count; i++)

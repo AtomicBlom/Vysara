@@ -1,3 +1,5 @@
+using SUIsei.Composition;
+
 namespace SUIsei.Media;
 
 /// <summary>A straight line from <see cref="StartPoint"/> to <see cref="EndPoint"/>, as WinUI's <c>LineGeometry</c>.

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- XAML -> typed control-tree generator wiring (registers *.xaml as AdditionalFiles + the analyzer ref). -->
+  <Import Project="..\build\SUIsei.props" />
+
+  <!-- The gallery's pages, its shell and the renderer that draws them through SUIsei's CPU rasterizer, with no window:
+       the Win32 host (SUIsei.Gallery) shows them, and SUIsei.Tests renders each page and compares it with its golden
+       image, so the gallery the window shows is the one the tests check. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>SUIsei.Gallery</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
+    <ProjectReference Include="..\SUIsei.Rasterizer\SUIsei.Rasterizer.csproj" />
+    <!-- The gallery showcases HarfBuzz shaping: it bakes a glyph-id Cascadia atlas (SUIsei.Text) and drives it with the
+         HarfBuzz shaper (SUIsei.HarfBuzz) so programming ligatures render. -->
+    <ProjectReference Include="..\SUIsei.Text\SUIsei.Text.csproj" />
+    <ProjectReference Include="..\SUIsei.HarfBuzz\SUIsei.HarfBuzz.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SUIsei.Gallery" />
+    <InternalsVisibleTo Include="SUIsei.Tests" />
+  </ItemGroup>
+
+  <!-- The font program the gallery shapes with (HarfBuzz reads its GSUB) and bakes the glyph-id atlas from. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\SUIsei\Assets\Fonts\CascadiaCode.ttf" LogicalName="CascadiaCode.ttf" />
+  </ItemGroup>
+
+  <Import Project="..\build\SUIsei.targets" />
+
+</Project>

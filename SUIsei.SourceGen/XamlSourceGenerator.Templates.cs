@@ -53,7 +53,7 @@ partial class XamlSourceGenerator
 		var ownsMember = ResolveType(gen.Compilation, ns, owner) is { } named && IsAssignableTo(ownerType, named);
 		if (ownsMember && FindAnyProperty(ownerType, prop) is { } member)
 		{
-			EmitMemberPropertyElement(gen, scope, ownerVar, member, propEl);
+			EmitMemberPropertyElement(gen, scope, ownerVar, ownerType, member, propEl);
 			return;
 		}
 
@@ -77,18 +77,69 @@ partial class XamlSourceGenerator
 			gen.Report(UnknownProperty, propEl, attachedOwner.ToDisplayString(), prop);
 	}
 
+	// Set a property the markup gives a value. Inside a ControlTemplate a dependency property takes it on its Template rung,
+	// as WinUI puts every value a template sets on its parts at the templated-parent level: below Local, so a value the app
+	// sets on a part wins, and ClearValue on the part reverts to the template's value. A CLR property whose type differs from
+	// its dependency property's takes the value converted, where the conversion is implicit, and is reported (SUISEI027)
+	// where it is not, since the value then goes through the CLR setter and is the part's own. Elsewhere, and for a CLR
+	// property with no dependency property, which has no levels, the value goes through the property's setter.
+	private static void EmitSet(Gen gen, Scope scope, XObject at, INamedTypeSymbol ownerType, string ownerVar, IPropertySymbol prop, string code)
+	{
+		if (scope.IsControlTemplate && FindDependencyProperty(ownerType, prop.Name) is { } dp && DependencyValueType(dp) is { } valueType)
+		{
+			if (SymbolEqualityComparer.Default.Equals(valueType, prop.Type))
+			{
+				scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({ownerVar}, {Fq(dp.ContainingType!)}.{dp.Name}, {code});");
+				return;
+			}
+			if (gen.Compilation.ClassifyConversion(prop.Type, valueType).IsImplicit)
+			{
+				scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({ownerVar}, {Fq(dp.ContainingType!)}.{dp.Name}, ({Fq(valueType)})({code}));");
+				return;
+			}
+			gen.Report(TemplateValueOnLocal, at, $"{ownerType.Name}.{prop.Name}",
+				$"its type, {prop.Type.ToDisplayString()}, does not convert implicitly to its dependency property's, {valueType.ToDisplayString()}");
+		}
+		scope.Emit($"{ownerVar}.{prop.Name} = {code};");
+	}
+
+	// Set an attached property through its owner's static setter. Inside a ControlTemplate, where the owner declares the
+	// dependency property the setter sets (<Prop>Property, of the setter's value type), it goes on the part's Template rung
+	// instead, as every other value a template gives its parts; one with no such dependency property is reported
+	// (SUISEI027), since the setter makes it the part's own.
+	private static void EmitAttachedSet(Gen gen, Scope scope, XObject at, INamedTypeSymbol owner, IMethodSymbol setter, string targetVar, string code)
+	{
+		if (scope.IsControlTemplate)
+		{
+			var property = setter.Name.Substring("Set".Length);
+			if (FindDependencyProperty(owner, property) is { } dp && DependencyValueType(dp) is { } valueType
+				&& SymbolEqualityComparer.Default.Equals(valueType, setter.Parameters[1].Type))
+			{
+				scope.Emit($"global::SUIsei.Generated.TemplateValues.Set({targetVar}, {Fq(dp.ContainingType!)}.{dp.Name}, {code});");
+				return;
+			}
+			gen.Report(TemplateValueOnLocal, at, $"{owner.Name}.{property}",
+				$"{owner.Name} declares no dependency property {property}Property of the setter's value type");
+		}
+		scope.Emit($"{Fq(owner)}.{setter.Name}({targetVar}, {code});");
+	}
+
 	// <Owner.Prop> for a property of the element: text is converted for the property's type, one object is assigned, and
 	// for a collection (a type with a one-argument Add) each object is added — the only form a get-only collection takes.
-	private static void EmitMemberPropertyElement(Gen gen, Scope scope, string ownerVar, IPropertySymbol member, XElement propEl)
+	// Assigning needs a setter the generated class can reach, as an attribute does.
+	private static void EmitMemberPropertyElement(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, IPropertySymbol member, XElement propEl)
 	{
 		var children = ObjectChildren(propEl);
 		var text = TextContent(propEl);
+		var unassignable = member.SetMethod is null ? null : UnassignableReason(gen, member, ownerType, ownerVar == "this");
 		if (children.Count == 0)
 		{
 			if (text is null || member.SetMethod is null)
 				gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (needs a value, or objects for a collection)");
+			else if (unassignable is not null)
+				gen.Report(OutsideSubset, propEl, $"Setting {ownerType.Name}.{member.Name}", unassignable);
 			else if (ConvertOrReport(gen, propEl, member.Type, text, member.Name, member) is { } code)
-				scope.Emit($"{ownerVar}.{member.Name} = {code};");
+				EmitSet(gen, scope, propEl, member.ContainingType, ownerVar, member, code);
 			return;
 		}
 		if (text is not null)
@@ -99,8 +150,10 @@ partial class XamlSourceGenerator
 
 		if (children.Count == 1 && member.SetMethod is not null && ChildFits(gen, children[0], member.Type))
 		{
-			if (EmitElement(gen, scope, children[0]) is { } childVar)
-				scope.Emit($"{ownerVar}.{member.Name} = {childVar};");
+			if (unassignable is not null)
+				gen.Report(OutsideSubset, propEl, $"Setting {ownerType.Name}.{member.Name}", unassignable);
+			else if (EmitElement(gen, scope, children[0]) is { } childVar)
+				EmitSet(gen, scope, propEl, member.ContainingType, ownerVar, member, childVar);
 			return;
 		}
 		if (!IsAddable(member.Type))
@@ -128,7 +181,7 @@ partial class XamlSourceGenerator
 		else
 			gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (takes one value)");
 		if (code is not null)
-			scope.Emit($"{Fq(owner)}.{setter.Name}({ownerVar}, {code});");
+			EmitAttachedSet(gen, scope, propEl, owner, setter, ownerVar, code);
 	}
 
 	// A property element's object children, skipping design-time and other ignorable markup.
@@ -140,6 +193,33 @@ partial class XamlSourceGenerator
 	{
 		var text = string.Concat(propEl.Nodes().OfType<XText>().Select(t => t.Value)).Trim();
 		return text.Length > 0 ? text : null;
+	}
+
+	// The one `kind` element a property element holds (<X.Template><ControlTemplate>, <VisualState.Storyboard><Storyboard>),
+	// skipping design-time and other ignorable markup. Anything else in it, a second one or text, is reported rather than
+	// dropped, and so is an empty one; null when it holds no `kind`.
+	private static XElement? SingleChild(Gen gen, XElement propEl, string kind)
+	{
+		XElement? found = null;
+		var reported = false;
+		foreach (var child in ObjectChildren(propEl))
+		{
+			if (child.Name.LocalName == kind && found is null)
+			{
+				found = child;
+				continue;
+			}
+			gen.Report(BadPropertyElement, child, $"{propEl.Name.LocalName} holding a {child.Name.LocalName} (it takes one {kind})");
+			reported = true;
+		}
+		if (TextContent(propEl) is not null)
+		{
+			gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (it takes one {kind}, not text)");
+			reported = true;
+		}
+		if (found is null && !reported)
+			gen.Report(BadPropertyElement, propEl, $"{propEl.Name.LocalName} (it takes one {kind})");
+		return found;
 	}
 
 	// Whether an object element would be a value of `type` (so it is assigned rather than added to a collection).
@@ -158,13 +238,37 @@ partial class XamlSourceGenerator
 		{
 			if (groupEl.Name.LocalName != "VisualStateGroup") { gen.Report(BadPropertyElement, groupEl, groupEl.Name.LocalName); continue; }
 			var groupVar = NewName(gen, "__vsgrp");
-			var groupName = StateName(groupEl);
+			var groupName = StateName(gen, groupEl);
 			scope.Emit($"var {groupVar} = new global::SUIsei.Animation.VisualStateGroup {{ Name = {Quote(groupName)} }};");
 			foreach (var stateEl in groupEl.Elements())
 			{
-				if (stateEl.Name.LocalName != "VisualState") { gen.Report(BadPropertyElement, stateEl, stateEl.Name.LocalName); continue; }
-				var stateName = StateName(stateEl);
-				var sbEl = stateEl.Elements().FirstOrDefault(e => e.Name.LocalName == "Storyboard");
+				if (IsIgnorable(stateEl, stateEl.Name.Namespace))
+					continue;
+				if (stateEl.Name.LocalName != "VisualState")
+				{
+					gen.Report(OutsideSubset, stateEl, $"<{stateEl.Name.LocalName}> in a VisualStateGroup", stateEl.Name.LocalName == "VisualStateGroup.Transitions"
+						? " (states change at once, or by their own storyboards' timing)" : " (a group holds VisualStates)");
+					continue;
+				}
+				var stateName = StateName(gen, stateEl);
+				// A state holds one Storyboard; WinUI's setters and triggers are reported rather than dropped.
+				XElement? sbEl = null;
+				foreach (var child in stateEl.Elements())
+				{
+					if (IsIgnorable(child, child.Name.Namespace))
+						continue;
+					if (child.Name.LocalName == "Storyboard" && sbEl is null)
+						sbEl = child;
+					else if (child.Name.LocalName == "VisualState.Storyboard" && sbEl is null)
+						sbEl = SingleChild(gen, child, "Storyboard");
+					else
+						gen.Report(OutsideSubset, child, $"<{child.Name.LocalName}> in a VisualState", child.Name.LocalName switch
+						{
+							"VisualState.Setters" => " (write the values as animations in the state's Storyboard)",
+							"VisualState.StateTriggers" => " (go to the state from code with VisualStateManager.GoToState)",
+							_ => " (a state holds one Storyboard)",
+						});
+				}
 				var sbExpr = sbEl is null ? "null" : EmitStoryboard(gen, scope, ownerVar, sbEl);
 				scope.Emit($"{groupVar}.States.Add(new global::SUIsei.Animation.VisualState {{ Name = {Quote(stateName)}, Storyboard = {sbExpr} }});");
 			}
@@ -173,16 +277,25 @@ partial class XamlSourceGenerator
 		scope.Emit($"global::SUIsei.Animation.VisualStateManager.SetVisualStateGroups({ownerVar}, {groupsVar});");
 	}
 
-	// A visual state's or group's name: x:Name, as WinUI markup writes it, or Name.
-	private static string StateName(XElement el) => el.Attribute(X + "Name")?.Value ?? el.Attribute("Name")?.Value ?? "";
+	// A visual state's or group's name: x:Name, as WinUI markup writes it. A bare Name is reported: WinUI's is read-only,
+	// set by x:Name alone. Every other attribute is reported too, since a state or group takes none.
+	private static string StateName(Gen gen, XElement el)
+	{
+		foreach (var attr in el.Attributes())
+		{
+			if (attr.IsNamespaceDeclaration || IsIgnorable(el, attr.Name.Namespace) || IsDirective(gen, el, attr))
+				continue;
+			gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a {el.Name.LocalName}",
+				attr.Name.LocalName == "Name" ? " (WinUI names a state or group with x:Name)" : "");
+		}
+		return el.Attribute(X + "Name")?.Value ?? "";
+	}
 
 	// --- Templates: ControlTemplate / DataTemplate / ItemsPanelTemplate factories ---
 
 	private static void EmitControlTemplateProperty(Gen gen, Scope scope, string ownerVar, INamedTypeSymbol ownerType, XElement propEl)
 	{
-		var templateEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ControlTemplate");
-		if (templateEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
-		if (ControlTemplateValue(gen, templateEl, ownerType) is { } template)
+		if (SingleChild(gen, propEl, "ControlTemplate") is { } templateEl && ControlTemplateValue(gen, templateEl, ownerType) is { } template)
 			scope.Emit($"{ownerVar}.Template = {template};");
 	}
 
@@ -200,8 +313,8 @@ partial class XamlSourceGenerator
 
 	private static void EmitDataTemplateProperty(Gen gen, Scope scope, string ownerVar, string targetProp, XElement propEl)
 	{
-		var templateEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "DataTemplate");
-		if (templateEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
+		if (SingleChild(gen, propEl, "DataTemplate") is not { } templateEl)
+			return;
 
 		// x:DataType types the item so the template's {x:Bind}s resolve; without it, an {x:Bind} inside diagnoses.
 		var dataType = ResolveTypeName(gen, templateEl, templateEl.Attribute(X + "DataType")?.Value);
@@ -217,17 +330,19 @@ partial class XamlSourceGenerator
 	// the panel with its attributes, as any template root is built.
 	private static void EmitItemsPanelProperty(Gen gen, Scope scope, string ownerVar, XElement propEl)
 	{
-		var tmplEl = propEl.Elements().FirstOrDefault(e => e.Name.LocalName == "ItemsPanelTemplate");
-		var panelEl = tmplEl?.Elements().FirstOrDefault(e => !e.Name.LocalName.Contains('.'));
-		if (panelEl is null) { gen.Report(BadPropertyElement, propEl, propEl.Name.LocalName); return; }
-		var panelType = ResolveType(gen.Compilation, panelEl.Name.Namespace, panelEl.Name.LocalName);
-		if (panelType is null) { gen.Report(UnknownElement, panelEl, panelEl.Name.LocalName); return; }
-		if (gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Panel") is not { } panel || !IsAssignableTo(panelType, panel))
-		{
-			gen.Report(BadPropertyElement, panelEl, $"ItemsPanelTemplate (its root must be a Panel; '{panelType.Name}' is not)");
+		if (SingleChild(gen, propEl, "ItemsPanelTemplate") is not { } tmplEl)
 			return;
+		if (TemplateRoots(tmplEl).FirstOrDefault() is { } panelEl)
+		{
+			var panelType = ResolveType(gen.Compilation, panelEl.Name.Namespace, panelEl.Name.LocalName);
+			if (panelType is null) { gen.Report(UnknownElement, panelEl, panelEl.Name.LocalName); return; }
+			if (gen.Compilation.GetTypeByMetadataName("SUIsei.Controls.Panel") is not { } panel || !IsAssignableTo(panelType, panel))
+			{
+				gen.Report(BadPropertyElement, panelEl, $"ItemsPanelTemplate (its root must be a Panel; '{panelType.Name}' is not)");
+				return;
+			}
 		}
-		var method = EmitTemplateFactory(gen, tmplEl!, isControlTemplate: false,
+		var method = EmitTemplateFactory(gen, tmplEl, isControlTemplate: false,
 			paramDecl: "", castLocal: null, dataRootExpr: "", dataRootType: null, returnType: "global::SUIsei.Controls.Panel");
 		if (method is not null)
 			scope.Emit($"{ownerVar}.ItemsPanel = new global::SUIsei.Controls.ItemsPanelTemplate {{ Factory = {method} }};");
@@ -238,8 +353,12 @@ partial class XamlSourceGenerator
 	private static string? EmitTemplateFactory(Gen gen, XElement templateEl, bool isControlTemplate, string paramDecl, string? castLocal, string dataRootExpr, INamedTypeSymbol? dataRootType,
 		string returnType = "global::SUIsei.FrameworkElement")
 	{
-		var rootChild = templateEl.Elements().FirstOrDefault(e => !e.Name.LocalName.Contains('.'));
+		ReportTemplateMarkup(gen, templateEl, isControlTemplate);
+		var roots = TemplateRoots(templateEl);
+		var rootChild = roots.FirstOrDefault();
 		if (rootChild is null) { gen.Report(BadPropertyElement, templateEl, templateEl.Name.LocalName); return null; }
+		for (var i = 1; i < roots.Count; i++)
+			gen.Report(OutsideSubset, roots[i], $"A second root, {roots[i].Name.LocalName}, in a {templateEl.Name.LocalName}", " (a template builds one element; wrap them in a panel)");
 
 		var method = NewName(gen, "__Template");
 		var body = new StringBuilder();
@@ -267,6 +386,34 @@ partial class XamlSourceGenerator
 		gen.Methods.AppendLine($"\t\treturn {rootVar};");
 		gen.Methods.AppendLine("\t}");
 		return method;
+	}
+
+	// A template's object elements, which it builds the first of, skipping design-time and other ignorable markup.
+	private static List<XElement> TemplateRoots(XElement templateEl) =>
+		templateEl.Elements().Where(e => !e.Name.LocalName.Contains('.') && !IsIgnorable(e, e.Name.Namespace)).ToList();
+
+	// Report what the template element itself carries that it doesn't build: a directive it doesn't take (x:DataType
+	// anywhere but a DataTemplate, x:DefaultBindMode, …), any attribute but a ControlTemplate's TargetType, and a property
+	// element. x:Key and x:DataType are read by the code that keeps or types the template.
+	private static void ReportTemplateMarkup(Gen gen, XElement templateEl, bool isControlTemplate)
+	{
+		foreach (var attr in templateEl.Attributes())
+		{
+			var ns = attr.Name.Namespace;
+			if (attr.IsNamespaceDeclaration || IsIgnorable(templateEl, ns) || IsDirective(gen, templateEl, attr)
+				|| (isControlTemplate && ns == XNamespace.None && attr.Name.LocalName == "TargetType"))
+				continue;
+			if (ns != XNamespace.None)
+				gen.Report(IgnoredContent, attr, $"attribute '{attr.Name.LocalName}' in XML namespace '{ns.NamespaceName}'");
+			else
+				gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a {templateEl.Name.LocalName}",
+					isControlTemplate ? " (a ControlTemplate takes a TargetType)" : "");
+		}
+		foreach (var child in templateEl.Elements())
+		{
+			if (child.Name.LocalName.Contains('.') && !IsIgnorable(child, child.Name.Namespace))
+				gen.Report(BadPropertyElement, child, child.Name.LocalName);
+		}
 	}
 
 	// A template-scoped {x:Bind} — a OneTime read against the template's data root (the item is fixed for the
@@ -298,12 +445,12 @@ partial class XamlSourceGenerator
 	// A {TemplateBinding source} wire: the templated control's property flows OneWay into a template part's property.
 	private static void EmitTemplateBinding(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop, string sourceProp)
 	{
-		// Content is a CLR property carrying a ContentChanged event (not a dependency property); wire via that event.
+		// Content is a CLR property, not a dependency property: its template binding is the control's own, dropped with the
+		// template as the others are.
 		if (sourceProp == "Content")
 		{
 			var host = $"((global::SUIsei.Controls.ContentControl){scope.DataRootExpr})";
-			scope.Emit($"{targetVar}.{prop.Name} = {host}.Content;");
-			scope.Emit($"{host}.ContentChanged += (_, _) => {targetVar}.{prop.Name} = {host}.Content;");
+			scope.Emit($"{host}.RegisterContentTemplateBinding(__v => {targetVar}.{prop.Name} = __v);");
 			return;
 		}
 		// Otherwise the source must be a typed dependency property on the templated control; the push is typed too, so a
@@ -504,14 +651,55 @@ partial class XamlSourceGenerator
 	}
 
 	// <Grid.ColumnDefinitions>/<Grid.RowDefinitions> → grid.<collection>.Add(GridLength …) per ColumnDefinition/
-	// RowDefinition child, reading its Width/Height as a GridLength. A definition with neither is "*".
+	// RowDefinition child, reading its Width/Height as a GridLength, written as an attribute or a property element
+	// (<RowDefinition.Height>Auto</RowDefinition.Height>). A definition with neither is "*". Anything else on a definition,
+	// its limits among them, is reported, since a definition takes its size alone.
 	private static void EmitGridDefinitions(Gen gen, Scope scope, string ownerVar, XElement propEl, string collection)
 	{
 		var gridLength = gen.Compilation.GetTypeByMetadataName("SUIsei.GridLength")!;
+		var definition = collection == "RowDefinitions" ? "RowDefinition" : "ColumnDefinition";
+		var sizeName = collection == "RowDefinitions" ? "Height" : "Width";
+		var sizeElementName = $"{definition}.{sizeName}";
 		foreach (var def in propEl.Elements())
 		{
-			var size = def.Attribute("Width") ?? def.Attribute("Height");
-			var code = size is null ? "global::SUIsei.GridLength.Star" : ConvertOrReport(gen, size, gridLength, size.Value, size.Name.LocalName);
+			if (IsIgnorable(def, def.Name.Namespace))
+				continue;
+			if (def.Name.LocalName != definition)
+			{
+				gen.Report(OutsideSubset, def, $"<{def.Name.LocalName}> in Grid.{collection}", $" (it holds {definition}s)");
+				continue;
+			}
+			foreach (var attr in def.Attributes())
+			{
+				if (attr.IsNamespaceDeclaration || IsIgnorable(def, attr.Name.Namespace) || IsDirective(gen, def, attr) || attr.Name.LocalName == sizeName)
+					continue;
+				gen.Report(OutsideSubset, attr, $"'{attr.Name.LocalName}' on a {definition}", $" (a {definition} takes its {sizeName} alone)");
+			}
+			var size = def.Attribute(sizeName);
+			XElement? sizeEl = null;
+			foreach (var child in ObjectChildren(def))
+			{
+				if (child.Name.LocalName == sizeElementName && size is null && sizeEl is null)
+					sizeEl = child;
+				else
+					gen.Report(OutsideSubset, child, $"<{child.Name.LocalName}> in a {definition}", child.Name.LocalName == sizeElementName
+						? $" (its {sizeName} is given already)" : $" (a {definition} takes its {sizeName} alone)");
+			}
+			if (TextContent(def) is not null)
+				gen.Report(OutsideSubset, def, $"Text in a {definition}", $" (write its {sizeName} as an attribute)");
+
+			string? code;
+			if (size is not null)
+				code = ConvertOrReport(gen, size, gridLength, size.Value, sizeName);
+			else if (sizeEl is null)
+				code = "global::SUIsei.GridLength.Star";
+			else if (ObjectChildren(sizeEl).Count == 0 && TextContent(sizeEl) is { } text)
+				code = ConvertOrReport(gen, sizeEl, gridLength, text, sizeName);
+			else
+			{
+				gen.Report(BadPropertyElement, sizeEl, $"{sizeElementName} (takes a length as text, such as Auto, * or 40)");
+				code = null;
+			}
 			if (code is not null)
 				scope.Emit($"{ownerVar}.{collection}.Add({code});");
 		}

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\build\SUIsei.props" />
+
+  <!-- SUIsei as a game ships it: SUIsei.Diagnostics never turned on. SUIsei.Tests turns the switch on for its whole
+       process, and a process can't turn it off again, so the off path runs here, in a process of its own. It references
+       the endpoint as a debug build would, to show that starting it does nothing while the switch is off. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="TUnit.Core" />
+    <Using Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUIsei\SUIsei.csproj" />
+    <ProjectReference Include="..\SUIsei.Diagnostics.Endpoint\SUIsei.Diagnostics.Endpoint.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\build\SUIsei.targets" />
+
+</Project>

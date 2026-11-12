@@ -10,7 +10,8 @@ namespace SUIsei.RoseTap;
 /// then answer each framed request until the host goes, asks the tap to detach, or the session is ended.
 /// <para>
 /// All of it happens on a reader thread of the session's own. A command that reads or changes the UI is handed to the
-/// game's UI thread with <see cref="Diagnostics.Post"/>, which runs it at the next tick, and the reader waits for it
+/// game's UI thread with <see cref="Diagnostics.Post(Action)"/>, which runs it at the next tick (so the tap assumes every
+/// host ticks on one thread), and the reader waits for it
 /// within a bound; a game that stops ticking leaves the host's request unanswered, which the host's own bound and its
 /// warning that the request may still land already cover. <c>detach</c> is answered on the reader thread.
 /// </para>

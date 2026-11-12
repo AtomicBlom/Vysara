@@ -7,7 +7,7 @@
     analyzers/dotnet/cs/ in this package, and NuGet wires it as an analyzer automatically; this file registers the
     .xaml it reads, as the source build's build/SUIsei.targets does. Every *.xaml under the project (or under
     $(SUIseiXamlSourceDir)), except the build output and whatever the project keeps out of its default item globs
-    (DefaultItemExcludes), becomes:
+    (DefaultItemExcludes, and the hidden folders of DefaultExcludesInProjectFolder), becomes:
       - <AdditionalFiles>, so the bundled SUIsei.SourceGen generator produces the typed control tree and compiled
         x:Bind glue;
       - <UpToDateCheckInput>, so the IDE's fast up-to-date check never serves a stale tree after an edit;
@@ -22,7 +22,7 @@
 
   <ItemGroup Condition="'$(SUIseiXamlEnable)' == 'true'">
     <SUIseiXaml Include="$(SUIseiXamlSourceDir)\**\*.xaml"
-               Exclude="$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
+               Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
     <AdditionalFiles Include="@(SUIseiXaml)" />
     <UpToDateCheckInput Include="@(SUIseiXaml)" />
     <Watch Include="@(SUIseiXaml)" />

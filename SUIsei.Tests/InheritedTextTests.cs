@@ -1,5 +1,6 @@
 using System.Numerics;
 using SUIsei.Animation;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Media;
 using SUIsei.Tests.Sample;
@@ -36,8 +37,8 @@ public sealed class InheritedTextTests
 			Factory = static control =>
 			{
 				var host = (ContentControl)control;
-				var presenter = new ContentPresenter { Content = host.Content };
-				host.ContentChanged += (_, _) => presenter.Content = host.Content;
+				var presenter = new ContentPresenter();
+				host.RegisterContentTemplateBinding(content => presenter.Content = content);
 				return new Border { Child = presenter };
 			},
 		},
@@ -122,28 +123,41 @@ public sealed class InheritedTextTests
 		loose.HasAnyValue(TextBlock.ForegroundProperty).ShouldBeFalse();
 	}
 
+	/// <summary>
+	/// As WinUI's default styles do, a built-in control's look sets its own text size and brush, which outrank what it
+	/// would inherit: a page's text properties reach its text, not its buttons and text boxes. Set on the control itself,
+	/// they reach the control's own text.
+	/// </summary>
 	[Test]
-	public void A_control_passes_its_values_to_the_controls_inside_it()
+	public void Built_in_controls_keep_their_own_text_and_pass_what_is_set_on_them_to_their_content()
 	{
 		var button = new Button { Content = "Go" };
 		var box = new TextBox { Text = "Typed" };
+		var plain = new TextBlock { Text = "Label" };
 		var panel = new StackPanel();
 		panel.Children.Add(button);
 		panel.Children.Add(box);
+		panel.Children.Add(plain);
 		var page = new ContentControl { Content = panel, FontSize = 22f, Foreground = Gold };
 		var host = Hosted(page);
 
-		button.FontSize.ShouldBe(22f);
-		button.Foreground.ShouldBeSameAs(Gold);
+		plain.FontSize.ShouldBe(22f);
+		plain.Foreground.ShouldBeSameAs(Gold);
+		button.FontSize.ShouldBe(14f);
+		button.Foreground.SolidColor().ShouldBe(InheritedText.BuiltInForeground);
+		box.FontSize.ShouldBe(14f);
 		var label = TextOf(PresenterOf(button));
-		label.FontSize.ShouldBe(22f);
-		label.Foreground.ShouldBeSameAs(Gold); // through the button's own {TemplateBinding Foreground} as well
-		box.FontSize.ShouldBe(22f);
+		label.FontSize.ShouldBe(14f);
 
-		page.FontSize = 26f;
+		button.FontSize = 26f;
+		button.Foreground = Gold;
 		host.Tick(0, 0f, new Vector2(300f, 300f));
+		label.FontSize.ShouldBe(26f);
+		label.Foreground.ShouldBeSameAs(Gold); // through the button's own {TemplateBinding Foreground} as well
 		label.DesiredSize.Height.ShouldBe(LineHeight * 26f, 1e-3f);
-		box.DesiredSize.Height.ShouldBeGreaterThan(LineHeight * 26f); // the box measures at its inherited size too
+		button.ClearValue(Control.FontSizeProperty);
+		host.Tick(0, 0f, new Vector2(300f, 300f));
+		label.FontSize.ShouldBe(14f); // back to the built-in look's, not the page's
 	}
 
 	[Test]
@@ -306,6 +320,65 @@ public sealed class InheritedTextTests
 		view.Own.TextAlignment.ShouldBe(TextAlignment.Right); // End, from markup, is Right
 		view.Styled.FontSize.ShouldBe(9f);
 		view.Styled.Foreground.ShouldBeSameAs(view.Title.Foreground);
+	}
+
+	/// <summary>
+	/// A template whose presenter takes the control's own brush and animates
+	/// <c>(ContentPresenter.Foreground).(SolidColorBrush.Color)</c>, as WinUI templates do: each built-in control's look gives
+	/// it a brush of its own, so the state recolours that control's text and no other's.
+	/// </summary>
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public void A_state_animating_a_built_in_control_s_foreground_recolours_only_that_control(bool useTransitions)
+	{
+		var lit = HdrColor.FromRgb(255, 215, 0);
+		var template = new ControlTemplate
+		{
+			Factory = control =>
+			{
+				var host = (ContentControl)control;
+				var presenter = new ContentPresenter { Content = host.Content };
+				host.RegisterTemplateBinding(Control.ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
+				var border = new Border { Child = presenter };
+				var emphasis = new VisualStateGroup { Name = "Emphasis" };
+				emphasis.States.Add(new VisualState
+				{
+					Name = "Lit",
+					Storyboard = new Storyboard
+					{
+						Children =
+						{
+							new ColorAnimation
+							{
+								To = lit, Duration = TimeSpan.FromSeconds(0.2), Target = presenter,
+								TargetProperty = new PropertyPath(ContentPresenter.ForegroundProperty, SolidColorBrush.ColorProperty),
+							},
+						},
+					},
+				});
+				VisualStateManager.SetVisualStateGroups(border, [emphasis]);
+				return border;
+			},
+		};
+		var button = new Button { Content = "Go", Template = template };
+		var other = new Button { Content = "Stay", Template = template };
+		var panel = new StackPanel();
+		panel.Children.Add(button);
+		panel.Children.Add(other);
+		var host = Hosted(panel);
+		var label = TextOf(PresenterOf(button));
+		label.ShownColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
+
+		VisualStateManager.GoToState(button, "Lit", useTransitions).ShouldBeTrue();
+		for (var i = 0; i < 4; i++)
+			host.Tick(0.1, 0f, new Vector2(300f, 300f));
+
+		ShouldBeNear(label.ShownColor(), lit);
+		ShouldBeNear(button.Foreground.SolidColor(), lit); // the button's own brush, recoloured in place
+		TextOf(PresenterOf(other)).ShownColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
+		other.Foreground.SolidColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
+		new Button().Foreground.SolidColor().ShouldBe(HdrColor.FromRgb(255, 255, 255));
 	}
 
 	[Test]

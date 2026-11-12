@@ -20,6 +20,14 @@ public sealed class InputManager
 	private readonly PointerRoutedEventArgs _args = new();
 	private readonly RoutedEventArgs _captureArgs = new();
 	private List<UIElement> _scratch = [];
+	// Each pointer's last routed event, which the exit raised on an element that left the tree under it carries.
+	private readonly Dictionary<uint, PointerInput> _lastInput = [];
+	// Reused by ReleaseWithin to collect the pointers whose captee left, so their entries can be removed after the walk.
+	private readonly List<uint> _pointerIds = [];
+	// Explicit captees and over-chain members that left the tree, whose PointerCaptureLost and PointerExited RaiseReleased
+	// has yet to raise.
+	private readonly List<(UIElement Element, uint PointerId)> _lostCapture = [];
+	private readonly List<(UIElement Element, uint PointerId)> _exited = [];
 
 	/// <summary>Invoked by <see cref="UIHost"/> on every pointer press so it can update keyboard focus.</summary>
 	internal Action<UIElement?>? OnPress { get; set; }
@@ -28,6 +36,7 @@ public sealed class InputManager
 	internal void Process(in PointerInput e, IReadOnlyList<UIView> views)
 	{
 		var hit = HitTest(e.Position, views);
+		_lastInput[e.PointerId] = e;
 
 		// A wheel event is its own routed event (no over-chain / move semantics): route it to the captee or the
 		// element under the pointer and stop.
@@ -131,6 +140,81 @@ public sealed class InputManager
 		return true;
 	}
 
+	/// <summary>
+	/// <paramref name="subtree"/> left the live tree: release every capture an element in it holds and drop its elements
+	/// from the pointers' over-chains, so a detached element neither keeps receiving a drag nor keeps the host reporting
+	/// that it wants the pointer. <see cref="UIElement.PointerCaptureLostEvent"/> on an explicit captee and
+	/// <see cref="UIElement.PointerExitedEvent"/> on each element dropped from an over-chain (which clears a button's
+	/// PointerOver) are queued for <see cref="RaiseReleased"/>, which the host calls once layout is done: an element can
+	/// leave in the middle of a layout pass (a virtualizing panel recycling a row), and no app code runs there. Runs as
+	/// elements leave, which includes every container a virtualizing panel recycles, so it allocates nothing once warm.
+	/// </summary>
+	internal void ReleaseWithin(UIElement subtree)
+	{
+		_pointerIds.Clear();
+		foreach (var (pointerId, captee) in _explicitCapture)
+		{
+			if (captee.IsWithin(subtree))
+				_pointerIds.Add(pointerId);
+		}
+		foreach (var pointerId in _pointerIds)
+		{
+			if (_explicitCapture.Remove(pointerId, out var captee))
+				_lostCapture.Add((captee, pointerId));
+		}
+
+		_pointerIds.Clear();
+		foreach (var (pointerId, captee) in _implicitCapture)
+		{
+			if (captee is not null && captee.IsWithin(subtree))
+				_pointerIds.Add(pointerId);
+		}
+		foreach (var pointerId in _pointerIds)
+			_implicitCapture.Remove(pointerId);
+
+		// In chain order, leaf first, as a move off them would raise their exits.
+		foreach (var (pointerId, chain) in _overChains)
+		{
+			for (var i = 0; i < chain.Count;)
+			{
+				if (chain[i].IsWithin(subtree))
+				{
+					_exited.Add((chain[i], pointerId));
+					chain.RemoveAt(i);
+				}
+				else
+					i++;
+			}
+		}
+	}
+
+	/// <summary>
+	/// Raise what <see cref="ReleaseWithin"/> queued: <see cref="UIElement.PointerCaptureLostEvent"/> on each explicit
+	/// captee that left, unless it has captured that pointer again since, then <see cref="UIElement.PointerExitedEvent"/>
+	/// on each element dropped from an over-chain, unless the pointer is over it again. Called by the host outside layout.
+	/// A handler may change capture or make more elements leave; what that queues is raised in the same call.
+	/// </summary>
+	internal void RaiseReleased()
+	{
+		for (var i = 0; i < _lostCapture.Count; i++)
+		{
+			var (element, pointerId) = _lostCapture[i];
+			if (_explicitCapture.TryGetValue(pointerId, out var captee) && ReferenceEquals(captee, element))
+				continue;
+			RaiseCaptureLost(element);
+		}
+		_lostCapture.Clear();
+
+		for (var i = 0; i < _exited.Count; i++)
+		{
+			var (element, pointerId) = _exited[i];
+			if (_overChains.TryGetValue(pointerId, out var chain) && Contains(chain, element))
+				continue;
+			RaiseDirect(UIElement.PointerExitedEvent, element, _lastInput.GetValueOrDefault(pointerId));
+		}
+		_exited.Clear();
+	}
+
 	// Diff the new over-chain against the previous one and raise enter/exit (direct, per element). The previous
 	// chain is reused as the next scratch buffer to avoid per-move allocation.
 	private void UpdateOverChain(in PointerInput e, UIElement? hit)
@@ -174,6 +258,8 @@ public sealed class InputManager
 	{
 		_args.Pointer = new PointerPoint(e.Position, e.Buttons, e.Pressure);
 		_args.Device = e.Device;
+		_args.PointerId = e.PointerId;
+		_args.Wheel = Vector2.Zero;
 
 		var preview = PreviewOf(evt);
 		if (preview is not null)
@@ -190,6 +276,7 @@ public sealed class InputManager
 	{
 		_args.Pointer = new PointerPoint(e.Position, e.Buttons, e.Pressure);
 		_args.Device = e.Device;
+		_args.PointerId = e.PointerId;
 		_args.Wheel = e.Wheel;
 		target.RaiseEvent(UIElement.PreviewPointerWheelChangedEvent, _args);
 		if (_args.Handled)
@@ -202,6 +289,8 @@ public sealed class InputManager
 	{
 		_args.Pointer = new PointerPoint(e.Position, e.Buttons, e.Pressure);
 		_args.Device = e.Device;
+		_args.PointerId = e.PointerId;
+		_args.Wheel = Vector2.Zero;
 		target.RaiseEvent(evt, _args);
 	}
 

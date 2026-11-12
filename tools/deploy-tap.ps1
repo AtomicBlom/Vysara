@@ -14,8 +14,10 @@
     only confuse whoever reads the folder.
 
     A game opens that endpoint only when its runtime config turns SUIsei.Diagnostics.Enabled on (see
-    SUIsei.RoseTap/README.md). A game that has loaded the tap holds the file open, so close it before
-    deploying again.
+    SUIsei.RoseTap/README.md), and by default loads a tap only from this taps folder and the folders
+    $env:ROSEMCP_TAPS names. RoseMCP keeps its taps folder beside its settings wherever it is installed, so
+    $env:ROSEMCP_DEPLOY_ROOT doesn't move it. A game that has loaded the tap holds the file open, so close it
+    before deploying again.
 
     Paths use forward slashes throughout; PowerShell accepts them on Windows.
 
@@ -24,13 +26,12 @@
     Build the tap and deploy it to this machine's RoseMCP install.
 
 .EXAMPLE
-    ./tools/deploy-tap.ps1 -Destination C:/Tools/RoseMcp
-    Deploy it to the taps folder of a specific install root, overriding $env:ROSEMCP_DEPLOY_ROOT.
+    ./tools/deploy-tap.ps1 -Destination C:/Tools/taps
+    Deploy it to another folder, which RoseMCP and the game look in only when $env:ROSEMCP_TAPS names it.
 #>
 [CmdletBinding()]
 param(
-    # The RoseMCP install root, whose taps folder the tap goes in. Falls back to
-    # $env:ROSEMCP_DEPLOY_ROOT, then %LOCALAPPDATA%/BinaryVibrance/RoseMCP, as RoseMCP's own deploy does.
+    # The folder the tap goes in. Defaults to RoseMCP's taps folder, %LOCALAPPDATA%/BinaryVibrance/RoseMCP/taps.
     [string] $Destination,
 
     [ValidateSet('Release', 'Debug')]
@@ -43,12 +44,11 @@ $repo = Split-Path $PSScriptRoot -Parent
 
 if (-not $Destination)
 {
-    $configured = $env:ROSEMCP_DEPLOY_ROOT
     $localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME '.local/share' }
-    $Destination = if ($configured) { $configured } else { Join-Path $localAppData 'BinaryVibrance/RoseMCP' }
+    $Destination = Join-Path $localAppData 'BinaryVibrance/RoseMCP/taps'
 }
 
-$taps = (Join-Path $Destination 'taps').Replace('\', '/')
+$taps = $Destination.Replace('\', '/')
 
 # A fresh stage, because `build -o` never removes what it does not write, and a leftover from an
 # earlier build would otherwise be deployed as though this one had produced it.

@@ -28,6 +28,7 @@ public sealed class Slider : Control
 	private static readonly SolidColorBrush ThumbOver = Brush.Sealed(HdrColor.FromRgb(120, 175, 245));
 	private static readonly SolidColorBrush ThumbPressed = Brush.Sealed(HdrColor.FromRgb(150, 195, 255));
 	private static readonly SolidColorBrush ThumbDisabled = Brush.Sealed(HdrColor.FromRgb(95, 98, 108));
+	private static readonly SolidColorBrush RailDisabled = Brush.Sealed(HdrColor.FromRgb(56, 58, 66));
 
 	private SliderTrack? _track;
 	private bool _dragging;
@@ -52,7 +53,12 @@ public sealed class Slider : Control
 				PropertyChanged = static (s, _, _) => s.OnValueChanged(),
 			});
 
-	public Slider() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
+	public Slider()
+	{
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		// As WinUI's default style does (SliderTrackValueFill): the fill takes the slider's Foreground, the look's accent.
+		InheritedText.GiveBuiltInLook(this, FillColor.Color);
+	}
 
 	/// <summary>The low end of the range (default 0).</summary>
 	public double Minimum { get => GetValue(MinimumProperty); set => SetValue(MinimumProperty, value); }
@@ -239,8 +245,8 @@ public sealed class Slider : Control
 
 			var rail = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
 			var fill = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
-			slider.RegisterTemplateBinding(BackgroundProperty, value => rail.Background = value ?? RailColor);
-			slider.RegisterTemplateBinding(ForegroundProperty, value => fill.Background = value ?? FillColor);
+			slider.RegisterTemplateBinding(BackgroundProperty, rail, Border.BackgroundProperty, static value => value ?? RailColor);
+			slider.RegisterTemplateBinding(ForegroundProperty, fill, Border.BackgroundProperty, static value => value ?? FillColor);
 			var thumb = new Border
 			{
 				Background = ThumbNormal,
@@ -258,10 +264,18 @@ public sealed class Slider : Control
 			slider._track = track;
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
-			common.States.Add(new VisualState { Name = "Normal", Storyboard = TemplateStates.RestoreBackground(thumb) });
+			common.States.Add(new VisualState { Name = "Normal" });
 			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(thumb, ThumbOver) });
 			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(thumb, ThumbPressed) });
-			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Background(thumb, ThumbDisabled) });
+			// Disabled mutes the rail and takes the accent out of the fill and the thumb.
+			common.States.Add(new VisualState
+			{
+				Name = "Disabled",
+				Storyboard = TemplateStates.Hold(
+					(rail, Border.BackgroundProperty, RailDisabled),
+					(fill, Border.BackgroundProperty, TemplateStates.DisabledAccent),
+					(thumb, Border.BackgroundProperty, ThumbDisabled)),
+			});
 			VisualStateManager.SetVisualStateGroups(track, [common]);
 
 			return track;

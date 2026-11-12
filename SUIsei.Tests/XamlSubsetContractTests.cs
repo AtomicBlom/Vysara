@@ -3,10 +3,11 @@ using Microsoft.CodeAnalysis;
 namespace SUIsei.Tests;
 
 /// <summary>
-/// The published XAML subset (Planning.md §4) as a test. Every form §4 lists as <b>In</b> appears here as markup that
-/// must generate with no diagnostic at all (in particular no SUISEI007 "unsupported markup") and compile. Every form
-/// §4 lists as <b>planned</b> must still be reported, so a planned form can never pass by being silently dropped. A
-/// form added to §4 belongs in one of the two tables.
+/// The published XAML subset, the contract in Planning.md, as a test. Every form it lists as <b>In</b> appears here as
+/// markup that must generate with no diagnostic at all and compile. Every form it lists as <b>planned</b>, and every WinUI
+/// form it lists as <b>Out</b>, must be reported as an error, so no form can pass by being silently dropped. A WinUI form
+/// that is ignored because ignoring it changes nothing the view shows (<c>x:Uid</c>) builds with exactly one warning. A
+/// form added to the contract belongs in one of the four tables.
 /// </summary>
 public sealed class XamlSubsetContractTests
 {
@@ -30,6 +31,13 @@ public sealed class XamlSubsetContractTests
 				public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 			}
 			public sealed class Item { public string Title { get; set; } = ""; }
+			public sealed class Plate : SUIsei.Controls.ContentControl
+			{
+				public float Locked { get; private set; }
+				public float Depth { get; init; }
+			}
+			public struct Pair { public float A { get; set; } }
+			public sealed class Made : SUIsei.Controls.ContentControl { internal Made() { } }
 			public static class Palette { public const string Title = "Title"; }
 		}
 		namespace SUIsei.Extensions
@@ -61,19 +69,21 @@ public sealed class XamlSubsetContractTests
 		<Canvas><Border x:Name="Box" Width="10" Height="10" Background="Red" /></Canvas>
 		<ContentControl>
 		  <VisualStateManager.VisualStateGroups>
-		    <VisualStateGroup Name="G">
-		      <VisualState Name="A" />
-		      <VisualState Name="B"><Storyboard>{{animations}}</Storyboard></VisualState>
+		    <VisualStateGroup x:Name="G">
+		      <VisualState x:Name="A" />
+		      <VisualState x:Name="B"><Storyboard>{{animations}}</Storyboard></VisualState>
 		    </VisualStateGroup>
 		  </VisualStateManager.VisualStateGroups>
 		</ContentControl>
 		""";
 
-	// Planning §4 "In".
+	// The contract's In forms.
 	private static readonly (string Form, string Body)[] InForms =
 	[
 		("elements and attributes", """<Border Width="10" Background="#FF0000" HorizontalAlignment="Left" />"""),
 		("x:Class and x:Name", """<TextBlock x:Name="Named" Text="hi" />"""),
+		("x:FieldModifier", """<TextBlock x:Name="Shown" x:FieldModifier="Public" /><TextBlock x:Name="Kept" x:FieldModifier="private" Text="{x:Bind ViewModel.Caption, Mode=OneWay}" />"""),
+		("a struct, and a constructor the view's assembly reaches", """<StackPanel.Resources><local:Pair x:Key="P" A="1" /></StackPanel.Resources><local:Made />"""),
 		("x:Key", """<StackPanel.Resources><Style x:Key="K" TargetType="Border" /></StackPanel.Resources>"""),
 		("x:DataType", """<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:DataType="local:Item"><TextBlock Text="{x:Bind Title}" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>"""),
 		("property element: value", """<Border><Border.Padding>1,2</Border.Padding></Border>"""),
@@ -99,9 +109,9 @@ public sealed class XamlSubsetContractTests
 		("inherited text properties and TextAlignment", """<ContentControl FontSize="18" Foreground="Gold"><TextBlock TextAlignment="Center" Text="a&#10;b" /></ContentControl><ContentPresenter FontSize="12" Foreground="Teal" /><TextBox FontSize="16" />"""),
 		("ItemsPanelTemplate", """<ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>"""),
 		("ResourceDictionary with inline merged dictionaries", """<StackPanel.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary><Style x:Key="M" TargetType="Border" /></ResourceDictionary></ResourceDictionary.MergedDictionaries></ResourceDictionary></StackPanel.Resources>"""),
-		("Grid row and column definitions", """<Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="2*" /></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="40" /></Grid.ColumnDefinitions></Grid>"""),
+		("Grid row and column definitions", """<Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="2*" /></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition><ColumnDefinition.Width>Auto</ColumnDefinition.Width></ColumnDefinition></Grid.ColumnDefinitions></Grid>"""),
 		("DoubleAnimation", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:0:1" />""")),
-		("ColorAnimation", States("""<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="Blue" />""")),
+		("ColorAnimation", States("""<ColorAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="Blue" EnableDependentAnimation="True" />""")),
 		("DoubleAnimationUsingKeyFrames", States("""<DoubleAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(UIElement.Opacity)"><LinearDoubleKeyFrame KeyTime="0:0:0" Value="1" /><DiscreteDoubleKeyFrame KeyTime="0:0:0.5" Value="0.5" /><EasingDoubleKeyFrame KeyTime="0:0:1" Value="0"><EasingDoubleKeyFrame.EasingFunction><QuadraticEase /></EasingDoubleKeyFrame.EasingFunction></EasingDoubleKeyFrame></DoubleAnimationUsingKeyFrames>""")),
 		("easing functions", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Left)" To="5"><DoubleAnimation.EasingFunction><BackEase Amplitude="0.3" /></DoubleAnimation.EasingFunction></DoubleAnimation><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Top)" To="5"><DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction></DoubleAnimation>""")),
 		("WinUI's other easing functions", States(string.Concat(
@@ -125,18 +135,94 @@ public sealed class XamlSubsetContractTests
 		("geometry elements", """<local:Shape2><local:Shape2.Data><GeometryGroup FillRule="Nonzero"><PathGeometry><PathFigure StartPoint="0,0" IsClosed="True"><LineSegment Point="1,0" /><PolyLineSegment Points="1,1 0,1" /><BezierSegment Point1="0,0" Point2="1,1" Point3="2,0" /><PolyBezierSegment Points="0,0 1,1 2,0" /><QuadraticBezierSegment Point1="1,1" Point2="2,0" /><PolyQuadraticBezierSegment Points="1,1 2,0" /><ArcSegment Point="3,3" Size="2,2" RotationAngle="10" IsLargeArc="True" SweepDirection="Clockwise" /></PathFigure></PathGeometry><RectangleGeometry Rect="0,0,2,2" /><EllipseGeometry Center="1,1" RadiusX="1" RadiusY="2" /><LineGeometry StartPoint="0,0" EndPoint="1,1" /></GeometryGroup></local:Shape2.Data></local:Shape2>"""),
 		("path markup, point and number lists", """<local:Shape2 Data="F1 M 0,0 L 10,0 10,10 H 0 V 5 C 1,1 2,2 3,3 S 4,4 5,5 Q 1,1 2,2 T 3,3 A 2,2 0 0 1 4,4 Z m 1,1 l 1,1 z" Points="0,0 1,1" Dashes="2 1" />"""),
 		("shapes and the stroke set", """<Canvas><Rectangle Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="Red" Stroke="Blue" StrokeThickness="2" Stretch="Uniform" /><Ellipse Width="10" Height="10" Fill="Red" /><Line X1="0" Y1="0" X2="10" Y2="10" Stroke="Red" StrokeDashArray="2 1" StrokeDashOffset="1" StrokeDashCap="Round" /><Polyline Points="0,0 5,5 10,0" Stroke="Red" StrokeLineJoin="Bevel" StrokeMiterLimit="3" StrokeStartLineCap="Square" StrokeEndLineCap="Triangle" /><Polygon Points="0,0 5,5 10,0" Fill="Red" FillRule="Nonzero" /><Path Data="M 0,0 L 10,10" Stroke="Red" Stretch="UniformToFill" /><Path Stroke="Red"><Path.Data><EllipseGeometry RadiusX="2" RadiusY="2" /></Path.Data></Path></Canvas>"""),
-		("shape property paths", """<Canvas><Rectangle x:Name="Card" Width="10" Height="10" Fill="Red" /><Line x:Name="Rule" X2="10" Stroke="Red" /><Path x:Name="Arrow" Data="M 0,0 L 10,10" Stroke="Red" /></Canvas><ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup Name="G"><VisualState Name="A" /><VisualState Name="B"><Storyboard><ColorAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)" To="Blue" /><DoubleAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="(Rectangle.RadiusX)" To="4" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(Line.X2)" To="20" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(Shape.StrokeThickness)" To="3" /><DoubleAnimation Storyboard.TargetName="Arrow" Storyboard.TargetProperty="(Path.Data).(Geometry.Transform).(RotateTransform.Angle)" To="90" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(suisei:StrokeTrim.End)" To="1" /></Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>"""),
+		("shape property paths", """<Canvas><Rectangle x:Name="Card" Width="10" Height="10" Fill="Red" /><Line x:Name="Rule" X2="10" Stroke="Red" /><Path x:Name="Arrow" Data="M 0,0 L 10,10" Stroke="Red" /></Canvas><ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A" /><VisualState x:Name="B"><Storyboard><ColorAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)" To="Blue" /><DoubleAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="(Rectangle.RadiusX)" To="4" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(Line.X2)" To="20" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(Shape.StrokeThickness)" To="3" /><DoubleAnimation Storyboard.TargetName="Arrow" Storyboard.TargetProperty="(Path.Data).(Geometry.Transform).(RotateTransform.Angle)" To="90" /><DoubleAnimation Storyboard.TargetName="Rule" Storyboard.TargetProperty="(suisei:StrokeTrim.End)" To="1" /></Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>"""),
 		("the runtime's suisei: extensions","""<Border suisei:Clipping.ClipToBounds="True" /><ScrollViewer suisei:Scrolling.WheelScrollAmount="64" /><ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel suisei:Virtualization.RowHeight="32" /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl><Path Data="M 0,0 L 10,0" Stroke="Red" suisei:StrokeTrim.Start="0.1" suisei:StrokeTrim.End="0.9" suisei:StrokeTrim.Offset="0.2" suisei:StrokeBrushMapping.Mode="AlongLength" />"""),
 		("Typography.NumeralAlignment", """<TextBlock Text="12" Typography.NumeralAlignment="Tabular" />"""),
-		("suisei:TextEffects", """<TextBlock x:Name="Title" Text="Go" suisei:TextEffects.OutlineThickness="0.08" suisei:TextEffects.OutlineBrush="Black" suisei:TextEffects.ShadowOffset="0.05,0.1" suisei:TextEffects.ShadowSoftness="0.2" suisei:TextEffects.ShadowBrush="#80000000" /><ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup Name="G"><VisualState Name="A" /><VisualState Name="B"><Storyboard><DoubleAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineThickness)" To="0.12" /><ColorAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineBrush).(SolidColorBrush.Color)" To="Red" /></Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>"""),
+		("Width and Height Auto, as a value and as an animation's key", """<Border Width="Auto" Height="Auto" />""" + States("""<ObjectAnimationUsingKeyFrames Storyboard.TargetName="Box" Storyboard.TargetProperty="(FrameworkElement.Width)"><DiscreteObjectKeyFrame KeyTime="0" Value="Auto" /></ObjectAnimationUsingKeyFrames>""")),
+		("durations in WinUI's grammar", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:0:0.25" BeginTime="00:00:01.5" /><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Left)" To="5" Duration="0" /><DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="(Canvas.Top)" To="5" Duration="1.02:03" BeginTime="0:00" />""")),
+		("suisei:TextEffects", """<TextBlock x:Name="Title" Text="Go" suisei:TextEffects.OutlineThickness="0.08" suisei:TextEffects.OutlineBrush="Black" suisei:TextEffects.ShadowOffset="0.05,0.1" suisei:TextEffects.ShadowSoftness="0.2" suisei:TextEffects.ShadowBrush="#80000000" /><ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A" /><VisualState x:Name="B"><Storyboard><DoubleAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineThickness)" To="0.12" /><ColorAnimation Storyboard.TargetName="Title" Storyboard.TargetProperty="(suisei:TextEffects.OutlineBrush).(SolidColorBrush.Color)" To="Red" /></Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>"""),
 	];
 
-	// Planning §4 "Planned": named in the contract but not implemented yet. Each must be reported, not ignored.
+	// The contract's Planned forms: named in it but not implemented yet. Each must be reported, not ignored.
 	private static readonly (string Form, string Body, string Id)[] PlannedForms =
 	[
 		("{ThemeResource}", """<StackPanel.Resources><Style x:Key="T" TargetType="Border" /></StackPanel.Resources><Border Style="{ThemeResource T}" />""", "SUISEI007"),
 		("ResourceDictionary Source", """<StackPanel.Resources><ResourceDictionary Source="Theme.xaml" /></StackPanel.Resources>""", "SUISEI020"),
 	];
+
+	// The WinUI forms the contract lists as Out, and forms whose meaning differs from WinUI's: each must be an error at its
+	// line, never skipped.
+	private static readonly (string Form, string Body, string Id)[] OutForms =
+	[
+		("x:Phase", """<TextBlock x:Phase="2" Text="hi" />""", "SUISEI025"),
+		("x:Load", """<TextBlock x:Load="False" Text="hi" />""", "SUISEI025"),
+		("x:DeferLoadStrategy", """<TextBlock x:DeferLoadStrategy="Lazy" Text="hi" />""", "SUISEI025"),
+		("x:Class on an element other than the root", """<TextBlock x:Class="Demo.Other" />""", "SUISEI025"),
+		("x: directive on an animation", States("""<DoubleAnimation x:Phase="1" Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" />"""), "SUISEI025"),
+		("x:DefaultBindMode on a DataTemplate", """<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:DataType="local:Item" x:DefaultBindMode="OneWay"><TextBlock Text="{x:Bind Title}" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>""", "SUISEI025"),
+		("x:DataType on a ControlTemplate", """<ContentControl><ContentControl.Template><ControlTemplate x:DataType="local:Item"><Border /></ControlTemplate></ContentControl.Template></ContentControl>""", "SUISEI025"),
+		("an x:FieldModifier WinUI doesn't take", """<TextBlock x:Name="Named" x:FieldModifier="sealed" />""", "SUISEI017"),
+		("Name= on a visual state", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState Name="A" /></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
+		("Name= on a visual state group", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup Name="G"><VisualState x:Name="A" /></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
+		("VisualState.Setters", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A"><VisualState.Setters><Setter Target="X.Opacity" Value="0" /></VisualState.Setters></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
+		("VisualState.StateTriggers", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A"><VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="720" /></VisualState.StateTriggers></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
+		("VisualStateGroup.Transitions", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualStateGroup.Transitions><VisualTransition /></VisualStateGroup.Transitions><VisualState x:Name="A" /></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
+		("timing on a Storyboard", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A"><Storyboard RepeatBehavior="Forever" /></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI025"),
+		("RowDefinition MinHeight", """<Grid><Grid.RowDefinitions><RowDefinition Height="*" MinHeight="40" /></Grid.RowDefinitions></Grid>""", "SUISEI025"),
+		("RowDefinition MinHeight as a property element", """<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.MinHeight>40</RowDefinition.MinHeight></RowDefinition></Grid.RowDefinitions></Grid>""", "SUISEI025"),
+		("a second root in a template", """<ContentControl><ContentControl.Template><ControlTemplate><Border /><Border /></ControlTemplate></ContentControl.Template></ContentControl>""", "SUISEI025"),
+		("a second template in a template property", """<ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>""", "SUISEI020"),
+		("a second storyboard in VisualState.Storyboard", """<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="G"><VisualState x:Name="A"><VisualState.Storyboard><Storyboard /><Storyboard /></VisualState.Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>""", "SUISEI020"),
+		("a duration as a bare number (days in WinUI)", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="2" />"""), "SUISEI012"),
+		("a duration as m:s (hours and minutes in WinUI)", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:30" />"""), "SUISEI012"),
+		("a duration in .NET's d:h:m:s form, which WinUI doesn't read", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="1:02:03:04" />"""), "SUISEI012"),
+		("a duration as a fractional number", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="1.5" />"""), "SUISEI012"),
+		("a duration that is not a number", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="NaN" />"""), "SUISEI012"),
+		("a negative duration", States("""<DoubleAnimation Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" Duration="-0:0:1" />"""), "SUISEI012"),
+		("a child its parent's content can't take", """<StackPanel><SolidColorBrush Color="Red" /></StackPanel>""", "SUISEI026"),
+		("an element of an abstract type", """<Border><Border.Background><Brush /></Border.Background></Border>""", "SUISEI025"),
+		("an element with no parameterless constructor the generated class reaches", """<Image><Image.Source><suisei:HostImageSource /></Image.Source></Image>""", "SUISEI025"),
+		("a property with no public setter", """<ListView SelectedIndex="2" />""", "SUISEI004"),
+		("a property whose setter the generated class can't reach", """<local:Plate Locked="1" />""", "SUISEI025"),
+		("a property with an init-only setter", """<local:Plate><local:Plate.Depth>1</local:Plate.Depth></local:Plate>""", "SUISEI025"),
+		("a composition type, which the default namespace does not map", """<StackPanel><CompositionColorBrush /></StackPanel>""", "SUISEI003"),
+	];
+
+	// WinUI forms that build with one warning, since ignoring them changes nothing the view shows.
+	private static readonly (string Form, string Body, string Id)[] WarnedForms =
+	[
+		("x:Uid, whose text shows as the markup writes it", """<TextBlock x:Uid="Greeting" Text="hi" />""", "SUISEI013"),
+		("x:Uid on an animation", States("""<DoubleAnimation x:Uid="Fade" Storyboard.TargetName="Box" Storyboard.TargetProperty="Opacity" To="0.5" />"""), "SUISEI013"),
+	];
+
+	[Test]
+	public void Every_warned_form_builds_with_one_warning()
+	{
+		var failures = new List<string>();
+		foreach (var (form, body, id) in WarnedForms)
+		{
+			var xaml = View(body);
+			var diagnostics = XamlGeneratorHarness.Run(xaml, CodeBehind).Diagnostics;
+			if (diagnostics.Select(d => d.Id).ToArray() is not [var only] || only != id || diagnostics[0].Severity != DiagnosticSeverity.Warning)
+				failures.Add($"{form}: expected one {id} warning, got {string.Join("; ", diagnostics.Select(d => $"{d.Id} {d.GetMessage()}"))}");
+			else if (XamlGeneratorHarness.CompileErrors(xaml, CodeBehind) is { Length: > 0 } errors)
+				failures.Add($"{form}: does not compile: {string.Join("; ", errors.Select(e => e.GetMessage()))}");
+		}
+		failures.ShouldBeEmpty();
+	}
+
+	[Test]
+	public void Every_out_form_is_an_error_at_its_line()
+	{
+		var failures = new List<string>();
+		foreach (var (form, body, id) in OutForms)
+		{
+			var diagnostics = XamlGeneratorHarness.Run(View(body), CodeBehind).Diagnostics;
+			if (diagnostics.Select(d => d.Id).ToArray() is not [var only] || only != id || diagnostics[0].Severity != DiagnosticSeverity.Error)
+				failures.Add($"{form}: expected one {id} error, got {string.Join("; ", diagnostics.Select(d => $"{d.Id} {d.GetMessage()}"))}");
+		}
+		failures.ShouldBeEmpty();
+	}
 
 	[Test]
 	public void Every_published_form_generates_with_no_diagnostic_and_compiles()

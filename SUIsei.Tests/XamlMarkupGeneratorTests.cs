@@ -34,8 +34,27 @@ public sealed class XamlMarkupGeneratorTests
 		namespace SUIsei.Documents { public sealed class Page : SUIsei.Controls.ContentControl { } }
 		namespace Demo
 		{
-			public partial class V { }
+			public partial class V
+			{
+				public string? Caption { get; set; }
+				private void OnRouted(object sender, SUIsei.RoutedEvents.RoutedEventArgs e) { }
+				private void OnPlain(object sender, System.EventArgs e) { }
+				private void OnSelection(object sender, SUIsei.Controls.SelectionChangedEventArgs e) { }
+				private void OnAny<T>(object sender, T e) { }
+				private static void OnStatic(object sender, SUIsei.RoutedEvents.RoutedEventArgs e) { }
+				private void OnByRef(object sender, ref SUIsei.RoutedEvents.RoutedEventArgs e) { }
+			}
 			public sealed class Caption : SUIsei.Controls.ContentControl { }
+			public struct Pair { public float A { get; set; } }
+			public sealed class Hidden : SUIsei.Controls.ContentControl { internal Hidden() { } }
+			public sealed class Closed : SUIsei.Controls.ContentControl { private Closed() { } }
+			public sealed class Gate : SUIsei.Controls.ContentControl
+			{
+				public float Shut { get; private set; }
+				public float Built { get; init; }
+				public float Inside { get; internal set; }
+			}
+			public class Level : SUIsei.Controls.ContentControl { public float Depth { get; protected set; } }
 			public static class Palette
 			{
 				public const string Title = "Title";
@@ -95,6 +114,31 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<suisei:Badge />", "new SUIsei.Extensions.Badge()")]
 	public void Elements_resolve_in_their_XML_namespace(string body, string expected) =>
 		Generates(body).ShouldContain(expected);
+
+	// --- Events ---
+
+	/// <summary>A handler binds to an event as C# binds it to the event's delegate: a routed event's args, an
+	/// EventHandler's, and a narrower event's args taken by a handler of their base.</summary>
+	[Test]
+	[Arguments("<Button Click=\"OnRouted\" />", ".Click += this.OnRouted;")]
+	[Arguments("<Slider ValueChanged=\"OnPlain\" />", ".ValueChanged += this.OnPlain;")]
+	[Arguments("<ListView SelectionChanged=\"OnSelection\" />", ".SelectionChanged += this.OnSelection;")]
+	[Arguments("<ListView SelectionChanged=\"OnRouted\" />", ".SelectionChanged += this.OnRouted;")]
+	[Arguments("<Button Click=\"OnAny\" />", ".Click += this.OnAny;")]
+	public void Event_handlers_bind_to_the_events_own_delegate(string body, string expected) =>
+		Generates(body).ShouldContain(expected);
+
+	[Test]
+	[Arguments("<Button Click=\"OnPlain\" />", "'OnPlain(object, RoutedEventArgs)' for event 'Click'")]
+	[Arguments("<ListView SelectionChanged=\"OnMissing\" />", "'OnMissing(object, SelectionChangedEventArgs)' for event 'SelectionChanged'")]
+	[Arguments("<Button Click=\"OnStatic\" />", "'OnStatic(object, RoutedEventArgs)' for event 'Click'")]
+	[Arguments("<Button Click=\"OnByRef\" />", "'OnByRef(object, RoutedEventArgs)' for event 'Click'")]
+	public void A_handler_the_event_cannot_bind_to_is_reported(string body, string message)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI010");
+		diagnostic.GetMessage().ShouldContain(message);
+	}
 
 	[Test]
 	[Arguments("<suisei:Nope />", "Nope")]
@@ -350,4 +394,197 @@ public sealed class XamlMarkupGeneratorTests
 	[Arguments("<StackPanel.Resources><Style x:Key=\"S\" TargetType=\"Border\" BasedOn=\"Base\" /></StackPanel.Resources>", "SUISEI007")]
 	public void A_bad_resource_form_is_an_error(string body, string id) =>
 		Fails(body).Id.ShouldBe(id);
+
+	// --- Directives ---
+
+	[Test]
+	public void X_FieldModifier_sets_the_named_elements_field_as_WinUI_reads_it()
+	{
+		var code = Generates("""
+			<TextBlock x:Name="A" x:FieldModifier="Public" />
+			<TextBlock x:Name="B" x:FieldModifier="private" Text="{x:Bind Caption, Mode=OneWay}" />
+			<TextBlock x:Name="C" x:FieldModifier="Friend" />
+			<TextBlock x:Name="D" x:FieldModifier="protected" />
+			<TextBlock x:Name="E" />
+			""");
+		code.ShouldContain("public SUIsei.Controls.TextBlock A = null!;");
+		code.ShouldContain("private SUIsei.Controls.TextBlock B = null!;");
+		code.ShouldContain("internal SUIsei.Controls.TextBlock C = null!;");
+		code.ShouldContain("protected SUIsei.Controls.TextBlock D = null!;");
+		code.ShouldContain("internal SUIsei.Controls.TextBlock E = null!;");
+	}
+
+	[Test]
+	public void An_x_FieldModifier_WinUI_does_not_take_is_SUISEI017_at_its_line()
+	{
+		var diagnostic = Fails("""<TextBlock x:Name="A" x:FieldModifier="sealed" />""");
+		diagnostic.Id.ShouldBe("SUISEI017");
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
+	public void X_Uid_is_ignored_with_a_warning_and_the_text_shows()
+	{
+		var xaml = View("""<TextBlock x:Uid="Greeting" Text="hi" />""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+		var diagnostic = result.Diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("SUISEI013");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Warning);
+		diagnostic.GetMessage().ShouldContain("x:Uid 'Greeting'");
+		Line(diagnostic).ShouldBe(BodyLine);
+		result.AllGeneratedText().ShouldContain(".Text = \"hi\";");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	[Arguments("<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:DataType=\"local:Caption\" x:DefaultBindMode=\"OneWay\"><TextBlock /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>", "SUISEI025")]
+	[Arguments("<ItemsControl><ItemsControl.ItemTemplate><DataTemplate x:Phase=\"1\"><TextBlock /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>", "SUISEI025")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate x:DataType=\"local:Caption\"><Border /></ControlTemplate></ContentControl.Template></ContentControl>", "SUISEI025")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate Width=\"4\"><Border /></ControlTemplate></ContentControl.Template></ContentControl>", "SUISEI025")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate><ControlTemplate.Resources /><Border /></ControlTemplate></ContentControl.Template></ContentControl>", "SUISEI020")]
+	[Arguments("<StackPanel.Resources><ControlTemplate x:Key=\"T\" x:DefaultBindMode=\"OneWay\"><Border /></ControlTemplate></StackPanel.Resources>", "SUISEI025")]
+	public void What_a_template_element_carries_and_does_not_build_is_an_error_at_its_line(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	// --- Construction and setters ---
+
+	[Test]
+	public void A_struct_and_a_constructor_the_generated_class_reaches_are_built()
+	{
+		var code = Generates("""<StackPanel.Resources><local:Pair x:Key="P" A="1" /></StackPanel.Resources><local:Hidden />""");
+		code.ShouldContain("new Demo.Pair();");
+		code.ShouldContain(".A = 1f;");
+		code.ShouldContain("new Demo.Hidden();");
+	}
+
+	[Test]
+	public void A_named_struct_is_kept_in_a_field_that_starts_at_its_default()
+	{
+		var xaml = View("""<StackPanel.Resources><local:Pair x:Name="Named" x:Key="P" A="2" /></StackPanel.Resources>""");
+		XamlGeneratorHarness.Run(xaml, CodeBehind).AllGeneratedText().ShouldContain("internal Demo.Pair Named = default;");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_element_whose_constructor_the_generated_class_cannot_reach_is_SUISEI025() =>
+		Fails("<local:Closed />").Id.ShouldBe("SUISEI025");
+
+	[Test]
+	public void A_setter_the_generated_class_reaches_is_set_as_an_attribute_and_as_a_property_element()
+	{
+		var code = Generates("""<local:Gate Inside="1" /><local:Gate><local:Gate.Inside>2</local:Gate.Inside></local:Gate>""");
+		code.ShouldContain(".Inside = 1f;");
+		code.ShouldContain(".Inside = 2f;");
+	}
+
+	[Test]
+	[Arguments("<local:Gate Shut=\"1\" />", "private setter")]
+	[Arguments("<local:Gate><local:Gate.Shut>1</local:Gate.Shut></local:Gate>", "private setter")]
+	[Arguments("<local:Gate Built=\"1\" />", "init-only")]
+	[Arguments("<local:Gate><local:Gate.Built>1</local:Gate.Built></local:Gate>", "init-only")]
+	[Arguments("<local:Level Depth=\"1\" />", "protected setter")]
+	public void A_setter_the_generated_class_cannot_call_is_SUISEI025_at_its_line(string body, string reason)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI025");
+		diagnostic.GetMessage().ShouldContain(reason);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	[Test]
+	public void A_protected_setter_is_set_on_an_unsealed_root_which_the_generated_class_derives_from()
+	{
+		const string xaml = """
+			<local:Level xmlns="https://github.com/AtomicBlom/SUIsei/ui"
+			             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			             xmlns:local="using:Demo"
+			             x:Class="Demo.W" Depth="2">
+			  <local:Level.Depth>3</local:Level.Depth>
+			</local:Level>
+			""";
+		var codeBehind = CodeBehind.Replace("public partial class V", "public partial class W { } public partial class V");
+		var result = XamlGeneratorHarness.Run(xaml, codeBehind);
+		result.Diagnostics.ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain("this.Depth = 2f;");
+		XamlGeneratorHarness.CompileErrors(xaml, codeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_internal_setter_is_set_where_the_library_gives_the_view_access_to_its_internals()
+	{
+		var library = XamlGeneratorHarness.Library("Lib", $$"""
+			[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("{{XamlGeneratorHarness.AssemblyName}}")]
+			namespace Lib { public sealed class Dial : SUIsei.Controls.ContentControl { public float Turn { get; internal set; } } }
+			""");
+		var xaml = View("""<lib:Dial xmlns:lib="using:Lib" Turn="3" />""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind, libraries: [library]);
+		result.Diagnostics.ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain(".Turn = 3f;");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind, libraries: [library]).ShouldBeEmpty();
+	}
+
+	// --- Ignorable markup and extra children in the forms that take one ---
+
+	[Test]
+	public void Design_time_markup_beside_a_template_a_panel_or_a_storyboard_is_skipped()
+	{
+		var code = Generates("""
+			<ItemsControl>
+			  <ItemsControl.ItemsPanel><d:ItemsPanelTemplate /><ItemsPanelTemplate><d:Border /><VirtualizingStackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+			  <ItemsControl.ItemTemplate><d:DataTemplate /><DataTemplate><TextBlock /></DataTemplate></ItemsControl.ItemTemplate>
+			</ItemsControl>
+			<Border x:Name="Fade" />
+			<ContentControl>
+			  <VisualStateManager.VisualStateGroups>
+			    <VisualStateGroup x:Name="G">
+			      <VisualState x:Name="A">
+			        <VisualState.Storyboard><d:Storyboard /><Storyboard><DoubleAnimation Storyboard.TargetName="Fade" Storyboard.TargetProperty="Opacity" To="0" /></Storyboard></VisualState.Storyboard>
+			      </VisualState>
+			    </VisualStateGroup>
+			  </VisualStateManager.VisualStateGroups>
+			</ContentControl>
+			""");
+		code.ShouldContain("new SUIsei.Controls.VirtualizingStackPanel()");
+		code.ShouldContain("new global::SUIsei.Animation.DoubleAnimation");
+	}
+
+	[Test]
+	[Arguments("<ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>")]
+	[Arguments("<ItemsControl><ItemsControl.ItemsPanel><Border /><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>")]
+	[Arguments("<ItemsControl><ItemsControl.ItemTemplate><DataTemplate><TextBlock /></DataTemplate><DataTemplate><TextBlock /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>")]
+	[Arguments("<ContentControl><ContentControl.Template><ControlTemplate><Border /></ControlTemplate><Border /></ContentControl.Template></ContentControl>")]
+	[Arguments("<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name=\"G\"><VisualState x:Name=\"A\"><VisualState.Storyboard><Storyboard /><Storyboard /></VisualState.Storyboard></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>")]
+	[Arguments("<ContentControl><VisualStateManager.VisualStateGroups><VisualStateGroup x:Name=\"G\"><VisualState x:Name=\"A\"><VisualState.Storyboard /></VisualState></VisualStateGroup></VisualStateManager.VisualStateGroups></ContentControl>")]
+	public void A_second_child_where_one_is_taken_is_SUISEI020_at_its_line(string body)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe("SUISEI020");
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
+
+	// --- Grid definitions ---
+
+	[Test]
+	public void A_definitions_size_is_read_from_a_property_element()
+	{
+		var code = Generates("""<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.Height>Auto</RowDefinition.Height></RowDefinition></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition><ColumnDefinition.Width>2*</ColumnDefinition.Width></ColumnDefinition></Grid.ColumnDefinitions></Grid>""");
+		code.ShouldContain(".RowDefinitions.Add(global::SUIsei.GridLength.Auto);");
+		code.ShouldContain(".ColumnDefinitions.Add(global::SUIsei.GridLength.Stars(2f));");
+	}
+
+	[Test]
+	[Arguments("<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.MinHeight>40</RowDefinition.MinHeight></RowDefinition></Grid.RowDefinitions></Grid>", "SUISEI025")]
+	[Arguments("<Grid><Grid.ColumnDefinitions><ColumnDefinition Width=\"*\"><ColumnDefinition.Width>Auto</ColumnDefinition.Width></ColumnDefinition></Grid.ColumnDefinitions></Grid>", "SUISEI025")]
+	[Arguments("<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.Height><Border /></RowDefinition.Height></RowDefinition></Grid.RowDefinitions></Grid>", "SUISEI020")]
+	[Arguments("<Grid><Grid.RowDefinitions><RowDefinition><RowDefinition.Height>tall</RowDefinition.Height></RowDefinition></Grid.RowDefinitions></Grid>", "SUISEI012")]
+	public void A_definition_property_element_other_than_its_size_is_reported_not_dropped(string body, string id)
+	{
+		var diagnostic = Fails(body);
+		diagnostic.Id.ShouldBe(id);
+		Line(diagnostic).ShouldBe(BodyLine);
+	}
 }

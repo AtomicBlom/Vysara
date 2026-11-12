@@ -1,4 +1,5 @@
 using System.Reflection.Metadata;
+using System.Runtime.CompilerServices;
 using SUIsei.Controls;
 
 [assembly: MetadataUpdateHandler(typeof(SUIsei.HotReloadHandler))]
@@ -14,9 +15,9 @@ namespace SUIsei;
 /// in another view as much as hosted as a <see cref="UIRoot.Content"/>, and its code-behind hears of it through the
 /// generated <c>partial void OnComponentRebuilt()</c>.
 /// <para>
-/// Bookkeeping is gated on <see cref="Enabled"/>, which defaults to <see cref="MetadataUpdater.IsSupported"/>:
-/// it is <c>false</c> under NativeAOT / optimized publish, so the whole mechanism is inert and trimmable there,
-/// preserving the reflection-free runtime. Tests force it on.
+/// Bookkeeping is gated on <see cref="Enabled"/>, which defaults to <see cref="MetadataUpdater.IsSupported"/> and is
+/// always <c>false</c> where dynamic code is not supported: under NativeAOT it reads as a constant false, so the trimmer
+/// removes the code it guards, preserving the reflection-free runtime. Tests force it on.
 /// </para>
 /// </summary>
 public static class HotReload
@@ -32,8 +33,10 @@ public static class HotReload
 	private static readonly HashSet<Type> Pending = [];
 
 	/// <summary>Whether hot-reload bookkeeping runs. Defaults to the runtime's metadata-update capability; set
-	/// <c>true</c> in tests to exercise the rebuild path without the hot-reload agent.</summary>
-	public static bool Enabled { get; set; } = MetadataUpdater.IsSupported;
+	/// <c>true</c> in tests to exercise the rebuild path without the hot-reload agent. Always false where dynamic code is
+	/// not supported, whatever it was set to: <see cref="RuntimeFeature.IsDynamicCodeSupported"/> is a constant the trimmer
+	/// folds, so under NativeAOT the getter is false and what it guards is removed.</summary>
+	public static bool Enabled { get => RuntimeFeature.IsDynamicCodeSupported && field; set; } = MetadataUpdater.IsSupported;
 
 	/// <summary>Register a generated view where the component IS the root UIElement (non-sealed root type, e.g.
 	/// ContentControl). <paramref name="rebuild"/> must be a no-capture static delegate. Idempotent.</summary>

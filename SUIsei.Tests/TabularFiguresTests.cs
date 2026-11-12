@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using SUIsei.Composition;
 using SUIsei.Controls;
 using SUIsei.Documents;
 using SUIsei.Drawing;
@@ -63,6 +64,18 @@ public sealed class TabularFiguresTests
 		new FontFeatureSet(FontFeature.TabularFigures).ShouldBe(FontFeatureSet.TabularFigures);
 		new FontFeatureSet(new FontFeature("tnum", 0)).IsOn(FontFeature.TabularFigures.Tag).ShouldBeFalse();
 		FontFeatureSet.Empty.IsEmpty.ShouldBeTrue();
+	}
+
+	/// <summary>Two sets that set the same tags to the same values are equal, with one hash, however the settings were
+	/// ordered: the shaping cache keys on the set, so the same text with the same features shapes once.</summary>
+	[Test]
+	public void A_feature_set_compares_equal_whatever_order_its_settings_were_written_in()
+	{
+		var a = new FontFeatureSet(new FontFeature("tnum"), new FontFeature("liga", 0));
+		var b = new FontFeatureSet(new FontFeature("liga", 0), new FontFeature("tnum"));
+
+		a.ShouldBe(b);
+		a.GetHashCode().ShouldBe(b.GetHashCode());
 	}
 
 	[Test]

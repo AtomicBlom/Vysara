@@ -22,9 +22,9 @@
 	</Canvas>
 	<ContentControl x:Name="Host">
 		<VisualStateManager.VisualStateGroups>
-			<VisualStateGroup Name="Reveal">
-				<VisualState Name="Hidden" />
-				<VisualState Name="Drawn">
+			<VisualStateGroup x:Name="Reveal">
+				<VisualState x:Name="Hidden" />
+				<VisualState x:Name="Drawn">
 					<Storyboard>
 						<DoubleAnimation Storyboard.TargetName="Trail" Storyboard.TargetProperty="(suisei:StrokeTrim.End)"
 						                 To="1" Duration="0:0:1" />

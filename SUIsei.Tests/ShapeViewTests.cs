@@ -1,4 +1,5 @@
 using System.Numerics;
+using SUIsei.Composition;
 using SUIsei.Drawing;
 using SUIsei.Media;
 using SUIsei.Tests.Sample;
@@ -36,11 +37,11 @@ public sealed class ShapeViewTests
 
 		var rule = Drawn(view.Rule).StrokeStyle;
 		rule.DashArray.ToArray().ShouldBe([4f, 2f]);
-		rule.DashCap.ShouldBe(PenLineCap.Round);
+		rule.DashCap.ShouldBe(CompositionStrokeCap.Round);
 
 		var trend = Drawn(view.Trend);
 		trend.Path!.ToString().ShouldBe("M 0,20 L 20,5 L 40,15 L 60,0");
-		(trend.StrokeStyle.LineJoin, trend.StrokeStyle.StartCap, trend.StrokeStyle.EndCap).ShouldBe((PenLineJoin.Round, PenLineCap.Round, PenLineCap.Triangle));
+		(trend.StrokeStyle.LineJoin, trend.StrokeStyle.StartCap, trend.StrokeStyle.EndCap).ShouldBe((CompositionStrokeLineJoin.Round, CompositionStrokeCap.Round, CompositionStrokeCap.Triangle));
 
 		Drawn(view.Badge).Path!.ToString().ShouldBe("F1 M 0,0 L 20,10 L 0,20 Z");
 

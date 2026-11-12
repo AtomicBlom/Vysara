@@ -44,7 +44,7 @@ public sealed class TemplatedViewTests
 		view.Card.Content = "Hello";
 
 		var presenter = (ContentPresenter)((Border)view.Card.GetTemplateRoot()!).Child!;
-		presenter.Content.ShouldBe("Hello"); // {TemplateBinding Content}, kept live via ContentChanged
+		presenter.Content.ShouldBe("Hello"); // {TemplateBinding Content}, kept live
 	}
 
 	[Test]

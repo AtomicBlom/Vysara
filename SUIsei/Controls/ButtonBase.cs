@@ -87,13 +87,10 @@ public abstract class ButtonBase : ContentControl
 
 	private void OnCanExecuteChanged(object? sender, EventArgs e) => UpdateCanExecute();
 
-	// While a command is set, the button is enabled exactly when the command can execute (WinUI's command-driven
-	// IsEnabled). A command-less button leaves IsEnabled entirely under the author's control.
-	private void UpdateCanExecute()
-	{
-		if (Command is { } command)
-			IsEnabled = command.CanExecute(CommandParameter);
-	}
+	// While a command is set, the button is enabled only when the command can execute (WinUI's command-driven IsEnabled),
+	// folded into the effective value: an author's IsEnabled="False" stays false whatever the command says, and is left
+	// as the author set it.
+	private void UpdateCanExecute() => SetCommandDisabled(Command is { } command && !command.CanExecute(CommandParameter));
 
 	private protected override string CommonVisualState =>
 		!IsEnabled ? "Disabled" : _isPressed ? "Pressed" : _isPointerOver ? "PointerOver" : "Normal";
