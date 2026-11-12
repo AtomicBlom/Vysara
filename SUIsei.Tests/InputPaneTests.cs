@@ -74,4 +74,20 @@ public sealed class InputPaneTests
 		top.LayoutPass(new Size(200f, 500f));
 		above.LayoutRect.Height.ShouldBe(50f);
 	}
+
+	[Test]
+	public void A_bottom_margin_already_above_the_keyboard_is_not_shrunk_again()
+	{
+		var inner = new Border { Margin = new Thickness(0f, 0f, 0f, 200f) }; // its box ends at 300 DIPs
+		InputPane.SetAvoidsKeyboard(inner, true);
+		var root = new UIRoot(UISurface.Hud)
+		{
+			LayoutScale = 2f,
+			Content = new Border { Padding = new Thickness(0f, 100f, 0f, 0f), Child = inner },
+			InputPaneHeight = 300f, // the keyboard's top at 350 DIPs, below the box
+		};
+		root.LayoutPass(new Size(400f, 1000f));
+
+		inner.LayoutRect.Height.ShouldBe(200f); // 100 to 300, untouched
+	}
 }

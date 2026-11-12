@@ -39,7 +39,9 @@ public sealed class InputPane : DependencyObject
 		var top = slot.Y;
 		for (var ancestor = element.Parent; ancestor is not null; ancestor = ancestor.Parent)
 			top += ancestor.LayoutRect.Y;
-		var covered = top + slot.Height - keyboardTop;
+		// The element's own box ends a bottom margin above the slot's end; only that much of it can be covered.
+		var bottomMargin = element is FrameworkElement framework ? framework.Margin.Bottom : 0f;
+		var covered = top + slot.Height - bottomMargin - keyboardTop;
 		return covered <= 0f ? slot : new Rect(slot.X, slot.Y, slot.Width, MathF.Max(0f, slot.Height - covered));
 	}
 }
