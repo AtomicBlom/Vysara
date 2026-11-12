@@ -27,14 +27,17 @@ internal sealed class ShapedGlyphRun
 	private FontAtlas? _font;
 	private FontFeatureSet? _features;
 	private ITextShaper? _shaper;
+	private TextFit _fit;
 
 	/// <summary>Whether this is the shaping of <paramref name="text"/> against <paramref name="font"/>'s current shaper with
-	/// <paramref name="features"/>.</summary>
-	public bool IsShapingOf(string text, FontAtlas font, FontFeatureSet features) =>
-		ReferenceEquals(_font, font) && ReferenceEquals(_shaper, font.Shaper) && Equals(_features, features) && string.Equals(_text, text);
+	/// <paramref name="features"/>, fitted as <paramref name="fit"/> says.</summary>
+	public bool IsShapingOf(string text, FontAtlas font, FontFeatureSet features, TextFit fit = default) =>
+		ReferenceEquals(_font, font) && ReferenceEquals(_shaper, font.Shaper) && Equals(_features, features) && _fit == fit &&
+		string.Equals(_text, text);
 
-	/// <summary>Shape <paramref name="text"/> again into the retained glyph and line lists, one line at a time.</summary>
-	public void Reshape(string text, FontAtlas font, FontFeatureSet features)
+	/// <summary>Shape <paramref name="text"/> again into the retained glyph and line lists, one line at a time: a line per
+	/// line break, each broken again at spaces and cut short with an ellipsis as <paramref name="fit"/> says.</summary>
+	public void Reshape(string text, FontAtlas font, FontFeatureSet features, TextFit fit = default)
 	{
 		Glyphs.Clear();
 		Lines.Clear();
@@ -43,19 +46,30 @@ internal sealed class ShapedGlyphRun
 		var span = text.AsSpan();
 		for (var start = 0; start >= 0;)
 		{
-			var line = span.Slice(start, TextLines.Next(span, start, out var next));
-			var first = Glyphs.Count;
-			var advance = shaper.Shape(line, font, features, Glyphs);
-			if (start > 0)
+			var length = TextLines.Next(span, start, out var next);
+			if (fit.Wraps)
 			{
-				for (var i = first; i < Glyphs.Count; i++)
-					Glyphs[i] = Glyphs[i] with { Cluster = Glyphs[i].Cluster + start };
+				// Greedy: each line takes words while what it holds, its trailing spaces left out, keeps inside the width
+				var end = start + length;
+				var from = start;
+				var breakAt = -1;   // where the line holding the words so far may end: after a run of spaces
+				for (var i = start; i < end;)
+				{
+					while (i < end && span[i] != ' ')
+						i++;
+					if (breakAt > from && shaper.Measure(span[from..i], font, features) > fit.WidthEm)
+					{
+						width = MathF.Max(width, AddLine(span[from..breakAt], from));
+						from = breakAt;
+					}
+					while (i < end && span[i] == ' ')
+						i++;
+					breakAt = i;
+				}
+				width = MathF.Max(width, AddLine(span[from..end], from));
 			}
-			// Trailing whitespace hangs past where the line is placed, so only the rest is aligned.
-			var trimmed = line.TrimEnd();
-			var placed = trimmed.Length == line.Length ? advance : shaper.Measure(trimmed, font, features);
-			Lines.Add(new ShapedLine(first, Glyphs.Count - first, advance, placed));
-			width = MathF.Max(width, advance);
+			else
+				width = MathF.Max(width, AddLine(span.Slice(start, length), start));
 			start = next;
 		}
 		Width = width;
@@ -63,7 +77,73 @@ internal sealed class ShapedGlyphRun
 		_font = font;
 		_features = features;
 		_shaper = shaper;
+		_fit = fit;
+
+		// One line, shaped from where it starts in the text; cut to the width first if fit says so. Its advance.
+		float AddLine(ReadOnlySpan<char> line, int start)
+		{
+			if (fit.Trims && shaper.Measure(line.TrimEnd(), font, features) > fit.WidthEm)
+				return AddTrimmed(line.TrimEnd(), start);
+			var first = Glyphs.Count;
+			var advance = shaper.Shape(line, font, features, Glyphs);
+			Offset(first, start);
+			// Trailing whitespace hangs past where the line is placed, so only the rest is aligned.
+			var trimmed = line.TrimEnd();
+			var placed = trimmed.Length == line.Length ? advance : shaper.Measure(trimmed, font, features);
+			Lines.Add(new ShapedLine(first, Glyphs.Count - first, advance, placed));
+			return advance;
+		}
+
+		// As much of the line as fits with an ellipsis after it (found by halving), then the ellipsis; the font's own if
+		// it has one, else three full stops
+		float AddTrimmed(ReadOnlySpan<char> line, int start)
+		{
+			var ellipsis = font.TryGetGlyph('…', out _) ? "…" : "...";
+			int low = 0, high = line.Length;
+			while (low < high)
+			{
+				var mid = (low + high + 1) / 2;
+				if (shaper.Measure(string.Concat(line[..mid].TrimEnd(), ellipsis), font, features) <= fit.WidthEm)
+					low = mid;
+				else
+					high = mid - 1;
+			}
+			var cut = string.Concat(line[..low].TrimEnd(), ellipsis);
+			var first = Glyphs.Count;
+			var advance = shaper.Shape(cut, font, features, Glyphs);
+			Offset(first, start);
+			// The ellipsis stands for what was cut: its glyphs point at the last character kept
+			for (var i = first; i < Glyphs.Count; i++)
+				if (Glyphs[i].Cluster >= start + low)
+					Glyphs[i] = Glyphs[i] with { Cluster = start + Math.Max(0, low - 1) };
+			Lines.Add(new ShapedLine(first, Glyphs.Count - first, advance, advance));
+			return advance;
+		}
+
+		void Offset(int first, int start)
+		{
+			if (start == 0)
+				return;
+			for (var i = first; i < Glyphs.Count; i++)
+				Glyphs[i] = Glyphs[i] with { Cluster = Glyphs[i].Cluster + start };
+		}
 	}
+}
+
+/// <summary>
+/// How a run's lines are fitted to a width: broken at spaces to keep inside it, cut short with an ellipsis, or neither
+/// (the default, in which the width means nothing).
+/// </summary>
+/// <param name="WidthEm">The width, in EM: the text block's, over its font size.</param>
+/// <param name="Wraps">Whether lines break at spaces to keep inside it.</param>
+/// <param name="Trims">Whether a line still wider is cut short with an ellipsis.</param>
+internal readonly record struct TextFit(float WidthEm, bool Wraps, bool Trims)
+{
+	/// <summary>The fit a text block asks for at <paramref name="width"/> (DIPs, infinite when unconstrained).</summary>
+	public static TextFit For(float width, float fontSize, TextWrapping wrapping, TextTrimming trimming) =>
+		float.IsFinite(width) && fontSize > 0f && (wrapping == TextWrapping.Wrap || trimming != TextTrimming.None)
+			? new TextFit(width / fontSize, wrapping == TextWrapping.Wrap, trimming != TextTrimming.None)
+			: default;
 }
 
 /// <summary>

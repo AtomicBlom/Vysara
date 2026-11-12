@@ -26,8 +26,8 @@ public enum TextAlignment
 
 	/// <summary>
 	/// As WinUI justifies text: a line that wraps is stretched to the width, and a line that ends at a line break or at the
-	/// end of the text starts at the left edge. SUIsei's text blocks do not wrap, so every line ends at a break or the end
-	/// of the text, and justified text is placed as <see cref="Left"/> is.
+	/// end of the text starts at the left edge. SUIsei doesn't stretch wrapped lines yet, so justified text is placed as
+	/// <see cref="Left"/> is.
 	/// </summary>
 	Justify = 3,
 }

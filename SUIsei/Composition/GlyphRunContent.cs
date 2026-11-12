@@ -52,6 +52,9 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 	/// value, so an equal set does not advance <see cref="VisualContent.Version"/>.</summary>
 	public FontFeatureSet Features { get; set => Change(ref field, value ?? throw new ArgumentNullException(nameof(value))); } = features ?? FontFeatureSet.Empty;
 
+	/// <summary>How the lines are fitted to the text block's width (wrapped, trimmed), as its measure shaped them.</summary>
+	internal TextFit Fit { get; set => Change(ref field, value); }
+
 	/// <summary>How each line sits across <see cref="Size"/>'s width; <see cref="CompositionTextAlignment.Left"/> unless set.
 	/// Whitespace at a line's end hangs past where the line is placed.</summary>
 	public CompositionTextAlignment TextAlignment { get; set => Change(ref field, value); } = CompositionTextAlignment.Left;
@@ -61,7 +64,7 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 	{
 		CompositionTextAlignment.Center => (Size.X - line.PlacedWidthEm * FontSize) / 2f,
 		CompositionTextAlignment.Right => Size.X - line.PlacedWidthEm * FontSize,
-		_ => 0f, // Left (Start), and Justify: no line wraps, so none is stretched
+		_ => 0f, // Left (Start), and Justify: wrapped lines aren't stretched
 	};
 
 	/// <summary>How far the outline reaches past the glyphs' edges, in EM. 0, the default, draws no outline.</summary>
@@ -124,14 +127,14 @@ public sealed class GlyphRunContent(string text, float fontSize, CompositionBrus
 		// a TextBlock shapes the run it shares with its content again in place while measuring, before arrange moves the
 		// content's version.
 		var run = Derived as ShapedGlyphRun;
-		if (run is not null && run.IsShapingOf(Text, Font, Features))
+		if (run is not null && run.IsShapingOf(Text, Font, Features, Fit))
 		{
 			if (!HasCurrentDerived)
 				SetDerived(run);
 			return run;
 		}
 		run ??= new ShapedGlyphRun();
-		run.Reshape(Text, Font, Features);
+		run.Reshape(Text, Font, Features, Fit);
 		SetDerived(run);
 		return run;
 	}
