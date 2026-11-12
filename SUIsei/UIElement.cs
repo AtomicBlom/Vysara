@@ -64,6 +64,19 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	public bool IsTabStop { get => GetValue(IsTabStopProperty); set => SetValue(IsTabStopProperty, value); }
 	public int TabIndex { get => GetValue(TabIndexProperty); set => SetValue(TabIndexProperty, value); }
 
+	/// <summary>Where focus goes from here on a d-pad's up, as WinUI's <c>XYFocusUp</c>: overrides the nearest tab stop
+	/// that way (<see cref="FocusManager"/>) while it is focusable. Null for the nearest.</summary>
+	public UIElement? XYFocusUp { get; set; }
+
+	/// <summary>Where focus goes from here on a d-pad's down; null for the nearest tab stop that way.</summary>
+	public UIElement? XYFocusDown { get; set; }
+
+	/// <summary>Where focus goes from here on a d-pad's left; null for the nearest tab stop that way.</summary>
+	public UIElement? XYFocusLeft { get; set; }
+
+	/// <summary>Where focus goes from here on a d-pad's right; null for the nearest tab stop that way.</summary>
+	public UIElement? XYFocusRight { get; set; }
+
 	// --- Pointer routed events ---
 	// Preview events tunnel root→target; the paired bubble events fire after if Preview is unhandled.
 

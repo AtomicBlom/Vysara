@@ -205,6 +205,18 @@ public abstract class Control : FrameworkElement
 		SetBuiltInValue(IsTabStopProperty, true);
 	}
 
+	/// <summary>
+	/// Shows how the control holds focus in its template's <c>FocusStates</c>, as WinUI's do: <c>Focused</c> when it
+	/// came by keyboard, a gamepad or code (a focus outline shows), <c>PointerFocused</c> by a click (none does),
+	/// <c>Unfocused</c> when it went. A template without them shows nothing. Called by the <see cref="FocusManager"/>.
+	/// </summary>
+	internal void ShowFocus(FocusState state) => VisualStateManager.GoToState(this, state switch
+	{
+		FocusState.Unfocused => "Unfocused",
+		FocusState.Pointer => "PointerFocused",
+		_ => "Focused",
+	}, useTransitions: true);
+
 	/// <summary>The host's animation clock (via the attached root), used by <see cref="VisualStateManager"/> to run
 	/// state transitions. Null when the control is not attached to a live host.</summary>
 	internal AnimationClock? Clock => AttachedRoot?.Clock;

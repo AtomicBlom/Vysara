@@ -66,6 +66,10 @@ public sealed class InputManager
 			if (target is not null)
 				Raise(UIElement.PointerReleasedEvent, target, e);
 			_implicitCapture.Remove(e.PointerId);
+			// A touch or pen lifted is gone, not hovering: it leaves whatever it was over (as WinUI's do), so nothing stays
+			// lit by it and WantsPointer doesn't hold for a contact that will never move again
+			if (e.Device != PointerDeviceType.Mouse)
+				Leave(e);
 		}
 		else
 		{
@@ -240,6 +244,15 @@ public sealed class InputManager
 		_scratch = prev ?? [];
 	}
 
+	// A pointer gone (a touch or pen lifted): exits raised on everything it was over, innermost first, and its chain forgotten.
+	private void Leave(in PointerInput e)
+	{
+		if (!_overChains.Remove(e.PointerId, out var chain))
+			return;
+		foreach (var el in chain)
+			RaiseDirect(UIElement.PointerExitedEvent, el, e);
+	}
+
 	// Raise a bubble event preceded by its tunnel Preview counterpart. If the Preview is handled, the bubble is skipped.
 	private void Raise(RoutedEvent evt, UIElement target, in PointerInput e)
 	{
@@ -293,7 +306,7 @@ public sealed class InputManager
 	}
 
 	// Surface priority: topmost screen layer wins.
-	private static UIElement? HitTest(Vector2 pos, IReadOnlyList<UIView> views)
+	internal static UIElement? HitTest(Vector2 pos, IReadOnlyList<UIView> views)
 	{
 		UIElement? best = null;
 		var bestZ = int.MinValue;

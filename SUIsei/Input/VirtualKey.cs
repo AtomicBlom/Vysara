@@ -42,4 +42,10 @@ public enum VirtualKey
 	F1 = 112, F2 = 113, F3 = 114, F4 = 115,
 	F5 = 116, F6 = 117, F7 = 118, F8 = 119,
 	F9 = 120, F10 = 121, F11 = 122, F12 = 123,
+
+	// A gamepad's, as WinUI numbers them: A presses the focused control (as Enter does), B goes back, the d-pad moves
+	// focus by direction (UIHost); the host queues them for a pad when the UI has it
+	GamepadA = 195, GamepadB = 196, GamepadX = 197, GamepadY = 198,
+	GamepadDPadUp = 203, GamepadDPadDown = 204, GamepadDPadLeft = 205, GamepadDPadRight = 206,
+	GamepadMenu = 207, GamepadView = 208,
 }
