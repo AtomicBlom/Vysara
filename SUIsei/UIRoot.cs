@@ -94,6 +94,19 @@ public sealed class UIRoot
 	internal float? InputPaneTop { get; private set; }
 
 	/// <summary>
+	/// How far in from each edge of the surface the screen hides content, in surface pixels: a phone's camera cutout or
+	/// rounded corners. Zero (the default) on a display that hides none. The host or app sets it; the next layout pass
+	/// arranges the elements marked <see cref="Extensions.SafeArea.EdgesProperty"/> clear of it.
+	/// </summary>
+	public Thickness SafeAreaInsets { get; set; }
+
+	/// <summary>
+	/// The part of the surface the screen hides nothing of, in layout units (DIPs), as of the last layout pass, or null
+	/// while the whole surface is safe.
+	/// </summary>
+	internal Rect? SafeRect { get; private set; }
+
+	/// <summary>
 	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
 	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
 	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
@@ -216,9 +229,16 @@ public sealed class UIRoot
 
 		var availDip = new Size(availablePixels.Width / LayoutScale, availablePixels.Height / LayoutScale);
 		var inputPaneTop = InputPaneHeight > 0f ? (float?)((availablePixels.Height - InputPaneHeight) / LayoutScale) : null;
-		if (inputPaneTop != InputPaneTop)
+		var insets = SafeAreaInsets;
+		var safeRect = insets == default
+			? (Rect?)null
+			: new Rect(insets.Left / LayoutScale, insets.Top / LayoutScale,
+				MathF.Max(0f, availDip.Width - (insets.Left + insets.Right) / LayoutScale),
+				MathF.Max(0f, availDip.Height - (insets.Top + insets.Bottom) / LayoutScale));
+		if (inputPaneTop != InputPaneTop || safeRect != SafeRect)
 		{
 			InputPaneTop = inputPaneTop;
+			SafeRect = safeRect;
 			Content?.InvalidateArrangeTree();
 			foreach (var (element, _, _) in _overlays)
 				element.InvalidateArrangeTree();

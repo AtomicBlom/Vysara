@@ -319,7 +319,7 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		if (!ArrangeDirty && _lastFinal == finalRect)
 			return;
 		_lastFinal = finalRect;
-		finalRect = Extensions.InputPane.Avoid(this, finalRect);
+		finalRect = Extensions.SafeArea.Inset(this, Extensions.InputPane.Avoid(this, finalRect));
 		if (Visibility == Visibility.Collapsed)
 			LayoutRect = new Rect(finalRect.X, finalRect.Y, 0, 0);
 		else
