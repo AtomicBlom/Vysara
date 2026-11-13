@@ -16,8 +16,9 @@ namespace SUIsei.Controls;
 /// <see cref="FontSize"/> and <see cref="Foreground"/> are inherited, as in WinUI: unless set here (locally, by a style or
 /// by an animation), they are those of the nearest <see cref="ContentPresenter"/>, <see cref="Control"/> or text block
 /// above, so the text a control's template or its string content shows takes the control's size and brush. The text
-/// breaks into lines at its line breaks, with no wrapping, and <see cref="TextAlignment"/> places each line across the
-/// width the text block is arranged at.
+/// breaks into lines at its line breaks and, with <see cref="TextWrapping"/>, at spaces to keep inside the width it is
+/// measured at; <see cref="TextTrimming"/> cuts a line still too wide short with an ellipsis; and
+/// <see cref="TextAlignment"/> places each line across the width the text block is arranged at.
 /// </para>
 /// </summary>
 public sealed class TextBlock : FrameworkElement
@@ -52,10 +53,22 @@ public sealed class TextBlock : FrameworkElement
 				PropertyChanged = static (t, _, _) => t.InvalidateContent(),
 			});
 
+	/// <summary>Whether lines also break at spaces to keep inside the width: WinUI's <c>TextWrapping</c>,
+	/// <see cref="SUIsei.TextWrapping.NoWrap"/> by default.</summary>
+	public static readonly DependencyProperty<TextBlock, TextWrapping> TextWrappingProperty =
+		DependencyProperty.Register<TextBlock, TextWrapping>(nameof(TextWrapping),
+			new PropertyMetadata<TextBlock, TextWrapping> { DefaultValue = TextWrapping.NoWrap, Invalidates = InvalidationFlags.Measure });
+
+	/// <summary>Whether a line still wider than the width is cut short with an ellipsis: WinUI's <c>TextTrimming</c>,
+	/// <see cref="SUIsei.TextTrimming.None"/> by default.</summary>
+	public static readonly DependencyProperty<TextBlock, TextTrimming> TextTrimmingProperty =
+		DependencyProperty.Register<TextBlock, TextTrimming>(nameof(TextTrimming),
+			new PropertyMetadata<TextBlock, TextTrimming> { DefaultValue = TextTrimming.None, Invalidates = InvalidationFlags.Measure });
+
 	// The paint of text with no Foreground. Shared by every such run and never changed.
 	private static readonly CompositionColorBrush DefaultForeground = new(HdrColor.FromRgb(255, 255, 255));
 
-	/// <summary>The text to lay out and render as MTSDF glyphs: a line per line break, with no wrapping.</summary>
+	/// <summary>The text to lay out and render as MTSDF glyphs: a line per line break, and more where it wraps.</summary>
 	public string Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
 
 	/// <summary>Font size in DIPs: 14 unless set here or inherited from above.</summary>
@@ -67,11 +80,19 @@ public sealed class TextBlock : FrameworkElement
 	/// <summary>How each line sits across the width the text block is arranged at.</summary>
 	public TextAlignment TextAlignment { get => GetValue(TextAlignmentProperty); set => SetValue(TextAlignmentProperty, value); }
 
+	/// <summary>Whether lines also break at spaces to keep inside the width the text block is measured at.</summary>
+	public TextWrapping TextWrapping { get => GetValue(TextWrappingProperty); set => SetValue(TextWrappingProperty, value); }
+
+	/// <summary>Whether a line still wider than that width is cut short with an ellipsis.</summary>
+	public TextTrimming TextTrimming { get => GetValue(TextTrimmingProperty); set => SetValue(TextTrimmingProperty, value); }
+
 	// Measured from the run's shaping: each line's width in EM, which a size doesn't change, times the size. So an animated
-	// FontSize, or one inherited from above, re-measures without shaping anything, and the same shaping draws the run.
+	// FontSize, or one inherited from above, re-measures without shaping anything (unless the text is fitted to the width,
+	// which is in EM too), and the same shaping draws the run.
 	protected override Size MeasureOverride(Size available)
 	{
 		var font = TextFont;
+		_fit = TextFit.For(available.Width, FontSize, TextWrapping, TextTrimming);
 		var shaped = Shaped(Text, font, Typography.FeaturesOf(this));
 		return new Size(MathF.Min(shaped.Width * FontSize, available.Width), shaped.Lines.Count * font.LineHeight * FontSize);
 	}
@@ -79,12 +100,13 @@ public sealed class TextBlock : FrameworkElement
 	// The text shaped, kept across measures and handed to the run this element draws, so measuring and drawing shape once
 	// between them: shaped again only when the text, the font, its shaper or the features change.
 	private ShapedGlyphRun? _shaped;
+	private TextFit _fit;
 
 	private ShapedGlyphRun Shaped(string text, FontAtlas font, FontFeatureSet features)
 	{
 		var shaped = _shaped ??= new ShapedGlyphRun();
-		if (!shaped.IsShapingOf(text, font, features))
-			shaped.Reshape(text, font, features);
+		if (!shaped.IsShapingOf(text, font, features, _fit))
+			shaped.Reshape(text, font, features, _fit);
 		return shaped;
 	}
 
@@ -111,10 +133,11 @@ public sealed class TextBlock : FrameworkElement
 		content.Update(text, FontSize, Foreground?.CompositionBrush ?? DefaultForeground, new Vector2(LayoutRect.Width, LayoutRect.Height),
 			TextFont, Typography.FeaturesOf(this));
 		content.TextAlignment = TextAlignment.ToComposition();
+		content.Fit = _fit;
 		content.UpdateEffects(TextEffects.GetOutlineThickness(this), TextEffects.GetOutlineBrush(this)?.CompositionBrush,
 			TextEffects.GetShadowOffset(this).ToVector2(), TextEffects.GetShadowSoftness(this), TextEffects.GetShadowBrush(this)?.CompositionBrush);
 		// The run draws from the shaping its measure made, rather than shaping the same text again.
-		if (_shaped is { } shaped && shaped.IsShapingOf(text, content.Font, content.Features))
+		if (_shaped is { } shaped && shaped.IsShapingOf(text, content.Font, content.Features, _fit))
 			content.SetDerived(shaped);
 		return content;
 	}
