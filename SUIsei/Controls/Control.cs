@@ -145,6 +145,15 @@ public abstract class Control : FrameworkElement
 
 	public Brush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
 
+	/// <summary>The space between the control's chrome and its content, as in WinUI: a built-in template puts it where
+	/// WinUI's default template does (a button's border, around its content). Where it isn't set, the template's own look
+	/// shows.</summary>
+	public static readonly DependencyProperty<Control, Thickness> PaddingProperty =
+		DependencyProperty.Register(nameof(Padding),
+			new PropertyMetadata<Control, Thickness> { Invalidates = InvalidationFlags.Measure });
+
+	public Thickness Padding { get => GetValue(PaddingProperty); set => SetValue(PaddingProperty, value); }
+
 	/// <summary>The size of the control's text in DIPs, inherited as in WinUI: the text in its template, or made for its
 	/// string content, takes it unless that text sets its own, and so do the controls inside it.</summary>
 	public static readonly DependencyProperty<Control, float> FontSizeProperty =
@@ -165,6 +174,52 @@ public abstract class Control : FrameworkElement
 		Listen(Background, attached);
 		Listen(BorderBrush, attached);
 		base.OnLiveTreeChanged(attached);
+		// A template realized before the control joined the tree saw only its own resources: read them again from here.
+		if (attached)
+			RefreshThemeResources();
+	}
+
+	// The theme resources the realized template read, each with the brush it found (null for none).
+	private List<(string Key, Brush? Found)>? _themeResources;
+
+	/// <summary>
+	/// What a built-in template reads for <paramref name="key"/>, as WinUI's default templates read a
+	/// <c>{ThemeResource}</c>: the brush under that key in the nearest <see cref="FrameworkElement.Resources"/> from this
+	/// control up, or <paramref name="fallback"/>, the template's own look, when none has it. So a page recolours the built-in
+	/// controls under it with keys such as <c>ToggleButtonBackgroundChecked</c>, as WinUI's lightweight styling does. A
+	/// template realized before the control joined a tree is built again if a key it read finds another brush there.
+	/// </summary>
+	internal Brush ThemeResource(string key, Brush fallback) => ThemeResourceOrNull(key) ?? fallback;
+
+	/// <summary>The brush under the theme resource <paramref name="key"/>, as <see cref="ThemeResource"/>, or null where none
+	/// is found: for a part the built-in look leaves alone unless a page gives it something.</summary>
+	internal Brush? ThemeResourceOrNull(string key)
+	{
+		var found = FindResource(key) as Brush;
+		(_themeResources ??= []).Add((key, found));
+		return found;
+	}
+
+	// Joined a tree: a template that read a theme resource which finds another brush from here is built again on the next
+	// measure, reading them anew.
+	private void RefreshThemeResources()
+	{
+		if (_templateRoot is null || _themeResources is not { } read)
+			return;
+		for (var i = 0; i < read.Count; i++)
+		{
+			if (!ReferenceEquals(FindResource(read[i].Key) as Brush, read[i].Found))
+			{
+				DiscardTemplate();
+				return;
+			}
+		}
+	}
+
+	internal override void ClearTemplateBindings()
+	{
+		_themeResources = null;
+		base.ClearTemplateBindings();
 	}
 
 	public static readonly DependencyProperty<Control, TabFocusNavigation> TabFocusNavigationProperty =
@@ -251,7 +306,10 @@ public abstract class Control : FrameworkElement
 	// template's parts and the old parts can be collected. Template bindings are registered only by template factories. A
 	// control with no template realized shows the states of its own groups, as a ListViewItem's built-in selection does; a
 	// template takes over from them, so they are left too.
-	private void OnTemplateChanged()
+	private void OnTemplateChanged() => DiscardTemplate();
+
+	// Drop the realized template, if any, for the next measure to build again.
+	private void DiscardTemplate()
 	{
 		VisualStateManager.LeaveAll(_templateRoot ?? (UIElement)this);
 		if (_templateRoot is not null)

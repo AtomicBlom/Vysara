@@ -22,6 +22,7 @@ public class ToggleButton : ButtonBase
 	public ToggleButton()
 	{
 		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		SetBuiltInValue(PaddingProperty, Button.BuiltInPadding);
 		InheritedText.GiveBuiltInLook(this);
 	}
 
@@ -116,13 +117,25 @@ public class ToggleButton : ButtonBase
 		// through parts instead. The part-based path is the OnToggleStateChanged hook.
 		VisualStateManager.GoToState(this, IsChecked switch { true => "Checked", null => "Indeterminate", _ => "Unchecked" }, useTransitions);
 		OnToggleStateChanged();
+
+		ShowForeground();
 	}
+
+	// The built-in template's presenter, and the text it shows while checked where ToggleButtonForegroundChecked gives one.
+	private ContentPresenter? _builtInPresenter;
+	private Brush? _checkedForeground;
+
+	// The built-in presenter's text: the checked text while checked where there is one, else the toggle's Foreground.
+	private void ShowForeground() =>
+		_builtInPresenter?.SetTemplateValue(ContentPresenter.ForegroundProperty,
+			IsChecked == true && _checkedForeground is { } checkedForeground ? checkedForeground : Foreground);
 
 	// The default toggle look: a rounded button whose pointer states show their backgrounds on the base border (faded by
 	// its BrushTransition), layered under an accent
 	// overlay whose opacity the CheckStates group drives — so checked/unchecked cross-fades the accent in and out
 	// without fighting the hover/press background (two states, two properties, no conflict). CheckBox replaces this
-	// template entirely with its box-and-glyph look.
+	// template entirely with its box-and-glyph look. As WinUI's, the accent is ToggleButtonBackgroundChecked and the text
+	// on it ToggleButtonForegroundChecked where a page's resources give them.
 	private static readonly ControlTemplate DefaultTemplate = new()
 	{
 		Factory = static control =>
@@ -134,17 +147,25 @@ public class ToggleButton : ButtonBase
 			var accent = new Border { Background = AccentBackground, CornerRadius = new CornerRadius(4f), Opacity = 0f };
 			var presenter = new ContentPresenter
 			{
-				Margin = new Thickness(10f, 5f),
 				HorizontalAlignment = HorizontalAlignment.Center,
 				VerticalAlignment = VerticalAlignment.Center,
 			};
 			// As WinUI's default template: the base border paints the toggle's Background, BorderBrush and BorderThickness,
-			// and the presenter its Foreground.
-			toggle.RegisterTemplateBinding(BackgroundProperty, baseBorder, Border.BackgroundProperty, static value => value ?? NormalBackground);
+			// the presenter its Foreground (or the checked text's, while checked), and Padding is the presenter's margin.
+			toggle._builtInPresenter = presenter;
+			var background = toggle.ThemeResource("ToggleButtonBackground", NormalBackground);
+			var over = toggle.ThemeResource("ToggleButtonBackgroundPointerOver", OverBackground);
+			var pressed = toggle.ThemeResource("ToggleButtonBackgroundPressed", PressedBackground);
+			TemplateStates.ThemedForeground(toggle, "ToggleButtonForeground");
+			toggle.RegisterTemplateBinding(BackgroundProperty, baseBorder, Border.BackgroundProperty, value => value ?? background);
 			toggle.RegisterTemplateBinding(BorderBrushProperty, baseBorder, Border.BorderBrushProperty);
 			toggle.RegisterTemplateBinding(BorderThicknessProperty, baseBorder, Border.BorderThicknessProperty);
-			toggle.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
+			toggle.RegisterTemplateBinding(PaddingProperty, presenter, FrameworkElement.MarginProperty);
+			toggle.RegisterTemplateBinding(ForegroundProperty, _ => toggle.ShowForeground());
 			toggle.RegisterContentTemplateBinding(content => presenter.Content = content);
+			accent.Background = toggle.ThemeResource("ToggleButtonBackgroundChecked", AccentBackground);
+			toggle._checkedForeground = toggle.ThemeResourceOrNull("ToggleButtonForegroundChecked");
+			toggle.ShowForeground();
 
 			root.Children.Add(baseBorder);
 			root.Children.Add(accent);
@@ -152,8 +173,8 @@ public class ToggleButton : ButtonBase
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
 			common.States.Add(new VisualState { Name = "Normal" });
-			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(baseBorder, OverBackground) });
-			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(baseBorder, PressedBackground) });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(baseBorder, over) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(baseBorder, pressed) });
 			// Disabled mutes the base and the label as a button's does, and the accent too, so a checked toggle still reads as
 			// checked but no longer in the accent colour.
 			common.States.Add(new VisualState

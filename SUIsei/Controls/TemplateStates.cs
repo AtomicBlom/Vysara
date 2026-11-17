@@ -61,6 +61,14 @@ internal static class TemplateStates
 	/// <summary>A fade of <paramref name="milliseconds"/> between background brushes.</summary>
 	public static BrushTransition Fade(double milliseconds) => new() { Duration = TimeSpan.FromMilliseconds(milliseconds) };
 
+	/// <summary>The built-in look's text colour, replaced by the brush under the theme resource <paramref name="key"/>
+	/// wherever one is found: a Foreground the control or its style sets still wins.</summary>
+	public static void ThemedForeground(Control control, string key)
+	{
+		if (control.ThemeResourceOrNull(key) is { } found)
+			control.SetBuiltInValue(Control.ForegroundProperty, found);
+	}
+
 	/// <summary>A storyboard that holds each target's property at its brush while its state is current.</summary>
 	public static Storyboard Hold(params ReadOnlySpan<(DependencyObject Target, DependencyProperty Property, Brush Brush)> holds)
 	{
