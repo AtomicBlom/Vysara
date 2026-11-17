@@ -66,13 +66,11 @@ public sealed class Grid : Panel
 		var cols = Cols;
 		var rows = Rows;
 
-		// Measure each child exactly once, against a cell constraint derived from the track types it spans: a Pixel
-		// track contributes its fixed extent; a Star track, where its dimension has no Auto track and the grid is
-		// offered a finite extent, its proportional share of what the Pixel tracks leave, as WinUI measures it (so text
-		// in a plain grid wraps at the grid's width); otherwise an Auto or Star track is left unconstrained, so the child
-		// reports its content size (which sizes Auto/Star tracks, with Star taking its proportional share only at
-		// arrange). One measure per child — no second resolved-size pass — so constraint-dependent content cannot
-		// desire one size for the track and a different one for its final cell.
+		// Measure each child against a cell constraint derived from the track types it spans: a Pixel track contributes its
+		// fixed extent; a Star track, where its dimension has no Auto track and the grid is offered a finite extent, its
+		// proportional share of what the Pixel tracks leave, as WinUI measures it (so text in a plain grid wraps at the
+		// grid's width); otherwise an Auto or Star track is left unconstrained, so the child reports its content size (which
+		// sizes Auto/Star tracks, with Star taking its proportional share only at arrange).
 		foreach (var child in Children.Items)
 		{
 			var ci = ClampIndex(GetColumn(child), cols.Length);
@@ -84,6 +82,34 @@ public sealed class Grid : Panel
 
 		ResolveTracks(cols, available.Width, horizontal: true, ref _colSizes);
 		ResolveTracks(rows, available.Height, horizontal: false, ref _rowSizes);
+
+		// A Star cell beside an Auto track was measured unbounded above, since its share wasn't known until the Auto tracks
+		// were sized. As WinUI measures star cells after the Auto ones, it is measured again now for that share: so content
+		// that lays out to its width (a scroll viewer deciding on its scroll bars, text wrapping) lays out for the width it
+		// will be arranged at, not for unbounded room.
+		var acrossWaited = WaitsForAuto(cols, available.Width);
+		var downWaited = WaitsForAuto(rows, available.Height);
+		if (!acrossWaited && !downWaited)
+			return new Size(Sum(_colSizes), Sum(_rowSizes));
+		var again = false;
+		foreach (var child in Children.Items)
+		{
+			var ci = ClampIndex(GetColumn(child), cols.Length);
+			var ri = ClampIndex(GetRow(child), rows.Length);
+			var across = acrossWaited && InStarShare(cols, ci, GetColumnSpan(child));
+			var down = downWaited && InStarShare(rows, ri, GetRowSpan(child));
+			if (!across && !down)
+				continue;
+			child.Measure(new Size(
+				across ? SpanSum(_colSizes, ci, GetColumnSpan(child)) : CellConstraint(cols, ci, GetColumnSpan(child), available.Width),
+				down ? SpanSum(_rowSizes, ri, GetRowSpan(child)) : CellConstraint(rows, ri, GetRowSpan(child), available.Height)));
+			again = true;
+		}
+		if (again)
+		{
+			ResolveTracks(cols, available.Width, horizontal: true, ref _colSizes);
+			ResolveTracks(rows, available.Height, horizontal: false, ref _rowSizes);
+		}
 		return new Size(Sum(_colSizes), Sum(_rowSizes));
 	}
 
@@ -217,6 +243,35 @@ public sealed class Grid : Panel
 				return float.PositiveInfinity;
 		}
 		return sum;
+	}
+
+	// Whether a Star track's share along this axis waits on its Auto tracks: the extent is finite, and it has both.
+	private static bool WaitsForAuto(ReadOnlySpan<GridLength> defs, float available)
+	{
+		if (!float.IsFinite(available))
+			return false;
+		bool auto = false, star = false;
+		foreach (var d in defs)
+		{
+			auto |= d.IsAuto;
+			star |= d.IsStar;
+		}
+		return auto && star;
+	}
+
+	// Whether a child's run of tracks takes a Star track's share: it spans a Star track and no Auto one (a cell with an Auto
+	// track in it stays unbounded, as it sizes that track).
+	private static bool InStarShare(ReadOnlySpan<GridLength> defs, int start, int span)
+	{
+		var end = Math.Min(defs.Length, start + Math.Max(1, span));
+		var star = false;
+		for (var i = start; i < end; i++)
+		{
+			if (defs[i].IsAuto)
+				return false;
+			star |= defs[i].IsStar;
+		}
+		return star;
 	}
 
 	private static int ClampIndex(int value, int length) => Math.Clamp(value, 0, length - 1);
