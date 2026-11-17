@@ -1,6 +1,6 @@
 # SUIsei
 
-A retained-mode, WinUI-inspired UI framework for .NET 10, designed for NativeAOT compatibility and headless testability.
+A retained-mode, WinUI-inspired UI framework for .NET 11, designed for NativeAOT compatibility and headless testability.
 
 ## Features
 

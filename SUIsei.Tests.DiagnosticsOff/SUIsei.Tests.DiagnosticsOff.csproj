@@ -6,7 +6,7 @@
        process, and a process can't turn it off again, so the off path runs here, in a process of its own. It references
        the endpoint as a debug build would, to show that starting it does nothing while the switch is off. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

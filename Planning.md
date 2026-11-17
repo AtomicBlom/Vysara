@@ -2,7 +2,7 @@
 
 > **What this is.** The design bible for SUIsei: the locked decisions, the architecture, the public contracts an integrating engine depends on, the load-bearing pillars, and the work that remains. [`README.md`](README.md) is the front page (features + usage); this is the *why* and the *what's next*.
 >
-> **What SUIsei is.** A standalone, **GPU-free, NativeAOT-clean**, retained-mode, WinUI-3-inspired XAML UI runtime for .NET 10, plus a Roslyn XAML source generator. It knows nothing about any render graph: it produces a neutral draw list (or exposes its composition tree directly) and a host renders it. In the Loom engine it is consumed by the thin `Loom.UI.SUIsei` glue through Loom's neutral `IRenderContext.DrawList` verb — the same path Dear ImGui uses — so no UI type ever enters the engine's describe/execute layers.
+> **What SUIsei is.** A standalone, **GPU-free, NativeAOT-clean**, retained-mode, WinUI-3-inspired XAML UI runtime for .NET 11, plus a Roslyn XAML source generator. It knows nothing about any render graph: it produces a neutral draw list (or exposes its composition tree directly) and a host renders it. In the Loom engine it is consumed by the thin `Loom.UI.SUIsei` glue through Loom's neutral `IRenderContext.DrawList` verb — the same path Dear ImGui uses — so no UI type ever enters the engine's describe/execute layers.
 
 ---
 
