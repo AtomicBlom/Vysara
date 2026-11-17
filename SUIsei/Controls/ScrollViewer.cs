@@ -32,6 +32,19 @@ public sealed class ScrollViewer : FrameworkElement
 		CornerRadius = new CornerRadius(ThumbThickness / 2f),
 		BackgroundTransition = new BrushTransition { Duration = TimeSpan.FromMilliseconds(120) },
 	};
+	// The horizontal thumb, along the bottom, shown only when HorizontalScrollMode is Enabled and the content is wider
+	private readonly Border _hThumb = new()
+	{
+		Background = ThumbRest,
+		CornerRadius = new CornerRadius(ThumbThickness / 2f),
+		BackgroundTransition = new BrushTransition { Duration = TimeSpan.FromMilliseconds(120) },
+	};
+	private float _hThumbWidth;
+	private float _hThumbTravel;
+	private bool _hThumbOver;
+	private bool _draggingHThumb;
+	private float _dragStartPointerX;
+	private float _dragStartHOffset;
 	// VisualChildren (the content, then the thumb), rebuilt only when Content changes, so reading it allocates nothing.
 	private UIElement[] _visualChildren;
 	private float _thumbHeight;
@@ -53,11 +66,28 @@ public sealed class ScrollViewer : FrameworkElement
 	private float _panStartY;
 	private float _panStartOffset;
 
+	/// <summary>Identifies <see cref="HorizontalScrollMode"/>.</summary>
+	public static readonly DependencyProperty<ScrollViewer, ScrollMode> HorizontalScrollModeProperty =
+		DependencyProperty.Register<ScrollViewer, ScrollMode>(nameof(HorizontalScrollMode),
+			new PropertyMetadata<ScrollViewer, ScrollMode> { DefaultValue = ScrollMode.Disabled, Invalidates = InvalidationFlags.Measure });
+
+	/// <summary>
+	/// Whether it also scrolls sideways: the content measured unbounded in width, a thumb along the bottom, a sideways wheel
+	/// (and a vertical one when there is nothing to scroll vertically) moving it. Disabled by default: the content takes the
+	/// viewport's width.
+	/// </summary>
+	public ScrollMode HorizontalScrollMode
+	{
+		get => GetValue(HorizontalScrollModeProperty);
+		set => SetValue(HorizontalScrollModeProperty, value);
+	}
+
 	public ScrollViewer()
 	{
 		ClipToBounds = true;
-		_visualChildren = [_vThumb];
+		_visualChildren = [_vThumb, _hThumb];
 		AdoptChild(_vThumb);
+		AdoptChild(_hThumb);
 		AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged);
 		AddHandler(KeyDownEvent, OnKeyDown);
 		AddHandler(GotFocusEvent, OnDescendantGotFocus);
@@ -77,6 +107,13 @@ public sealed class ScrollViewer : FrameworkElement
 		_vThumb.AddHandler(PointerMovedEvent, OnThumbMoved);
 		_vThumb.AddHandler(PointerReleasedEvent, OnThumbReleased);
 		_vThumb.AddHandler(PointerCaptureLostEvent, OnThumbCaptureLost);
+
+		_hThumb.AddHandler(PointerEnteredEvent, OnHThumbEntered);
+		_hThumb.AddHandler(PointerExitedEvent, OnHThumbExited);
+		_hThumb.AddHandler(PointerPressedEvent, OnHThumbPressed);
+		_hThumb.AddHandler(PointerMovedEvent, OnHThumbMoved);
+		_hThumb.AddHandler(PointerReleasedEvent, OnHThumbReleased);
+		_hThumb.AddHandler(PointerCaptureLostEvent, OnHThumbCaptureLost);
 	}
 
 	public UIElement? Content
@@ -89,7 +126,7 @@ public sealed class ScrollViewer : FrameworkElement
 			if (field is not null)
 				DropChild(field);
 			field = value;
-			_visualChildren = value is null ? [_vThumb] : [value, _vThumb];
+			_visualChildren = value is null ? [_vThumb, _hThumb] : [value, _vThumb, _hThumb];
 			if (value is not null)
 				AdoptChild(value);
 			InvalidateMeasure();
@@ -136,6 +173,7 @@ public sealed class ScrollViewer : FrameworkElement
 	protected override Size MeasureOverride(Size available)
 	{
 		_vThumb.Measure(available);
+		_hThumb.Measure(available);
 		if (Content is null)
 		{
 			ExtentWidth = ExtentHeight = 0f;
@@ -143,7 +181,7 @@ public sealed class ScrollViewer : FrameworkElement
 		}
 
 		// Measure the content unbounded in the scroll axis so its full extent is known regardless of the viewport.
-		Content.Measure(new Size(available.Width, float.PositiveInfinity));
+		Content.Measure(new Size(HorizontalScrollMode == ScrollMode.Enabled ? float.PositiveInfinity : available.Width, float.PositiveInfinity));
 		ExtentWidth = Content.DesiredSize.Width;
 		ExtentHeight = Content.DesiredSize.Height;
 
@@ -183,11 +221,12 @@ public sealed class ScrollViewer : FrameworkElement
 		return finalSize;
 	}
 
-	// Size the thumb to the visible fraction of the content and slide it down in proportion to the scroll position;
-	// hide it when there is nothing to scroll.
+	// Size each thumb to the visible fraction of the content and slide it in proportion to the scroll position; hide it when
+	// there is nothing to scroll that way. The horizontal one runs along the bottom, short of the vertical one's corner.
 	private void ArrangeThumb(Size finalSize)
 	{
-		if (ScrollableHeight > 0f && ViewportHeight > 0f)
+		var vertical = ScrollableHeight > 0f && ViewportHeight > 0f;
+		if (vertical)
 		{
 			_thumbHeight = Math.Clamp(ViewportHeight * (ViewportHeight / ExtentHeight), ThumbMinLength, ViewportHeight);
 			_thumbTravel = ViewportHeight - _thumbHeight;
@@ -202,13 +241,31 @@ public sealed class ScrollViewer : FrameworkElement
 			_vThumb.Visibility = Visibility.Collapsed;
 			_vThumb.Arrange(new Rect(finalSize.Width, 0f, 0f, 0f));
 		}
+
+		if (HorizontalScrollMode == ScrollMode.Enabled && ScrollableWidth > 0f && ViewportWidth > 0f)
+		{
+			var track = ViewportWidth - (vertical ? ThumbThicknessActive + ThumbMargin : 0f);
+			_hThumbWidth = Math.Clamp(track * (ViewportWidth / ExtentWidth), ThumbMinLength, track);
+			_hThumbTravel = track - _hThumbWidth;
+			var x = _hThumbTravel > 0f ? HorizontalOffset / ScrollableWidth * _hThumbTravel : 0f;
+			var thickness = _hThumbOver || _draggingHThumb ? ThumbThicknessActive : ThumbThickness;
+			_hThumb.Visibility = Visibility.Visible;
+			_hThumb.Arrange(new Rect(x, finalSize.Height - thickness - ThumbMargin, _hThumbWidth, thickness));
+		}
+		else
+		{
+			_hThumbTravel = 0f;
+			_hThumb.Visibility = Visibility.Collapsed;
+			_hThumb.Arrange(new Rect(0f, finalSize.Height, 0f, 0f));
+		}
 	}
 
-	// Brighten/dim the thumb toward its current interaction state. Grabbed wins over hover wins over rest; faded by the
+	// Brighten/dim the thumbs toward their current interaction state. Grabbed wins over hover wins over rest; faded by each
 	// thumb's BrushTransition when on a live host, switched at once when not (so the state is observable headlessly).
 	private void UpdateThumbVisual()
 	{
 		_vThumb.Background = _draggingThumb ? ThumbActive : _thumbOver ? ThumbHover : ThumbRest;
+		_hThumb.Background = _draggingHThumb ? ThumbActive : _hThumbOver ? ThumbHover : ThumbRest;
 		InvalidateArrange(); // the engaged thumb is wider
 	}
 
@@ -262,12 +319,70 @@ public sealed class ScrollViewer : FrameworkElement
 		UpdateThumbVisual();
 	}
 
+	private void OnHThumbEntered(object sender, RoutedEventArgs e)
+	{
+		_hThumbOver = true;
+		UpdateThumbVisual();
+	}
+
+	private void OnHThumbExited(object sender, RoutedEventArgs e)
+	{
+		_hThumbOver = false;
+		UpdateThumbVisual();
+	}
+
+	private void OnHThumbPressed(object sender, RoutedEventArgs e)
+	{
+		if (e is not PointerRoutedEventArgs p || ScrollableWidth <= 0f)
+			return;
+		_draggingHThumb = true;
+		_dragStartPointerX = p.GetCurrentPoint(this).Position.X;
+		_dragStartHOffset = HorizontalOffset;
+		_hThumb.CapturePointer(0);
+		UpdateThumbVisual();
+		e.Handled = true;
+	}
+
+	private void OnHThumbMoved(object sender, RoutedEventArgs e)
+	{
+		if (!_draggingHThumb || e is not PointerRoutedEventArgs p)
+			return;
+		var dx = p.GetCurrentPoint(this).Position.X - _dragStartPointerX;
+		if (_hThumbTravel > 0f)
+			SetHorizontalOffset(_dragStartHOffset + dx * ScrollableWidth / _hThumbTravel);
+		e.Handled = true;
+	}
+
+	private void OnHThumbReleased(object sender, RoutedEventArgs e)
+	{
+		if (!_draggingHThumb)
+			return;
+		_draggingHThumb = false;
+		_hThumb.ReleasePointerCapture(0);
+		UpdateThumbVisual();
+		e.Handled = true;
+	}
+
+	private void OnHThumbCaptureLost(object sender, RoutedEventArgs e)
+	{
+		_draggingHThumb = false;
+		UpdateThumbVisual();
+	}
+
 	private void OnPointerWheelChanged(object sender, RoutedEventArgs e)
 	{
 		if (e is not PointerRoutedEventArgs pointer)
 			return;
-		// Wheel up (positive delta) scrolls toward the top (offset decreases).
-		SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * Scrolling.GetWheelScrollAmount(this));
+		var amount = Scrolling.GetWheelScrollAmount(this);
+		var sideways = HorizontalScrollMode == ScrollMode.Enabled && ScrollableWidth > 0f;
+		// A sideways wheel (a trackpad's) scrolls across; so does an upright one when there is nothing to scroll down.
+		if (sideways && pointer.Wheel.X != 0f)
+			SetHorizontalOffset(HorizontalOffset - pointer.Wheel.X * amount);
+		else if (sideways && ScrollableHeight <= 0f)
+			SetHorizontalOffset(HorizontalOffset - pointer.Wheel.Y * amount);
+		else
+			// Wheel up (positive delta) scrolls toward the top (offset decreases).
+			SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * amount);
 		e.Handled = true;
 	}
 

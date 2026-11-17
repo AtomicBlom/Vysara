@@ -79,6 +79,59 @@ public sealed class ScrollViewerTests
 	}
 
 	[Test]
+	public void Measures_its_content_to_the_viewport_width_unless_horizontal_scrolling_is_enabled()
+	{
+		var child = new Border { Width = 400f, Height = 50f };
+		var viewer = new ScrollViewer { Content = child, Width = 100f, Height = 100f };
+		var root = new UIRoot(UISurface.Hud) { Content = viewer };
+		root.LayoutPass(new Size(100f, 100f));
+		viewer.ScrollableWidth.ShouldBe(0f);   // measured to the viewport: nothing to scroll sideways
+
+		viewer.HorizontalScrollMode = ScrollMode.Enabled;
+		root.LayoutPass(new Size(100f, 100f));
+		viewer.ExtentWidth.ShouldBe(400f);
+		viewer.ScrollableWidth.ShouldBe(300f);
+
+		viewer.ScrollToHorizontalOffset(120f);
+		root.LayoutPass(new Size(100f, 100f));
+		child.LayoutRect.X.ShouldBe(-120f);   // the content slides left by the offset
+	}
+
+	[Test]
+	public void A_wheel_scrolls_sideways_when_there_is_nothing_to_scroll_down()
+	{
+		var child = new Border { Width = 400f, Height = 50f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
+		var viewer = new ScrollViewer { Content = child, Width = 100f, Height = 100f, HorizontalScrollMode = ScrollMode.Enabled };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
+		host.Tick(0.016, 0f, new Vector2(100f, 100f));
+		viewer.ScrollableHeight.ShouldBe(0f);
+
+		// The content is 50 tall, centred in the 100 of the viewport
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, new Vector2(40f, 50f),
+			PointerUpdateKind.None, PointerButtons.None, 1f, new Vector2(0f, -1f), 0));
+		host.Tick(0.016, 0f, new Vector2(100f, 100f));
+		viewer.HorizontalOffset.ShouldBeGreaterThan(0f);
+		viewer.VerticalOffset.ShouldBe(0f);
+	}
+
+	[Test]
+	public void A_sideways_wheel_scrolls_sideways_when_both_can_scroll()
+	{
+		var child = new Border { Width = 400f, Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
+		var viewer = new ScrollViewer { Content = child, Width = 100f, Height = 100f, HorizontalScrollMode = ScrollMode.Enabled };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
+		host.Tick(0.016, 0f, new Vector2(100f, 100f));
+
+		host.QueuePointer(new PointerInput(0, PointerDeviceType.Mouse, new Vector2(40f, 50f),
+			PointerUpdateKind.None, PointerButtons.None, 1f, new Vector2(-1f, 0f), 0));
+		host.Tick(0.016, 0f, new Vector2(100f, 100f));
+		viewer.HorizontalOffset.ShouldBeGreaterThan(0f);
+		viewer.VerticalOffset.ShouldBe(0f);
+	}
+
+	[Test]
 	public void Dragging_the_thumb_scrolls_the_viewer()
 	{
 		var child = new Border { Width = 80f, Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
