@@ -305,8 +305,14 @@ public sealed class ScrollViewer : FrameworkElement
 
 		if (Content is { } content)
 		{
-			var contentWidth = MathF.Max(ExtentWidth, viewportWidth);
-			var contentHeight = MathF.Max(ExtentHeight, viewportHeight);
+			// Along an axis it doesn't scroll the content takes the viewport. Measured for more (a bar it only now knows it
+			// shows, its gutter taken), it is measured again for what there is.
+			var disabledAcross = HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled;
+			var disabledDown = VerticalScrollBarVisibility == ScrollBarVisibility.Disabled;
+			if ((disabledAcross && ExtentWidth > viewportWidth) || (disabledDown && ExtentHeight > viewportHeight))
+				MeasureContent(viewportWidth, viewportHeight);
+			var contentWidth = disabledAcross ? viewportWidth : MathF.Max(ExtentWidth, viewportWidth);
+			var contentHeight = disabledDown ? viewportHeight : MathF.Max(ExtentHeight, viewportHeight);
 			content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
 
 			// Keep the focused descendant in view as it takes focus and as the viewport shrinks under it: its place is only

@@ -224,6 +224,23 @@ public sealed class ScrollViewerTests
 	}
 
 	[Test]
+	public void A_viewer_that_finds_it_needs_its_bar_only_when_arranged_still_keeps_its_content_clear_of_it()
+	{
+		var items = new StackPanel();
+		for (var i = 0; i < 20; i++)
+			items.Children.Add(new Border { Height = 30f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) });
+		var viewer = new ScrollViewer { Content = items };
+
+		// Measured with all the height it wants, as a parent sizing it to its content does, then arranged shorter
+		viewer.Measure(new Size(100f, float.PositiveInfinity));
+		viewer.Arrange(new Rect(0f, 0f, 100f, 100f));
+
+		viewer.ViewportWidth.ShouldBeLessThan(100f);
+		items.LayoutRect.Width.ShouldBe(viewer.ViewportWidth);
+		items.Children[0].LayoutRect.Width.ShouldBe(viewer.ViewportWidth);
+	}
+
+	[Test]
 	public void A_wheel_over_a_gap_between_the_items_scrolls_the_viewer()
 	{
 		var items = new StackPanel();
