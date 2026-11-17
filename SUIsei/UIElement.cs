@@ -62,6 +62,23 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	public bool IsHitTestVisible { get => GetValue(IsHitTestVisibleProperty); set => SetValue(IsHitTestVisibleProperty, value); }
 
 	public bool IsTabStop { get => GetValue(IsTabStopProperty); set => SetValue(IsTabStopProperty, value); }
+
+	/// <summary>
+	/// Attempts to give the element keyboard focus, as WinUI's <c>UIElement.Focus</c>: through its root's focus manager, raising
+	/// the focus events as any move does. False when it isn't attached to a root, can't take focus (not a tab stop, not
+	/// visible, or in a disabled control), or a handler cancelled the move.
+	/// </summary>
+	/// <param name="value">How it takes focus: <see cref="FocusState.Programmatic"/> from code, or as a keyboard or a pointer
+	/// would give it.</param>
+	/// <exception cref="ArgumentException"><paramref name="value"/> is <see cref="FocusState.Unfocused"/>, which is no way to
+	/// take focus.</exception>
+	public bool Focus(FocusState value)
+	{
+		if (value == FocusState.Unfocused)
+			throw new ArgumentException("An element can't take focus as Unfocused.", nameof(value));
+		return AttachedRoot?.FocusManager is { } focus && focus.TrySetFocus(this, value);
+	}
+
 	public int TabIndex { get => GetValue(TabIndexProperty); set => SetValue(TabIndexProperty, value); }
 
 	/// <summary>Where focus goes from here on a d-pad's up, as WinUI's <c>XYFocusUp</c>: overrides the nearest tab stop

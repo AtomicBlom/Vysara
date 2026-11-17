@@ -6,11 +6,14 @@ using SUIsei.RoutedEvents;
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A clipping viewport over a single oversized <see cref="Content"/>. Measures the content
-/// unbounded in the scroll axis to learn its extent, arranges it offset by the scroll position, and clips to the
-/// viewport. Scrolls by mouse wheel, by keyboard (Page/Home/End/arrows when a descendant is focused), and
-/// programmatically; the offset is always clamped to <see cref="ScrollableHeight"/>/<see cref="ScrollableWidth"/>.
-/// Pairs with <see cref="VirtualizingStackPanel"/>, which reports its full extent for exactly this viewport.
+/// A clipping viewport over a single oversized <see cref="Content"/>, as WinUI's. Along each axis whose scroll bar visibility
+/// isn't <see cref="ScrollBarVisibility.Disabled"/> (vertical by default, as WinUI's) it measures the content unbounded to
+/// learn its extent; it arranges the content offset by the scroll position and clips to the viewport. Scrolls by mouse
+/// wheel, by a thumb, by keyboard (Page/Home/End/arrows when a descendant is focused), by a finger where the axis's
+/// <see cref="ScrollMode"/> lets it, and programmatically; the offset is always clamped to
+/// <see cref="ScrollableHeight"/>/<see cref="ScrollableWidth"/>. A wheel it can't scroll any further is left unhandled, so an
+/// enclosing viewer scrolls instead. Pairs with <see cref="VirtualizingStackPanel"/>, which reports its full extent for
+/// exactly this viewport.
 /// </summary>
 [ContentProperty(Name = nameof(Content))]
 public sealed class ScrollViewer : FrameworkElement
@@ -25,27 +28,21 @@ public sealed class ScrollViewer : FrameworkElement
 	private const float ThumbMinLength = 28f;
 	private const float ThumbMargin = 2f;
 
-	// The thumb fades between its brushes through its BrushTransition when on a live host, and switches at once when not.
+	// The thumbs fade between their brushes through their BrushTransition when on a live host, and switch at once when not.
+	// The vertical one runs down the right; the horizontal one along the bottom, short of the vertical one's corner.
 	private readonly Border _vThumb = new()
 	{
 		Background = ThumbRest,
 		CornerRadius = new CornerRadius(ThumbThickness / 2f),
 		BackgroundTransition = new BrushTransition { Duration = TimeSpan.FromMilliseconds(120) },
 	};
-	// The horizontal thumb, along the bottom, shown only when HorizontalScrollMode is Enabled and the content is wider
 	private readonly Border _hThumb = new()
 	{
 		Background = ThumbRest,
 		CornerRadius = new CornerRadius(ThumbThickness / 2f),
 		BackgroundTransition = new BrushTransition { Duration = TimeSpan.FromMilliseconds(120) },
 	};
-	private float _hThumbWidth;
-	private float _hThumbTravel;
-	private bool _hThumbOver;
-	private bool _draggingHThumb;
-	private float _dragStartPointerX;
-	private float _dragStartHOffset;
-	// VisualChildren (the content, then the thumb), rebuilt only when Content changes, so reading it allocates nothing.
+	// VisualChildren (the content, then the thumbs), rebuilt only when Content changes, so reading it allocates nothing.
 	private UIElement[] _visualChildren;
 	private float _thumbHeight;
 	private float _thumbTravel;
@@ -53,33 +50,80 @@ public sealed class ScrollViewer : FrameworkElement
 	private bool _draggingThumb;
 	private float _dragStartPointerY;
 	private float _dragStartOffset;
+	private float _hThumbWidth;
+	private float _hThumbTravel;
+	private bool _hThumbOver;
+	private bool _draggingHThumb;
+	private float _dragStartPointerX;
+	private float _dragStartHOffset;
 	// The descendant holding keyboard focus, kept in view: scrolled to when it takes focus and again whenever the viewport
 	// shrinks under it (an on-screen keyboard opening over the page).
 	private UIElement? _focused;
 	private bool _bringFocusedIntoView;
 	// Touch panning: a finger down on the content, and whether it has travelled far enough (PanSlop, in DIPs) to be a pan
-	// rather than a tap; once it has, the viewer holds the pointer and the content follows the finger.
+	// rather than a tap; once it has, the viewer holds the pointer and the content follows the finger along each axis its
+	// ScrollMode lets it.
 	private const float PanSlop = 8f;
 	private bool _panPressed;
 	private bool _panning;
 	private uint _panPointer;
+	private float _panStartX;
 	private float _panStartY;
+	private float _panStartHOffset;
 	private float _panStartOffset;
+
+	/// <summary>Identifies <see cref="HorizontalScrollBarVisibility"/>.</summary>
+	public static readonly DependencyProperty<ScrollViewer, ScrollBarVisibility> HorizontalScrollBarVisibilityProperty =
+		DependencyProperty.Register<ScrollViewer, ScrollBarVisibility>(nameof(HorizontalScrollBarVisibility),
+			new PropertyMetadata<ScrollViewer, ScrollBarVisibility> { DefaultValue = ScrollBarVisibility.Disabled, Invalidates = InvalidationFlags.Measure });
+
+	/// <summary>Identifies <see cref="VerticalScrollBarVisibility"/>.</summary>
+	public static readonly DependencyProperty<ScrollViewer, ScrollBarVisibility> VerticalScrollBarVisibilityProperty =
+		DependencyProperty.Register<ScrollViewer, ScrollBarVisibility>(nameof(VerticalScrollBarVisibility),
+			new PropertyMetadata<ScrollViewer, ScrollBarVisibility> { DefaultValue = ScrollBarVisibility.Visible, Invalidates = InvalidationFlags.Measure });
 
 	/// <summary>Identifies <see cref="HorizontalScrollMode"/>.</summary>
 	public static readonly DependencyProperty<ScrollViewer, ScrollMode> HorizontalScrollModeProperty =
 		DependencyProperty.Register<ScrollViewer, ScrollMode>(nameof(HorizontalScrollMode),
-			new PropertyMetadata<ScrollViewer, ScrollMode> { DefaultValue = ScrollMode.Disabled, Invalidates = InvalidationFlags.Measure });
+			new PropertyMetadata<ScrollViewer, ScrollMode> { DefaultValue = ScrollMode.Enabled });
+
+	/// <summary>Identifies <see cref="VerticalScrollMode"/>.</summary>
+	public static readonly DependencyProperty<ScrollViewer, ScrollMode> VerticalScrollModeProperty =
+		DependencyProperty.Register<ScrollViewer, ScrollMode>(nameof(VerticalScrollMode),
+			new PropertyMetadata<ScrollViewer, ScrollMode> { DefaultValue = ScrollMode.Enabled });
 
 	/// <summary>
-	/// Whether it also scrolls sideways: the content measured unbounded in width, a thumb along the bottom, a sideways wheel
-	/// (and a vertical one when there is nothing to scroll vertically) moving it. Disabled by default: the content takes the
-	/// viewport's width.
+	/// Whether it scrolls sideways, and shows a thumb along the bottom when it can, as WinUI's. Disabled by default: the content
+	/// takes the viewport's width.
 	/// </summary>
+	public ScrollBarVisibility HorizontalScrollBarVisibility
+	{
+		get => GetValue(HorizontalScrollBarVisibilityProperty);
+		set => SetValue(HorizontalScrollBarVisibilityProperty, value);
+	}
+
+	/// <summary>
+	/// Whether it scrolls up and down, and shows a thumb down the right when it can, as WinUI's. Visible by default; Disabled
+	/// measures the content to the viewport's height.
+	/// </summary>
+	public ScrollBarVisibility VerticalScrollBarVisibility
+	{
+		get => GetValue(VerticalScrollBarVisibilityProperty);
+		set => SetValue(VerticalScrollBarVisibilityProperty, value);
+	}
+
+	/// <summary>Whether a finger panning the content scrolls it sideways, as WinUI's. Enabled by default.</summary>
 	public ScrollMode HorizontalScrollMode
 	{
 		get => GetValue(HorizontalScrollModeProperty);
 		set => SetValue(HorizontalScrollModeProperty, value);
+	}
+
+	/// <summary>Whether a finger panning the content scrolls it up and down, as WinUI's. Enabled by default.</summary>
+	public ScrollMode VerticalScrollMode
+	{
+		get => GetValue(VerticalScrollModeProperty);
+		set => SetValue(VerticalScrollModeProperty, value);
 	}
 
 	public ScrollViewer()
@@ -99,7 +143,7 @@ public sealed class ScrollViewer : FrameworkElement
 		AddHandler(PreviewPointerReleasedEvent, OnPanReleased, handledEventsToo: true);
 		AddHandler(PointerCaptureLostEvent, OnPanCaptureLost);
 
-		// The thumb is a grab handle: hovering/grabbing it lights it up, a press starts a drag (capturing the pointer
+		// Each thumb is a grab handle: hovering/grabbing it lights it up, a press starts a drag (capturing the pointer
 		// so it tracks past the thumb's edges), and the drag maps pointer travel onto the scroll range.
 		_vThumb.AddHandler(PointerEnteredEvent, OnThumbEntered);
 		_vThumb.AddHandler(PointerExitedEvent, OnThumbExited);
@@ -140,15 +184,27 @@ public sealed class ScrollViewer : FrameworkElement
 	public float ViewportHeight { get; private set; }
 	public float ViewportWidth { get; private set; }
 
-	public float ScrollableHeight => MathF.Max(0f, ExtentHeight - ViewportHeight);
-	public float ScrollableWidth => MathF.Max(0f, ExtentWidth - ViewportWidth);
+	/// <summary>How far it can scroll down: none when <see cref="VerticalScrollBarVisibility"/> is Disabled.</summary>
+	public float ScrollableHeight => VerticalScrollBarVisibility == ScrollBarVisibility.Disabled ? 0f : MathF.Max(0f, ExtentHeight - ViewportHeight);
+
+	/// <summary>How far it can scroll sideways: none when <see cref="HorizontalScrollBarVisibility"/> is Disabled.</summary>
+	public float ScrollableWidth => HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled ? 0f : MathF.Max(0f, ExtentWidth - ViewportWidth);
 
 	/// <summary>The thumb's current interaction-state target colour (test seam): rest, hover, or grabbed.</summary>
 	internal HdrColor ThumbStateColor => ((SolidColorBrush)_vThumb.Background!).Color;
 
+	/// <summary>Where the horizontal thumb is arranged (test seam): empty while it is hidden.</summary>
+	internal Rect HorizontalThumbRect => _hThumb.Visibility == Visibility.Visible ? _hThumb.LayoutRect : default;
+
 	public void ScrollToVerticalOffset(float offset) => SetVerticalOffset(offset);
 
 	public void ScrollToHorizontalOffset(float offset) => SetHorizontalOffset(offset);
+
+	private static bool ShowsThumb(ScrollBarVisibility visibility) => visibility is ScrollBarVisibility.Auto or ScrollBarVisibility.Visible;
+
+	private bool PansHorizontally => HorizontalScrollMode != ScrollMode.Disabled && ScrollableWidth > 0f;
+
+	private bool PansVertically => VerticalScrollMode != ScrollMode.Disabled && ScrollableHeight > 0f;
 
 	private void SetVerticalOffset(float offset)
 	{
@@ -180,8 +236,10 @@ public sealed class ScrollViewer : FrameworkElement
 			return Size.Zero;
 		}
 
-		// Measure the content unbounded in the scroll axis so its full extent is known regardless of the viewport.
-		Content.Measure(new Size(HorizontalScrollMode == ScrollMode.Enabled ? float.PositiveInfinity : available.Width, float.PositiveInfinity));
+		// Measure the content unbounded along each axis it scrolls, so its full extent is known regardless of the viewport.
+		Content.Measure(new Size(
+			HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled ? available.Width : float.PositiveInfinity,
+			VerticalScrollBarVisibility == ScrollBarVisibility.Disabled ? available.Height : float.PositiveInfinity));
 		ExtentWidth = Content.DesiredSize.Width;
 		ExtentHeight = Content.DesiredSize.Height;
 
@@ -205,13 +263,14 @@ public sealed class ScrollViewer : FrameworkElement
 			content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
 
 			// Keep the focused descendant in view as it takes focus and as the viewport shrinks under it: its place is only
-			// known once the content is arranged, so scroll then and arrange the content again at the new offset.
+			// known once the content is arranged, so scroll then and arrange the content again at the new offsets.
 			if (_focused is not null && (_bringFocusedIntoView || shrank))
 			{
 				_bringFocusedIntoView = false;
-				if (OffsetShowing(_focused) is { } offset && offset != VerticalOffset)
+				if (OffsetsShowing(_focused) is { } offsets && (offsets.X != HorizontalOffset || offsets.Y != VerticalOffset))
 				{
-					VerticalOffset = offset;
+					HorizontalOffset = offsets.X;
+					VerticalOffset = offsets.Y;
 					content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
 				}
 			}
@@ -222,10 +281,11 @@ public sealed class ScrollViewer : FrameworkElement
 	}
 
 	// Size each thumb to the visible fraction of the content and slide it in proportion to the scroll position; hide it when
-	// there is nothing to scroll that way. The horizontal one runs along the bottom, short of the vertical one's corner.
+	// there is nothing to scroll that way or its scroll bar visibility hides it. The horizontal one runs along the bottom,
+	// short of the vertical one's corner.
 	private void ArrangeThumb(Size finalSize)
 	{
-		var vertical = ScrollableHeight > 0f && ViewportHeight > 0f;
+		var vertical = ShowsThumb(VerticalScrollBarVisibility) && ScrollableHeight > 0f && ViewportHeight > 0f;
 		if (vertical)
 		{
 			_thumbHeight = Math.Clamp(ViewportHeight * (ViewportHeight / ExtentHeight), ThumbMinLength, ViewportHeight);
@@ -242,7 +302,7 @@ public sealed class ScrollViewer : FrameworkElement
 			_vThumb.Arrange(new Rect(finalSize.Width, 0f, 0f, 0f));
 		}
 
-		if (HorizontalScrollMode == ScrollMode.Enabled && ScrollableWidth > 0f && ViewportWidth > 0f)
+		if (ShowsThumb(HorizontalScrollBarVisibility) && ScrollableWidth > 0f && ViewportWidth > 0f)
 		{
 			var track = ViewportWidth - (vertical ? ThumbThicknessActive + ThumbMargin : 0f);
 			_hThumbWidth = Math.Clamp(track * (ViewportWidth / ExtentWidth), ThumbMinLength, track);
@@ -369,35 +429,45 @@ public sealed class ScrollViewer : FrameworkElement
 		UpdateThumbVisual();
 	}
 
+	// A sideways wheel (a trackpad's) scrolls across; an upright one scrolls down, or across when there is nothing to scroll
+	// down. Handled only when it moved something: a wheel at the end of the range goes on to an enclosing viewer, as WinUI
+	// chains it.
 	private void OnPointerWheelChanged(object sender, RoutedEventArgs e)
 	{
 		if (e is not PointerRoutedEventArgs pointer)
 			return;
 		var amount = Scrolling.GetWheelScrollAmount(this);
-		var sideways = HorizontalScrollMode == ScrollMode.Enabled && ScrollableWidth > 0f;
-		// A sideways wheel (a trackpad's) scrolls across; so does an upright one when there is nothing to scroll down.
-		if (sideways && pointer.Wheel.X != 0f)
+		var (horizontal, vertical) = (HorizontalOffset, VerticalOffset);
+		if (pointer.Wheel.X != 0f)
 			SetHorizontalOffset(HorizontalOffset - pointer.Wheel.X * amount);
-		else if (sideways && ScrollableHeight <= 0f)
-			SetHorizontalOffset(HorizontalOffset - pointer.Wheel.Y * amount);
-		else
+		if (pointer.Wheel.Y != 0f)
+		{
 			// Wheel up (positive delta) scrolls toward the top (offset decreases).
-			SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * amount);
-		e.Handled = true;
+			if (ScrollableHeight > 0f)
+				SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * amount);
+			else
+				SetHorizontalOffset(HorizontalOffset - pointer.Wheel.Y * amount);
+		}
+		if (HorizontalOffset != horizontal || VerticalOffset != vertical)
+			e.Handled = true;
 	}
 
 	private void OnKeyDown(object sender, RoutedEventArgs e)
 	{
 		if (e is not KeyRoutedEventArgs key)
 			return;
+		var step = Scrolling.GetWheelScrollAmount(this);
 		switch (key.Key)
 		{
 			case VirtualKey.PageDown: SetVerticalOffset(VerticalOffset + ViewportHeight); e.Handled = true; break;
 			case VirtualKey.PageUp: SetVerticalOffset(VerticalOffset - ViewportHeight); e.Handled = true; break;
 			case VirtualKey.Home: SetVerticalOffset(0f); e.Handled = true; break;
 			case VirtualKey.End: SetVerticalOffset(ScrollableHeight); e.Handled = true; break;
-			case VirtualKey.Down: SetVerticalOffset(VerticalOffset + Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
-			case VirtualKey.Up: SetVerticalOffset(VerticalOffset - Scrolling.GetWheelScrollAmount(this)); e.Handled = true; break;
+			case VirtualKey.Down: SetVerticalOffset(VerticalOffset + step); e.Handled = true; break;
+			case VirtualKey.Up: SetVerticalOffset(VerticalOffset - step); e.Handled = true; break;
+			// Left and Right are left alone where there is nothing to scroll sideways, so they still move focus.
+			case VirtualKey.Right when ScrollableWidth > 0f: SetHorizontalOffset(HorizontalOffset + step); e.Handled = true; break;
+			case VirtualKey.Left when ScrollableWidth > 0f: SetHorizontalOffset(HorizontalOffset - step); e.Handled = true; break;
 		}
 	}
 
@@ -416,39 +486,51 @@ public sealed class ScrollViewer : FrameworkElement
 			_focused = null;
 	}
 
-	// A finger down on the content may be the start of a pan. A mouse scrolls with its wheel and the thumb instead, and a
-	// finger on the thumb drags the thumb.
+	// A finger down on the content may be the start of a pan, where an axis's ScrollMode lets one scroll it. A mouse scrolls
+	// with its wheel and the thumbs instead, and a finger on a thumb drags the thumb.
 	private void OnPanPressed(object sender, RoutedEventArgs e)
 	{
-		if (e is not PointerRoutedEventArgs p || p.Device != PointerDeviceType.Touch || ScrollableHeight <= 0f
-			|| ReferenceEquals(e.OriginalSource, _vThumb))
+		if (e is not PointerRoutedEventArgs p || p.Device != PointerDeviceType.Touch || !(PansHorizontally || PansVertically)
+			|| ReferenceEquals(e.OriginalSource, _vThumb) || ReferenceEquals(e.OriginalSource, _hThumb))
 			return;
 		_panPressed = true;
 		_panning = false;
 		_panPointer = p.PointerId;
-		_panStartY = p.GetCurrentPoint(this).Position.Y;
+		var position = p.GetCurrentPoint(this).Position;
+		_panStartX = position.X;
+		_panStartY = position.Y;
+		_panStartHOffset = HorizontalOffset;
 		_panStartOffset = VerticalOffset;
 	}
 
-	// Past the slop, the press becomes a pan: the viewer takes the pointer, which ends the press on the control under the
-	// finger without a click, and from then on the content follows the finger.
+	// Past the slop, along the axes it may pan, the press becomes a pan: the viewer takes the pointer, which ends the press on
+	// the control under the finger without a click, and from then on the content follows the finger.
 	private void OnPanMoved(object sender, RoutedEventArgs e)
 	{
 		if (!_panPressed || e is not PointerRoutedEventArgs p || p.PointerId != _panPointer)
 			return;
-		var y = p.GetCurrentPoint(this).Position.Y;
+		var position = p.GetCurrentPoint(this).Position;
+		var (horizontally, vertically) = (PansHorizontally, PansVertically);
 		if (!_panning)
 		{
-			if (MathF.Abs(y - _panStartY) < PanSlop)
+			var dx = horizontally ? position.X - _panStartX : 0f;
+			var dy = vertically ? position.Y - _panStartY : 0f;
+			var travel = MathF.Sqrt(dx * dx + dy * dy);
+			if (travel < PanSlop)
 				return;
 			_panning = true;
 			// Follow the finger from the slop's edge, so the content neither jumps by the slop nor loses travel past it that a
 			// coalesced move already carries.
-			_panStartY += MathF.CopySign(PanSlop, y - _panStartY);
+			_panStartX += dx * (PanSlop / travel);
+			_panStartY += dy * (PanSlop / travel);
+			_panStartHOffset = HorizontalOffset;
 			_panStartOffset = VerticalOffset;
 			CapturePointer(_panPointer);
 		}
-		SetVerticalOffset(_panStartOffset + (_panStartY - y));
+		if (horizontally)
+			SetHorizontalOffset(_panStartHOffset + (_panStartX - position.X));
+		if (vertically)
+			SetVerticalOffset(_panStartOffset + (_panStartY - position.Y));
 		e.Handled = true;
 	}
 
@@ -470,27 +552,39 @@ public sealed class ScrollViewer : FrameworkElement
 			_panPressed = _panning = false;
 	}
 
-	// The vertical offset that brings `element` wholly into the viewport (its top, when it is taller than the viewport) with
-	// the least scrolling; null when it is no longer under this scroll viewer.
-	private float? OffsetShowing(UIElement element)
+	// The offsets that bring `element` wholly into the viewport (its top-left corner, when it is larger than the viewport)
+	// with the least scrolling; null when it is no longer under this scroll viewer.
+	private (float X, float Y)? OffsetsShowing(UIElement element)
 	{
-		// Its arranged places, up to the content, add up to its top in viewport space: the content sits at minus the offset.
+		// Its arranged places, up to the content, add up to its corner in viewport space: the content sits at minus the offsets.
+		var left = 0f;
 		var top = 0f;
 		var node = element;
 		for (; node is not null && !ReferenceEquals(node, this); node = node.Parent)
+		{
+			left += node.LayoutRect.X;
 			top += node.LayoutRect.Y;
+		}
 		if (node is null)
 		{
 			_focused = null;
 			return null;
 		}
 
-		var bottom = top + element.LayoutRect.Height;
-		var offset = VerticalOffset;
-		if (bottom > ViewportHeight)
-			offset += bottom - ViewportHeight;
-		if (top - (offset - VerticalOffset) < 0f)
-			offset = VerticalOffset + top;
-		return Math.Clamp(offset, 0f, ScrollableHeight);
+		return (
+			OffsetShowing(left, element.LayoutRect.Width, ViewportWidth, HorizontalOffset, ScrollableWidth),
+			OffsetShowing(top, element.LayoutRect.Height, ViewportHeight, VerticalOffset, ScrollableHeight));
+	}
+
+	// Along one axis: the offset that brings [start, start + length) in viewport space into a viewport of `viewport`, scrolled
+	// as little as it can be from `offset`, its start winning when it can't all fit.
+	private static float OffsetShowing(float start, float length, float viewport, float offset, float scrollable)
+	{
+		var showing = offset;
+		if (start + length > viewport)
+			showing += start + length - viewport;
+		if (start - (showing - offset) < 0f)
+			showing = offset + start;
+		return Math.Clamp(showing, 0f, scrollable);
 	}
 }

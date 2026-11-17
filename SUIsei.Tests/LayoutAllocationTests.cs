@@ -26,7 +26,7 @@ public sealed class LayoutAllocationTests
 	public static IEnumerable<string> Scenes() =>
 	[
 		"Grid", "Grid with no definitions", "StackPanel", "Canvas", "Border", "ContentPresenter", "Button", "ItemsControl",
-		"VirtualizingStackPanel", "ScrollViewer",
+		"VirtualizingStackPanel", "ScrollViewer", "ScrollViewer both ways",
 	];
 
 	private static Scene Build(string scene)
@@ -157,6 +157,19 @@ public sealed class LayoutAllocationTests
 						stack.Children.Add(i % 2 == 0 ? Box(height: 24f) : new TextBlock { Text = "Scrolled text" });
 					var scroller = new ScrollViewer { Height = 300f, Content = stack };
 					scroller.ScrollToVerticalOffset(0f);
+					return new Scene(scroller, animated);
+				}
+
+			case "ScrollViewer both ways":
+				{
+					// Rows wider than the viewer, so it scrolls sideways too, with both thumbs shown.
+					var stack = new StackPanel();
+					var animated = Box(width: 80f, height: 20f);
+					stack.Children.Add(animated);
+					for (var i = 0; i < 40; i++)
+						stack.Children.Add(i % 2 == 0 ? Box(width: 900f, height: 24f) : new TextBlock { Text = "Scrolled text, both ways" });
+					var scroller = new ScrollViewer { Height = 300f, Content = stack, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
+					scroller.ScrollToHorizontalOffset(0f);
 					return new Scene(scroller, animated);
 				}
 
@@ -306,6 +319,30 @@ public sealed class LayoutAllocationTests
 		}
 
 		Frames(30);
+		Allocations.ShouldAllocateNothing(() => Frames(60));
+	}
+
+	[Test]
+	public void Scrolling_a_scroll_viewer_both_ways_allocates_nothing_once_warm()
+	{
+		var (content, _) = Build("ScrollViewer both ways");
+		var scroller = (ScrollViewer)content;
+		var root = Root(scroller);
+		var (across, down) = (0f, 0f);
+		void Frames(int count)
+		{
+			for (var f = 0; f < count; f++)
+			{
+				across = (across + 11f) % scroller.ScrollableWidth;
+				down = (down + 7f) % scroller.ScrollableHeight;
+				scroller.ScrollToHorizontalOffset(across);
+				scroller.ScrollToVerticalOffset(down);
+				root.LayoutPass(Surface);
+			}
+		}
+
+		Frames(30);
+		scroller.ScrollableWidth.ShouldBeGreaterThan(0f);
 		Allocations.ShouldAllocateNothing(() => Frames(60));
 	}
 
