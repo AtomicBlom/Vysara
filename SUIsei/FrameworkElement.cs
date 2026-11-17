@@ -214,4 +214,28 @@ public abstract class FrameworkElement : UIElement
 	}
 
 	private static float Clamp(float v, float min, float max) => MathF.Min(MathF.Max(v, min), max);
+
+	// The live x:Binds of the data template that built this element, attached while it is in a live tree.
+	private Controls.IDataTemplateBindings? _templateBindings;
+
+	/// <summary>Keeps <paramref name="bindings"/> with this element (<see cref="Controls.DataTemplate.SetBindings"/>),
+	/// attaching them now if it is already in a live tree.</summary>
+	internal void SetTemplateBindings(Controls.IDataTemplateBindings bindings)
+	{
+		_templateBindings?.Detach();
+		_templateBindings = bindings;
+		if (AttachedRoot is not null)
+			bindings.Attach();
+	}
+
+	private protected override void OnLiveTreeChanged(bool attached)
+	{
+		base.OnLiveTreeChanged(attached);
+		if (_templateBindings is null)
+			return;
+		if (attached)
+			_templateBindings.Attach();
+		else
+			_templateBindings.Detach();
+	}
 }

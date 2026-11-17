@@ -18,10 +18,16 @@ namespace SUIsei.SourceGen;
 /// Compiled data + event binding: <c>{x:Bind path[, Mode=OneTime|OneWay|TwoWay][, FallbackValue=X][, TargetNullValue=Y]}</c>
 /// on a property emits a typed <c>&lt;Class&gt;_Bindings</c> helper (Initialize/Update/Subscribe/StopTracking +
 /// INPC tracking that switches on <c>PropertyName</c> literals). TwoWay additionally wires the control's
-/// <c>{PropertyName}Changed</c> event back to the VM. An event attribute wires <c>el.Event += this.Handler</c>.
+/// <c>{PropertyName}Changed</c> event back to the source, converting a nullable or numeric control value for it, and reads
+/// the source again after writing it, so a source that refuses or coerces a value is shown as it is. The path may instead be
+/// a function, <c>prefix:Type.Method(path, …)</c>: a static method called again whenever an argument's path changes. A bool
+/// shown on a <c>Visibility</c> converts as WinUI's does (true Visible). In a <c>DataTemplate</c> the root is the item
+/// (<c>{x:Bind}</c> with no path is the item itself), and a OneWay or TwoWay binding is tracked by a helper made for each
+/// element the template builds, attached while that element is in a live tree (<c>DataTemplate.SetBindings</c>).
+/// An event attribute wires <c>el.Event += this.Handler</c>.
 /// <c>{StaticResource key}</c> emits a <c>FindResource("key")</c> lookup through the markup ancestors that declared
 /// resources; <c>{x:Null}</c> and <c>{x:Static}</c> resolve at compile time.
-/// Function paths and converters are outside the supported subset and diagnose.
+/// Converters are outside the supported subset and diagnose.
 /// </para>
 /// <para>
 /// The source table: <c>InitializeComponent()</c> and each template factory end by recording, through
@@ -60,7 +66,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 	private static readonly DiagnosticDescriptor NoContentModel = new("SUISEI006", "Element cannot hold children",
 		"'{0}' has no Children/Child/Content to host the child '{1}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor UnsupportedMarkup = new("SUISEI007", "Unsupported markup",
-		"Markup '{0}' is outside the XAML subset (supported: {{x:Bind path[, Mode=OneTime|OneWay|TwoWay][, FallbackValue=X][, TargetNullValue=Y]}}, {{StaticResource key}}, event handlers)", "SUIsei", DiagnosticSeverity.Error, true);
+		"Markup '{0}' is outside the XAML subset (supported: {{x:Bind [path | prefix:Type.Method(path, …)][, Mode=OneTime|OneWay|TwoWay][, FallbackValue=X][, TargetNullValue=Y]}}, {{StaticResource key}}, event handlers)", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BindPathUnresolved = new("SUISEI008", "Unresolved x:Bind path",
 		"x:Bind path '{0}' could not be resolved on '{1}'", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor BindTypeMismatch = new("SUISEI009", "Incompatible x:Bind types",
@@ -101,6 +107,12 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		"{0} is outside the XAML subset{1}", "SUIsei", DiagnosticSeverity.Error, true);
 	private static readonly DiagnosticDescriptor WrongChildType = new("SUISEI026", "Child of the wrong type",
 		"'{0}' cannot hold a {1}: its {2} takes a {3}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor TwoWayNoWriteBack = new("SUISEI028", "TwoWay binding can't write back",
+		"TwoWay binding on '{0}' can't write the control's value back: {1}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor BadXBindFunction = new("SUISEI029", "Unresolved x:Bind function",
+		"x:Bind function '{0}' does not resolve: {1}", "SUIsei", DiagnosticSeverity.Error, true);
+	private static readonly DiagnosticDescriptor BadXBind = new("SUISEI030", "Malformed x:Bind",
+		"'{0}' is not an {{x:Bind}} SUIsei builds: {1}", "SUIsei", DiagnosticSeverity.Error, true);
 
 	// The x: directives SUIsei reads, and where: x:Name on any element (and on a visual state or group), x:FieldModifier
 	// beside it, x:Key on a resource, x:Class on the root and x:DataType on a DataTemplate. x:Uid is ignored with a
@@ -216,27 +228,39 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 
 	private readonly record struct GenResult(EquatableArray<GeneratedSource> Sources, EquatableArray<DiagnosticInfo> Diagnostics);
 
-	// One resolved x:Bind binding.
-	private sealed class Bind(
-		string targetVar,
-		string targetProp,
-		string[] path,
-		ITypeSymbol[] resultTypes,
-		ITypeSymbol leafType,
-		bool oneWay,
-		bool twoWay,
-		string? fallbackValue,
-		string? targetNullValue)
+	// A property path an {x:Bind} reads from its root (the page, or a template's item): its members and the type each one
+	// reads. Empty for the root itself, a template's {x:Bind} with no path.
+	private sealed class BindPath(string[] segments, ITypeSymbol[] resultTypes)
 	{
-		public string TargetVar { get; } = targetVar;
-		public string TargetProp { get; } = targetProp;
-		public string[] Path { get; } = path;
+		public string[] Segments { get; } = segments;
 		public ITypeSymbol[] ResultTypes { get; } = resultTypes;
-		public ITypeSymbol LeafType { get; } = leafType;
-		public bool OneWay { get; } = oneWay || twoWay;  // TwoWay also pushes VM→control
-		public bool TwoWay { get; } = twoWay;
-		public string? FallbackValue { get; } = fallbackValue;
-		public string? TargetNullValue { get; } = targetNullValue;
+		public int Length => Segments.Length;
+		// The type of the value the whole path reads.
+		public ITypeSymbol Leaf => ResultTypes[ResultTypes.Length - 1];
+	}
+
+	// One resolved x:Bind binding: a path, or a static function of paths; the property it sets; how its value converts on
+	// the way in (a bool shown as a Visibility) and, for TwoWay, on the way back.
+	private sealed class Bind
+	{
+		public string TargetVar { get; set; } = "";
+		public string TargetProp { get; set; } = "";
+		// The target element's type, which a template's helper keeps it in a field of.
+		public INamedTypeSymbol TargetElementType { get; set; } = null!;
+		public BindPath? Path { get; set; }
+		public IMethodSymbol? Function { get; set; }
+		public BindPath[] Arguments { get; set; } = [];
+		// The type of the value: the path's leaf, the function's return type, or the item for a template's {x:Bind}.
+		public ITypeSymbol LeafType { get; set; } = null!;
+		public bool OneWay { get; set; }  // TwoWay also pushes source → control
+		public bool TwoWay { get; set; }
+		public string? FallbackValue { get; set; }
+		public string? TargetNullValue { get; set; }
+		public bool ToVisibility { get; set; }
+		// The control's value converted for the source, `{0}` standing for it.
+		public string WriteBack { get; set; } = "{0}";
+		// The paths whose changes the binding follows: its own, or its function's arguments.
+		public IEnumerable<BindPath> Tracked => Function is not null ? Arguments : Path is { } path ? [path] : [];
 	}
 
 	private sealed class Gen(Compilation compilation, string path, SourceText text, INamedTypeSymbol? pageType, CancellationToken ct)
@@ -292,6 +316,8 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		// The RecordSource calls for the elements and style setters this scope builds, emitted together at its end behind the
 		// diagnostics switch, so one check covers them and the trimmer drops the lot where the switch is off.
 		public List<string> SourceRecords { get; } = [];
+		// A DataTemplate's OneWay and TwoWay {x:Bind}s, tracked against the item by a helper made for each element it builds.
+		public List<Bind> TemplateBindings { get; } = [];
 
 		// Append a statement at InitializeComponent / factory-body indentation (both are two tabs deep).
 		public void Emit(string statement) => Body.AppendLine("\t\t" + statement);
@@ -356,7 +382,7 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		sb.AppendLine("\t{");
 		sb.Append(gen.Body);
 		foreach (var b in oneTimeBindings)
-			sb.AppendLine($"\t\t{b.TargetVar}.{b.TargetProp} = {OneTimeExpr(b)};");
+			sb.AppendLine($"\t\t{AssignStatement(b, "this", b.TargetVar)}");
 		foreach (var wire in gen.EventWires)
 			sb.AppendLine($"\t\t{wire}");
 		if (hasBindings)
@@ -534,33 +560,14 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 			}
 
 			// {x:Bind …}
-			if (TryParseXBind(inner, out var path, out var oneWay, out var twoWay, out var fallback, out var targetNull))
+			if (ParseXBind(inner) is { } spec)
 			{
-				// FallbackValue / TargetNullValue are values of the property, converted like any other.
-				var fallbackCode = fallback is null ? null : ConvertOrReport(gen, attr, prop.Type, fallback, $"{name} FallbackValue", prop);
-				var targetNullCode = targetNull is null ? null : ConvertOrReport(gen, attr, prop.Type, targetNull, $"{name} TargetNullValue", prop);
-				if ((fallback is not null && fallbackCode is null) || (targetNull is not null && targetNullCode is null))
-					continue;
-				if (scope.IsTemplate)
-				{
-					EmitTemplateBind(gen, scope, attr, var, prop, path, fallbackCode, targetNullCode);
-					continue;
-				}
-				if (!TryResolvePath(gen.PageType, path, out var resultTypes, out var leafType))
-				{
-					gen.Report(BindPathUnresolved, attr, string.Join(".", path), gen.PageType?.ToDisplayString() ?? "the page");
-					continue;
-				}
-				if (!gen.Compilation.ClassifyConversion(leafType, prop.Type).IsImplicit)
-				{
-					gen.Report(BindTypeMismatch, attr, leafType.ToDisplayString(), name, prop.Type.ToDisplayString());
-					continue;
-				}
-				// Downgrade TwoWay to OneWay if the control has no {PropertyName}Changed event.
-				var effectiveTwoWay = twoWay && FindEvent(type, prop.Name + "Changed") is not null;
-				if (twoWay && !effectiveTwoWay)
-					gen.Report(TwoWayNoEvent, attr, type.ToDisplayString(), prop.Name);
-				gen.Bindings.Add(new Bind(var, prop.Name, path, resultTypes, leafType, oneWay, effectiveTwoWay, fallbackCode, targetNullCode));
+				if (spec.OutsideSubset)
+					gen.Report(UnsupportedMarkup, attr, value.Trim());
+				else if (spec.Error is { } why)
+					gen.Report(BadXBind, attr, value.Trim(), why);
+				else
+					EmitXBind(gen, scope, attr, var, type, prop, spec);
 				continue;
 			}
 

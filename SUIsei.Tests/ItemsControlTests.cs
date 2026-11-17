@@ -54,6 +54,26 @@ public sealed class ItemsControlTests
 	}
 
 	[Test]
+	public void An_items_panel_set_after_the_items_lays_them_out_again_in_it()
+	{
+		// Markup sets an attribute before a property element, so a template's OneTime ItemsSource lands before its ItemsPanel
+		var ic = new ItemsControl { ItemsSource = new[] { "a", "b" } };
+		var first = ic.ItemsHost!;
+		first.ShouldBeOfType<StackPanel>().Orientation.ShouldBe(Orientation.Vertical);
+
+		ic.ItemsPanel = new ItemsPanelTemplate { Factory = static () => new StackPanel { Orientation = Orientation.Horizontal } };
+
+		var panel = ic.ItemsHost.ShouldBeOfType<StackPanel>();
+		panel.ShouldNotBeSameAs(first);
+		panel.Orientation.ShouldBe(Orientation.Horizontal);
+		panel.Parent.ShouldBe(ic);
+		first.Parent.ShouldBeNull();
+		panel.Children.Count.ShouldBe(2);
+		((TextBlock)panel.Children[0]).Text.ShouldBe("a");
+		((TextBlock)panel.Children[1]).Text.ShouldBe("b");
+	}
+
+	[Test]
 	public void List_view_wraps_items_in_selectable_containers()
 	{
 		var lv = new ListView { ItemsSource = new[] { "a", "b", "c" } };

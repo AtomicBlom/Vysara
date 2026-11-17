@@ -97,6 +97,11 @@ public sealed class XamlSubsetContractTests
 		("{x:Bind} OneWay deep path", """<TextBlock Text="{x:Bind ViewModel.Child.Name, Mode=OneWay}" />"""),
 		("{x:Bind} TwoWay", """<TextBox Text="{x:Bind ViewModel.Caption, Mode=TwoWay}" />"""),
 		("{x:Bind} FallbackValue and TargetNullValue", """<TextBlock Text="{x:Bind ViewModel.Caption, Mode=OneWay, FallbackValue=N/A, TargetNullValue=none}" />"""),
+		("{x:Bind} a bool shown as a Visibility", """<TextBlock Visibility="{x:Bind Busy, Mode=OneWay}" />"""),
+		("{x:Bind} function of paths", """<TextBlock Text="{x:Bind local:Fmt.Percent(Volume), Mode=OneWay}" /><TextBlock Visibility="{x:Bind local:Fmt.Any(ViewModel.Child.Name), FallbackValue=Collapsed}" />"""),
+		("{x:Bind} TwoWay IsChecked and a Slider's Value into a float", """<ToggleButton IsChecked="{x:Bind Busy, Mode=TwoWay}" /><Slider Value="{x:Bind Volume, Mode=TwoWay}" />"""),
+		("{x:Bind} OneWay and TwoWay in a DataTemplate, nested in another", """<ItemsControl ItemsSource="{x:Bind Rows}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="local:Row"><StackPanel><ToggleButton IsChecked="{x:Bind On, Mode=TwoWay}" /><TextBlock Text="{x:Bind local:Fmt.Percent(Level), Mode=OneWay}" Visibility="{x:Bind On, Mode=OneWay}" /><ItemsControl ItemsSource="{x:Bind Children}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="local:Row"><TextBlock Text="{x:Bind Title, Mode=OneWay}" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>"""),
+		("{x:Bind} the item itself, x:String", """<ItemsControl ItemsSource="{x:Bind Names}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String"><TextBlock Text="{x:Bind}" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>"""),
 		("{StaticResource}", """<StackPanel.Resources><Style x:Key="S" TargetType="Border" /></StackPanel.Resources><Border Style="{StaticResource S}" />"""),
 		("{TemplateBinding}", """<ContentControl><ContentControl.Template><ControlTemplate TargetType="ContentControl"><ContentPresenter Content="{TemplateBinding Content}" /></ControlTemplate></ContentControl.Template></ContentControl>"""),
 		("{x:Null}", """<TextBlock Text="{x:Null}" />"""),
@@ -155,6 +160,9 @@ public sealed class XamlSubsetContractTests
 	private static readonly (string Form, string Body, string Id)[] OutForms =
 	[
 		("x:Phase", """<TextBlock x:Phase="2" Text="hi" />""", "SUISEI025"),
+		("an {x:Bind} converter", """<TextBlock Text="{x:Bind ViewModel.Caption, Converter=Upper}" />""", "SUISEI007"),
+		("a literal argument to an {x:Bind} function", """<TextBlock Text="{x:Bind local:Fmt.Percent(0.5)}" />""", "SUISEI007"),
+		("Mode=OneWay on an {x:Bind} in a ControlTemplate", """<ContentControl><ContentControl.Template><ControlTemplate TargetType="ContentControl"><Border Opacity="{x:Bind Opacity, Mode=OneWay}" /></ControlTemplate></ContentControl.Template></ContentControl>""", "SUISEI025"),
 		("x:Load", """<TextBlock x:Load="False" Text="hi" />""", "SUISEI025"),
 		("x:DeferLoadStrategy", """<TextBlock x:DeferLoadStrategy="Lazy" Text="hi" />""", "SUISEI025"),
 		("x:Class on an element other than the root", """<TextBlock x:Class="Demo.Other" />""", "SUISEI025"),
@@ -267,6 +275,26 @@ public sealed class XamlSubsetContractTests
 				public SUIsei.Extensions.HostImageSource Minimap { get; } = new("minimap", 32, 16);
 			}
 			public sealed class Item2Host : SUIsei.Controls.ContentControl { }
+			public partial class V
+			{
+				public bool Busy { get; set; }
+				public float Volume { get; set; }
+				public System.Collections.Generic.List<Row> Rows { get; } = new();
+				public System.Collections.Generic.List<string> Names { get; } = new();
+			}
+			public sealed class Row : System.ComponentModel.INotifyPropertyChanged
+			{
+				public string Title { get; set; } = "";
+				public bool On { get; set; }
+				public float Level { get; set; }
+				public System.Collections.Generic.List<Row> Children { get; } = new();
+				public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+			}
+			public static class Fmt
+			{
+				public static string Percent(float value) => value.ToString();
+				public static bool Any(string? text) => !string.IsNullOrEmpty(text);
+			}
 			public sealed class Shape2 : SUIsei.Controls.ContentControl
 			{
 				public SUIsei.Media.Geometry? Data { get; set; }

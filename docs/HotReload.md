@@ -42,6 +42,11 @@ apply live and that force a restart.
 - Adding/removing/retargeting `{x:Bind}` and `{StaticResource}` on existing named elements.
 - Editing styles, templates, storyboards, and visual states.
 
+A `DataTemplate` whose `OneWay` or `TwoWay` bindings change keeps reloading: its bindings helper is a class nested in the
+view's, which a new binding gives a field, and its elements are handed to the helper by an object initializer, never its
+constructor, so no signature changes. Rows already realized keep the template they were built from until their items
+control realizes them again (the outer view's rebuild does).
+
 **Needs a restart (rude edit):**
 
 - Adding or renaming an `x:Name` (adds/renames a generated field).

@@ -1,273 +1,538 @@
 using System.Text;
+using System.Xml.Linq;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace SUIsei.SourceGen;
 
 partial class XamlSourceGenerator
 {
-	// --- The generated Bindings helper ---
+	private const string Visible = "global::SUIsei.Visibility.Visible";
+	private const string Collapsed = "global::SUIsei.Visibility.Collapsed";
+
+	// --- Resolving one {x:Bind} ---
+
+	// One {x:Bind} on `prop` of the element `targetVar` (of `targetType`): resolved against its root (the page, a
+	// DataTemplate's item, or a ControlTemplate's templated control), checked each way it flows, then handed on. On the page
+	// it joins the page's bindings (OneTime ones assigned in InitializeComponent, the rest tracked by the _Bindings helper);
+	// in a template a OneTime one is assigned in the factory, and a OneWay or TwoWay one in a DataTemplate is tracked by the
+	// template's own helper, one per realized element.
+	private static void EmitXBind(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop, XBindSpec spec)
+	{
+		// FallbackValue / TargetNullValue are values of the property, converted like any other.
+		var fallbackCode = spec.Fallback is null ? null : ConvertOrReport(gen, attr, prop.Type, spec.Fallback, $"{prop.Name} FallbackValue", prop);
+		var targetNullCode = spec.TargetNull is null ? null : ConvertOrReport(gen, attr, prop.Type, spec.TargetNull, $"{prop.Name} TargetNullValue", prop);
+		if ((spec.Fallback is not null && fallbackCode is null) || (spec.TargetNull is not null && targetNullCode is null))
+			return;
+
+		if (scope.IsControlTemplate && spec.OneWay)
+		{
+			gen.Report(OutsideSubset, attr, $"Mode={(spec.TwoWay ? "TwoWay" : "OneWay")} on an {{x:Bind}} in a ControlTemplate",
+				" (a ControlTemplate's {x:Bind} is read once, against the templated control; follow one of its properties with {TemplateBinding})");
+			return;
+		}
+
+		// The root a path starts from, and the expression that reaches it where the binding is first assigned.
+		var rootType = scope.IsTemplate ? scope.DataRootType : gen.PageType;
+		var rootName = scope.IsTemplate ? "the template data type (set x:DataType)" : gen.PageType?.ToDisplayString() ?? "the page";
+		var rootExpr = !scope.IsTemplate ? "this" : scope.IsControlTemplate || rootType is not null ? scope.DataRootExpr : "__item";
+
+		var bind = spec.Function is not null
+			? ResolveFunctionBind(gen, attr, targetVar, targetType, prop, spec, rootType, rootName)
+			: ResolvePathBind(gen, scope, attr, targetVar, targetType, prop, spec, rootType, rootName);
+		if (bind is null)
+			return;
+		bind.FallbackValue = fallbackCode;
+		bind.TargetNullValue = targetNullCode;
+
+		if (!scope.IsTemplate)
+			gen.Bindings.Add(bind);
+		else if (!bind.OneWay)
+			scope.Emit(AssignStatement(bind, rootExpr, targetVar));
+		else
+			scope.TemplateBindings.Add(bind);
+	}
+
+	// A path binding: the path read from the root, or the root itself where there is no path (a template's item).
+	private static Bind? ResolvePathBind(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop,
+		XBindSpec spec, INamedTypeSymbol? rootType, string rootName)
+	{
+		BindPath path;
+		ITypeSymbol leafType;
+		if (spec.Path.Length == 0)
+		{
+			if (!scope.IsTemplate)
+			{
+				gen.Report(BadXBind, attr, attr.Value.Trim(), "an {x:Bind} with no path binds a template's item; on a page, name a path");
+				return null;
+			}
+			path = new BindPath([], []);
+			leafType = (ITypeSymbol?)rootType ?? gen.Compilation.ObjectType;
+		}
+		else
+		{
+			if (!TryResolvePath(rootType, spec.Path, out var resultTypes, out leafType))
+			{
+				gen.Report(BindPathUnresolved, attr, string.Join(".", spec.Path), rootName);
+				return null;
+			}
+			path = new BindPath(spec.Path, resultTypes);
+		}
+		if (!ForwardConversion(gen, attr, prop, leafType, out var toVisibility))
+			return null;
+
+		var bind = new Bind
+		{
+			TargetVar = targetVar,
+			TargetProp = prop.Name,
+			TargetElementType = targetType,
+			Path = path,
+			LeafType = leafType,
+			// The item itself is fixed for its element's life, so a binding to it is read once whatever its Mode.
+			OneWay = spec.OneWay && path.Length > 0,
+			ToVisibility = toVisibility,
+		};
+		if (!spec.TwoWay)
+			return bind;
+
+		// TwoWay: the control's {Prop}Changed writes the value back to the path's leaf, converted for it. What can't be
+		// written back is an error whether or not the control has the event; a control without one is read OneWay.
+		var reason = path.Length == 0 ? "a template's item itself has no path to write to"
+			: toVisibility ? "a Visibility does not convert back to a bool"
+			: WriteBackFormat(gen, prop.Type, leafType) is not { } format ? $"a {prop.Type.ToDisplayString()} does not convert to the source's {leafType.ToDisplayString()}"
+			: !IsWritable(path.Length == 1 ? rootType : path.ResultTypes[path.Length - 2], path.Segments[path.Length - 1]) ? $"'{path.Segments[path.Length - 1]}' has no setter"
+			: null;
+		if (reason is not null)
+		{
+			gen.Report(TwoWayNoWriteBack, attr, prop.Name, reason);
+			return null;
+		}
+		if (FindEvent(targetType, prop.Name + "Changed") is null)
+		{
+			gen.Report(TwoWayNoEvent, attr, targetType.ToDisplayString(), prop.Name);
+			return bind;
+		}
+		bind.TwoWay = true;
+		bind.WriteBack = WriteBackFormat(gen, prop.Type, leafType)!;
+		return bind;
+	}
+
+	// A function binding: a static method, named through its type's xmlns prefix, called with the values of its argument
+	// paths, each read from the binding's root. OneTime or OneWay; it has nothing to write a TwoWay value back to.
+	private static Bind? ResolveFunctionBind(Gen gen, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop,
+		XBindSpec spec, INamedTypeSymbol? rootType, string rootName)
+	{
+		var function = spec.Function!;
+		if (spec.TwoWay)
+		{
+			gen.Report(TwoWayNoWriteBack, attr, prop.Name, $"'{function}' is a function, with no path to write back to");
+			return null;
+		}
+		var dot = function.LastIndexOf('.');
+		var ownerName = function.Substring(0, dot);
+		var methodName = function.Substring(dot + 1);
+		if (ResolveTypeName(gen, attr.Parent!, ownerName) is not { } owner)
+		{
+			gen.Report(BadXBindFunction, attr, function, $"'{ownerName}' names no type (a type is named through its xmlns prefix, as xmlns:local=\"using:App.Views\")");
+			return null;
+		}
+
+		var arguments = new BindPath[spec.Arguments.Count];
+		for (var i = 0; i < arguments.Length; i++)
+		{
+			if (!TryResolvePath(rootType, spec.Arguments[i], out var resultTypes, out _))
+			{
+				gen.Report(BindPathUnresolved, attr, string.Join(".", spec.Arguments[i]), rootName);
+				return null;
+			}
+			arguments[i] = new BindPath(spec.Arguments[i], resultTypes);
+		}
+
+		var named = owner.GetMembers(methodName).OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary).ToList();
+		var callable = named.Where(m => m is { IsStatic: true, IsGenericMethod: false, ReturnsVoid: false }
+			&& m.Parameters.All(static p => p.RefKind == RefKind.None)
+			&& gen.Compilation.IsSymbolAccessibleWithin(m, GeneratedClass(gen))).ToList();
+		var applicable = callable.Where(m => m.Parameters.Length == arguments.Length
+			&& m.Parameters.Select((p, i) => gen.Compilation.ClassifyConversion(arguments[i].Leaf, p.Type).IsImplicit).All(static ok => ok)).ToList();
+		if (applicable.Count > 1)
+		{
+			// The overload taking every argument as it is, where there is exactly one.
+			var exact = applicable.Where(m => m.Parameters.Select((p, i) => SymbolEqualityComparer.Default.Equals(arguments[i].Leaf, p.Type)).All(static same => same)).ToList();
+			if (exact.Count == 1)
+				applicable = exact;
+		}
+		var argumentTypes = string.Join(", ", arguments.Select(static a => a.Leaf.ToDisplayString()));
+		if (applicable.Count != 1)
+		{
+			gen.Report(BadXBindFunction, attr, function,
+				named.Count == 0 ? $"{owner.ToDisplayString()} has no method '{methodName}'"
+				: callable.Count == 0 ? $"'{methodName}' is not a static method the view can call, taking its arguments by value and returning a value"
+				: applicable.Count == 0 ? $"no overload of '{methodName}' takes ({argumentTypes})"
+				: $"more than one overload of '{methodName}' takes ({argumentTypes})");
+			return null;
+		}
+		var method = applicable[0];
+		if (!ForwardConversion(gen, attr, prop, method.ReturnType, out var toVisibility))
+			return null;
+
+		return new Bind
+		{
+			TargetVar = targetVar,
+			TargetProp = prop.Name,
+			TargetElementType = targetType,
+			Function = method,
+			Arguments = arguments,
+			LeafType = method.ReturnType,
+			OneWay = spec.OneWay,
+			ToVisibility = toVisibility,
+		};
+	}
+
+	// Whether a value of `source` reaches the property: as it is, or a bool shown as a Visibility, as WinUI's x:Bind
+	// converts it (true Visible, false Collapsed).
+	private static bool ForwardConversion(Gen gen, XAttribute attr, IPropertySymbol prop, ITypeSymbol source, out bool toVisibility)
+	{
+		toVisibility = false;
+		if (gen.Compilation.ClassifyConversion(source, prop.Type).IsImplicit)
+			return true;
+		if (prop.Type.ToDisplayString() == "SUIsei.Visibility" && IsBool(source))
+		{
+			toVisibility = true;
+			return true;
+		}
+		gen.Report(BindTypeMismatch, attr, source.ToDisplayString(), prop.Name, prop.Type.ToDisplayString());
+		return false;
+	}
+
+	private static bool IsBool(ITypeSymbol type) =>
+		type.SpecialType == SpecialType.System_Boolean || (NullableUnderlying(type) is { SpecialType: SpecialType.System_Boolean });
+
+	private static ITypeSymbol? NullableUnderlying(ITypeSymbol type) =>
+		type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable ? nullable.TypeArguments[0] : null;
+
+	// How a TwoWay write-back turns the control's value (`{0}`) into the source's type, or null where it can't: as it is
+	// where that converts implicitly, a nullable control value (a ToggleButton's bool?) taken as its value or the default,
+	// and a number cast to the source's numeric type (a Slider's double into a float).
+	private static string? WriteBackFormat(Gen gen, ITypeSymbol control, ITypeSymbol source)
+	{
+		var compilation = gen.Compilation;
+		if (compilation.ClassifyConversion(control, source).IsImplicit)
+			return "{0}";
+		if (NullableUnderlying(control) is { } underlying)
+		{
+			var fromValue = compilation.ClassifyConversion(underlying, source);
+			if (fromValue.IsImplicit)
+				return "({0}).GetValueOrDefault()";
+			if (fromValue is { IsExplicit: true, IsNumeric: true })
+				return $"({Fq(source)})({{0}}).GetValueOrDefault()";
+		}
+		return compilation.ClassifyConversion(control, source) is { IsExplicit: true, IsNumeric: true } ? $"({Fq(source)})({{0}})" : null;
+	}
+
+	// Whether `owner` has a settable property or a writable field named `name`, which a TwoWay write-back assigns.
+	private static bool IsWritable(ITypeSymbol? owner, string name)
+	{
+		for (var t = owner as INamedTypeSymbol; t is not null; t = t.BaseType)
+		{
+			foreach (var member in t.GetMembers(name))
+			{
+				switch (member)
+				{
+					case IPropertySymbol property:
+						return property.SetMethod is { IsInitOnly: false };
+					case IFieldSymbol field:
+						return !field.IsReadOnly && !field.IsConst;
+				}
+			}
+		}
+		return false;
+	}
+
+	// --- The code that pushes a binding's value ---
+
+	// The statement that pushes the binding's value, read from `root`, into `target`'s property: an expression statement,
+	// or a block where it needs locals of its own, so statements side by side never share one.
+	private static string AssignStatement(Bind b, string root, string target)
+	{
+		var dest = $"{target}.{b.TargetProp}";
+		if (b.Function is { } function)
+			return FunctionStatement(b, function, root, dest);
+
+		var read = PathRead(root, b.Path!, b.Path!.Length);
+		if (!b.ToVisibility)
+			return $"{dest} = {CoalesceRead(read, b.LeafType, b.FallbackValue, b.TargetNullValue)};";
+		if (!read.Contains("?.") && NullableUnderlying(b.LeafType) is null)
+			return $"{dest} = ({read}) ? {Visible} : {Collapsed};";
+		var whenNull = b.TargetNullValue ?? b.FallbackValue;
+		return whenNull is null
+			? $"{dest} = ({read}) == true ? {Visible} : {Collapsed};"
+			: $"{{ var __v = {read}; {dest} = __v is null ? ({whenNull}) : (__v == true ? {Visible} : {Collapsed}); }}";
+	}
+
+	// A function binding's push: each argument read from `root`; where an argument's path passes through an object that
+	// may be null, the call waits for it, and the target takes the FallbackValue meanwhile (or keeps what it shows), as
+	// WinUI's x:Bind does.
+	private static string FunctionStatement(Bind b, IMethodSymbol function, string root, string dest)
+	{
+		var checks = new List<string>();
+		var args = new List<string>();
+		for (var k = 0; k < b.Arguments.Length; k++)
+		{
+			var arg = b.Arguments[k];
+			if (arg.Length == 1)
+			{
+				args.Add($"{root}.{arg.Segments[0]}");
+				continue;
+			}
+			var owner = PathRead(root, arg, arg.Length - 1);
+			if (owner.Contains("?.") || arg.ResultTypes[arg.Length - 2].IsReferenceType)
+			{
+				checks.Add($"{owner} is {{ }} __a{k}");
+				args.Add($"__a{k}.{arg.Segments[arg.Length - 1]}");
+			}
+			else
+				args.Add($"{owner}.{arg.Segments[arg.Length - 1]}");
+		}
+		var call = $"{Fq(function.ContainingType)}.{function.Name}({string.Join(", ", args)})";
+		var returnsNullable = function.ReturnType.IsReferenceType || NullableUnderlying(function.ReturnType) is not null;
+		var value = b.ToVisibility
+			? NullableUnderlying(function.ReturnType) is null ? $"({call}) ? {Visible} : {Collapsed}" : $"({call}) == true ? {Visible} : {Collapsed}"
+			: CoalesceRead(call, function.ReturnType, null, returnsNullable ? b.TargetNullValue : null);
+		var assign = $"{dest} = {value};";
+		if (checks.Count == 0)
+			return assign;
+		var otherwise = b.FallbackValue is null ? "" : $" else {dest} = {b.FallbackValue};";
+		return $"{{ if ({string.Join(" && ", checks)}) {assign}{otherwise} }}";
+	}
+
+	// The first `count` segments of `path` read from `root`, each reference-typed member read null-conditionally so a null
+	// anywhere up the chain yields null rather than throwing.
+	private static string PathRead(string root, BindPath path, int count)
+	{
+		var sb = new StringBuilder(root);
+		for (var i = 0; i < count; i++)
+			sb.Append(i == 0 || !path.ResultTypes[i - 1].IsReferenceType ? "." : "?.").Append(path.Segments[i]);
+		return sb.ToString();
+	}
+
+	// The control→source assignment for a TwoWay reverse wire: the control's value converted for the source, assigned to
+	// the path's leaf. Where the leaf's owner is reference-typed the chain to it is read null-conditionally and the write
+	// guarded (a null intermediate is no write rather than an NRE); a value-typed owner is assigned in place, since writing
+	// a copy would not reach the source.
+	private static string WriteBack(Bind b, string controlValue)
+	{
+		var path = b.Path!;
+		var rhs = b.WriteBack.Replace("{0}", controlValue);
+		var leaf = path.Segments[path.Length - 1];
+		if (path.Length > 1 && path.ResultTypes[path.Length - 2].IsReferenceType)
+			return $"if ({PathRead("_root", path, path.Length - 1)} is {{ }} __o) __o.{leaf} = {rhs};";
+		var sb = new StringBuilder("_root");
+		foreach (var segment in path.Segments)
+			sb.Append('.').Append(segment);
+		return $"{sb} = {rhs};";
+	}
+
+	// --- The binding helpers: the page's _Bindings, and a DataTemplate's, one per realized element ---
 
 	private static GeneratedSource EmitBindings(string fullClass, string? ns, string cls, List<Bind> binds)
 	{
 		var sb = new StringBuilder();
 		sb.AppendLine("// <auto-generated/> by SUIsei.SourceGen");
 		sb.AppendLine("#nullable enable");
-		sb.AppendLine("using System.Collections.Generic;");
-		sb.AppendLine("using System.ComponentModel;");
 		if (ns is not null)
 			sb.AppendLine($"namespace {ns};");
 		sb.AppendLine();
 		// The helper is nested in the view's class, so it reaches a named element's field whatever x:FieldModifier gave it.
-		var classStart = sb.Length;
-		sb.AppendLine($"private sealed class {cls}_Bindings");
-		sb.AppendLine("{");
-		sb.AppendLine($"\tprivate readonly {cls} _root;");
-		sb.AppendLine("\tprivate readonly List<INotifyPropertyChanged> _tracked = new();");
-		sb.AppendLine($"\tpublic {cls}_Bindings({cls} root) => _root = root;");
-		sb.AppendLine();
-
-		var tracked = binds.Where(b => b.OneWay).ToList();
-		var twoWayBinds = tracked.Where(b => b.TwoWay).ToList();
-
-		// Reentrancy guards for TwoWay bindings (one bool per binding, indexed by position in `tracked`).
-		for (var i = 0; i < tracked.Count; i++)
-		{
-			if (tracked[i].TwoWay)
-				sb.AppendLine($"\tprivate bool _updating_{i};");
-		}
-		if (twoWayBinds.Count > 0)
-			sb.AppendLine();
-
-		// Initialize: OneTime assignments, then subscribe + push the OneWay/TwoWay values.
-		sb.AppendLine("\tpublic void Initialize()");
-		sb.AppendLine("\t{");
-		foreach (var b in binds.Where(b => !b.OneWay))
-			sb.AppendLine($"\t\t{Assignment(b)}");
-		foreach (var b in twoWayBinds)
-		{
-			var idx = tracked.IndexOf(b);
-			var changedEvt = b.TargetProp + "Changed";
-			sb.AppendLine($"\t\t_root.{b.TargetVar}.{changedEvt} += On_{idx}_ControlChanged;");
-		}
-		sb.AppendLine("\t\tSubscribe();");
-		sb.AppendLine("\t\tUpdate();");
-		sb.AppendLine("\t}");
-		sb.AppendLine();
-
-		// Update_N: push one OneWay/TwoWay value, wrapped in reentrancy guard for TwoWay.
-		for (var i = 0; i < tracked.Count; i++)
-		{
-			var b = tracked[i];
-			if (b.TwoWay)
-			{
-				sb.AppendLine($"\tprivate void Update_{i}()");
-				sb.AppendLine("\t{");
-				sb.AppendLine($"\t\tif (_updating_{i}) return;");
-				sb.AppendLine($"\t\t_updating_{i} = true;");
-				sb.AppendLine("\t\ttry");
-				sb.AppendLine("\t\t{");
-				sb.AppendLine($"\t\t\t{Assignment(b)}");
-				sb.AppendLine("\t\t}");
-				sb.AppendLine($"\t\tfinally {{ _updating_{i} = false; }}");
-				sb.AppendLine("\t}");
-			}
-			else
-				sb.AppendLine($"\tprivate void Update_{i}() => {Assignment(b)}");
-		}
-		sb.AppendLine("\tpublic void Update()");
-		sb.AppendLine("\t{");
-		for (var i = 0; i < tracked.Count; i++)
-			sb.AppendLine($"\t\tUpdate_{i}();");
-		sb.AppendLine("\t}");
-		sb.AppendLine();
-
-		// Reverse wires for TwoWay: control → VM.
-		for (var i = 0; i < tracked.Count; i++)
-		{
-			var b = tracked[i];
-			if (!b.TwoWay)
-				continue;
-			var writeBack = WriteBack(b, $"_root.{b.TargetVar}.{b.TargetProp}");
-			sb.AppendLine($"\tprivate void On_{i}_ControlChanged(object? sender, System.EventArgs e)");
-			sb.AppendLine("\t{");
-			sb.AppendLine($"\t\tif (_updating_{i}) return;");
-			sb.AppendLine($"\t\t_updating_{i} = true;");
-			sb.AppendLine("\t\ttry");
-			sb.AppendLine("\t\t{");
-			sb.AppendLine($"\t\t\t{writeBack}");
-			sb.AppendLine("\t\t}");
-			sb.AppendLine($"\t\tfinally {{ _updating_{i} = false; }}");
-			sb.AppendLine("\t}");
-		}
-
-		// Subscribe to each distinct INPC source: the page (_root) plus every intermediate object up each path
-		// (the owner of each non-root segment), so a change anywhere along the chain rewires + refreshes. Each owner
-		// is read null-conditionally through its reference-typed parents, so a null intermediate yields a null source
-		// that Track() simply skips rather than throwing.
-		var trackExprs = new List<string> { "_root" };
-		foreach (var b in tracked)
-		{
-			for (var depth = 1; depth < b.Path.Length; depth++)
-			{
-				var owner = OwnerExpr(b, depth);
-				if (!trackExprs.Contains(owner))
-					trackExprs.Add(owner);
-			}
-		}
-
-		sb.AppendLine("\tpublic void Subscribe()");
-		sb.AppendLine("\t{");
-		sb.AppendLine("\t\tStopTracking();");
-		foreach (var expr in trackExprs)
-			sb.AppendLine($"\t\tTrack({expr});");
-		sb.AppendLine("\t}");
-		sb.AppendLine();
-		sb.AppendLine("\tpublic void StopTracking()");
-		sb.AppendLine("\t{");
-		sb.AppendLine("\t\tforeach (var t in _tracked) t.PropertyChanged -= OnPropertyChanged;");
-		sb.AppendLine("\t\t_tracked.Clear();");
-		sb.AppendLine("\t}");
-		sb.AppendLine();
-		sb.AppendLine("\tprivate void Track(object? o)");
-		sb.AppendLine("\t{");
-		sb.AppendLine("\t\tif (o is INotifyPropertyChanged inpc) { inpc.PropertyChanged += OnPropertyChanged; _tracked.Add(inpc); }");
-		sb.AppendLine("\t}");
-		sb.AppendLine();
-
-		// INPC change handler. A non-leaf segment anywhere up any path is an "intermediate": a change to it swaps a
-		// sub-object, so we rewire (Subscribe) and refresh everything rather than updating a single leaf.
-		var intermediateNames = new HashSet<string>();
-		foreach (var b in tracked)
-		{
-			for (var i = 0; i < b.Path.Length - 1; i++)
-				intermediateNames.Add(b.Path[i]);
-		}
-		var leafUpdates = new Dictionary<string, List<int>>();
-		for (var i = 0; i < tracked.Count; i++)
-		{
-			var segs = tracked[i].Path;
-			var leaf = segs[segs.Length - 1];
-			if (intermediateNames.Contains(leaf))
-				continue;
-			if (!leafUpdates.TryGetValue(leaf, out var list))
-				leafUpdates[leaf] = list = [];
-			list.Add(i);
-		}
-
-		sb.AppendLine("\tprivate void OnPropertyChanged(object? sender, PropertyChangedEventArgs e)");
-		sb.AppendLine("\t{");
-		sb.AppendLine("\t\tswitch (e.PropertyName)");
-		sb.AppendLine("\t\t{");
-		foreach (var name in intermediateNames)
-			sb.AppendLine($"\t\t\tcase \"{name}\": Subscribe(); Update(); break;");
-		foreach (var kv in leafUpdates)
-		{
-			var calls = string.Join(" ", kv.Value.Select(i => $"Update_{i}();"));
-			sb.AppendLine($"\t\t\tcase \"{kv.Key}\": {calls} break;");
-		}
-		sb.AppendLine("\t\t\tcase null: case \"\": Subscribe(); Update(); break;");
-		sb.AppendLine("\t\t}");
-		sb.AppendLine("\t}");
-		sb.AppendLine("}");
-
-		var helper = sb.ToString(classStart, sb.Length - classStart);
-		sb.Length = classStart;
 		sb.AppendLine($"partial class {cls}");
 		sb.AppendLine("{");
-		// The helper's text ends with a line break, so its last entry is empty.
-		var lines = helper.Split(["\r\n", "\n"], StringSplitOptions.None);
-		for (var i = 0; i < lines.Length - 1; i++)
-			sb.AppendLine(lines[i].Length > 0 ? "\t" + lines[i] : "");
+		sb.Append(BindingsClass($"{cls}_Bindings", cls, binds, template: false, "\t"));
 		sb.AppendLine("}");
-
 		return new GeneratedSource(MakeHintName(fullClass, ".Bindings"), sb.ToString());
 	}
 
-	// "Target.Prop = <read of the page path>;" — handles FallbackValue / TargetNullValue / null-coalescing.
-	private static string Assignment(Bind b)
-	{
-		var read = ReadExpr(b);
-		string value;
-		if (b.TargetNullValue is not null && b.FallbackValue is not null)
-			value = $"({read}) ?? ({b.TargetNullValue}) ?? ({b.FallbackValue})";
-		else if (b.TargetNullValue is not null)
-			value = $"({read}) ?? ({b.TargetNullValue})";
-		else if (b.FallbackValue is not null)
-			value = $"({read}) ?? ({b.FallbackValue})";
-		else if (b.LeafType.SpecialType == SpecialType.System_String)
-			value = $"({read}) ?? string.Empty";
-		else if (read.Contains("?.") && b.LeafType.IsValueType)
-			value = $"({read}) ?? default";
-		else
-			value = read;
-		return $"_root.{b.TargetVar}.{b.TargetProp} = {value};";
-	}
+	// Where a binding's target is reached from inside its helper: the page's field (or the page itself, for a binding on an
+	// unsealed root), or the template helper's own field for the element.
+	private static string HelperTarget(Bind b, bool template) =>
+		template ? $"_e_{b.TargetVar}" : b.TargetVar == "this" ? "_root" : $"_root.{b.TargetVar}";
 
-	// OneTime assignment RHS: path accessed directly on `this` (no `_root.` prefix), with fallback coalescing.
-	private static string OneTimeExpr(Bind b)
+	// A binding helper class, at `indent`: it pushes each binding's value (Update), wires each TwoWay binding's control back
+	// to its source, and tracks INotifyPropertyChanged along every path, so a change to a leaf updates the bindings reading
+	// it and a change to an intermediate rewires and refreshes them all. The page's subscribes as it is initialized; a
+	// template's (`template`) only while its element is in a live tree (IDataTemplateBindings.Attach / Detach).
+	private static string BindingsClass(string className, string rootType, List<Bind> binds, bool template, string indent)
 	{
 		var sb = new StringBuilder();
-		for (var i = 0; i < b.Path.Length; i++)
+		void Line(string text = "") => sb.AppendLine(text.Length == 0 ? "" : indent + text);
+
+		Line(template
+			? $"private sealed class {className} : global::SUIsei.Controls.IDataTemplateBindings"
+			: $"private sealed class {className}");
+		Line("{");
+		Line($"\tprivate readonly {rootType} _root;");
+		Line("\tprivate readonly global::System.Collections.Generic.List<global::System.ComponentModel.INotifyPropertyChanged> _tracked = new();");
+		var targets = binds.GroupBy(static b => b.TargetVar).Select(static g => g.First()).ToList();
+		// A template's elements are handed over by an object initializer, not the constructor, so a binding added to the
+		// template under hot reload adds a field rather than changing a signature, which the runtime can't apply live.
+		if (template)
 		{
-			var acc = i == 0 ? "" : (b.ResultTypes[i - 1].IsReferenceType ? "?." : ".");
-			sb.Append(acc).Append(b.Path[i]);
+			foreach (var t in targets)
+				Line($"\tinternal {Fq(t.TargetElementType)} _e_{t.TargetVar} = null!;");
 		}
-		var read = sb.ToString();
-		if (b.TargetNullValue is not null && b.FallbackValue is not null)
-			return $"({read}) ?? ({b.TargetNullValue}) ?? ({b.FallbackValue})";
-		if (b.TargetNullValue is not null)
-			return $"({read}) ?? ({b.TargetNullValue})";
-		if (b.FallbackValue is not null)
-			return $"({read}) ?? ({b.FallbackValue})";
-		if (b.LeafType.SpecialType == SpecialType.System_String)
-			return $"({read}) ?? string.Empty";
-		if (read.Contains("?.") && b.LeafType.IsValueType)
-			return $"({read}) ?? default";
-		return read;
-	}
+		Line($"\tpublic {className}({rootType} root) => _root = root;");
+		Line();
 
-	// The control→source assignment statement for a TwoWay reverse wire. A single-segment path assigns directly.
-	// A deeper path writes through the leaf's owner; when that owner is reference-typed the chain to it is read
-	// null-conditionally and the write guarded (a null intermediate becomes a no-op rather than an NRE), whereas a
-	// value-typed owner is assigned in place (binding a local copy would not write back to the source).
-	private static string WriteBack(Bind b, string rhs)
-	{
-		if (b.Path.Length == 1)
-			return $"_root.{b.Path[0]} = {rhs};";
-
-		var leaf = b.Path[b.Path.Length - 1];
-		if (b.ResultTypes[b.Path.Length - 2].IsReferenceType)
-			return $"if ({OwnerExpr(b, b.Path.Length - 1)} is {{ }} __o) __o.{leaf} = {rhs};";
-
-		var sb = new StringBuilder("_root");
-		for (var i = 0; i < b.Path.Length; i++)
-			sb.Append('.').Append(b.Path[i]);
-		return $"{sb} = {rhs};";
-	}
-
-	private static string ReadExpr(Bind b)
-	{
-		var sb = new StringBuilder("_root");
-		for (var i = 0; i < b.Path.Length; i++)
+		// Reentrancy guards for TwoWay bindings, one per binding.
+		for (var i = 0; i < binds.Count; i++)
 		{
-			var acc = i == 0 ? "." : (b.ResultTypes[i - 1].IsReferenceType ? "?." : ".");
-			sb.Append(acc).Append(b.Path[i]);
+			if (binds[i].TwoWay)
+				Line($"\tprivate bool _updating_{i};");
 		}
-		return sb.ToString();
-	}
+		if (binds.Any(static b => b.TwoWay))
+			Line();
 
-	// The object that owns segment <paramref name="depth"/> of the path: <c>_root</c> joined with the first
-	// <paramref name="depth"/> segments, each reference-typed parent read null-conditionally so the expression is
-	// safe to evaluate even when an intermediate is null (the subscription side then simply skips a null source).
-	private static string OwnerExpr(Bind b, int depth)
-	{
-		var sb = new StringBuilder("_root");
-		for (var i = 0; i < depth; i++)
+		// Initialize: wire each TwoWay control back to its source, then push every value (and, on the page, subscribe).
+		Line("\tpublic void Initialize()");
+		Line("\t{");
+		for (var i = 0; i < binds.Count; i++)
 		{
-			var acc = i == 0 ? "." : (b.ResultTypes[i - 1].IsReferenceType ? "?." : ".");
-			sb.Append(acc).Append(b.Path[i]);
+			if (binds[i].TwoWay)
+				Line($"\t\t{HelperTarget(binds[i], template)}.{binds[i].TargetProp}Changed += On_{i}_ControlChanged;");
 		}
+		if (!template)
+			Line("\t\tSubscribe();");
+		Line("\t\tUpdate();");
+		Line("\t}");
+		Line();
+		if (template)
+		{
+			Line("\tpublic void Attach()");
+			Line("\t{");
+			Line("\t\tSubscribe();");
+			Line("\t\tUpdate();");
+			Line("\t}");
+			Line();
+			Line("\tpublic void Detach() => StopTracking();");
+			Line();
+		}
+
+		// Update_N pushes one value; a TwoWay one inside its guard, so the control's change event doesn't write it back.
+		for (var i = 0; i < binds.Count; i++)
+		{
+			var assign = AssignStatement(binds[i], "_root", HelperTarget(binds[i], template));
+			if (!binds[i].TwoWay)
+			{
+				Line($"\tprivate void Update_{i}() {{ {assign} }}");
+				continue;
+			}
+			Line($"\tprivate void Update_{i}()");
+			Line("\t{");
+			Line($"\t\tif (_updating_{i}) return;");
+			Line($"\t\t_updating_{i} = true;");
+			Line($"\t\ttry {{ {assign} }}");
+			Line($"\t\tfinally {{ _updating_{i} = false; }}");
+			Line("\t}");
+		}
+		Line("\tpublic void Update()");
+		Line("\t{");
+		for (var i = 0; i < binds.Count; i++)
+			Line($"\t\tUpdate_{i}();");
+		Line("\t}");
+		Line();
+
+		// The reverse wire: the control's value into the source; then the source read again and shown, so a source that
+		// refuses or coerces the value (a choice that can't be unselected, a clamp) is shown as it is. The source's own
+		// change notice, raised while the guard was up, was not heard.
+		for (var i = 0; i < binds.Count; i++)
+		{
+			var b = binds[i];
+			if (!b.TwoWay)
+				continue;
+			Line($"\tprivate void On_{i}_ControlChanged(object? sender, global::System.EventArgs e)");
+			Line("\t{");
+			Line($"\t\tif (_updating_{i}) return;");
+			Line($"\t\t_updating_{i} = true;");
+			Line($"\t\ttry {{ {WriteBack(b, $"{HelperTarget(b, template)}.{b.TargetProp}")} }}");
+			Line($"\t\tfinally {{ _updating_{i} = false; }}");
+			Line($"\t\tUpdate_{i}();");
+			Line("\t}");
+			Line();
+		}
+
+		// Subscribe to each distinct INPC source: the root, plus every object up each path (the owner of each segment
+		// after the first). Each owner is read null-conditionally through its reference-typed parents, so a null
+		// intermediate is a null source that Track() skips rather than throwing.
+		var trackExprs = new List<string> { "_root" };
+		foreach (var b in binds)
+		{
+			foreach (var path in b.Tracked)
+			{
+				for (var depth = 1; depth < path.Length; depth++)
+				{
+					var owner = PathRead("_root", path, depth);
+					if (!trackExprs.Contains(owner))
+						trackExprs.Add(owner);
+				}
+			}
+		}
+		Line("\tpublic void Subscribe()");
+		Line("\t{");
+		Line("\t\tStopTracking();");
+		foreach (var expr in trackExprs)
+			Line($"\t\tTrack({expr});");
+		Line("\t}");
+		Line();
+		Line("\tpublic void StopTracking()");
+		Line("\t{");
+		Line("\t\tforeach (var t in _tracked) t.PropertyChanged -= OnPropertyChanged;");
+		Line("\t\t_tracked.Clear();");
+		Line("\t}");
+		Line();
+		Line("\tprivate void Track(object? o)");
+		Line("\t{");
+		Line("\t\tif (o is global::System.ComponentModel.INotifyPropertyChanged inpc) { inpc.PropertyChanged += OnPropertyChanged; _tracked.Add(inpc); }");
+		Line("\t}");
+		Line();
+
+		// A change to a segment before any path's leaf swaps an object the paths read through, so it rewires (Subscribe)
+		// and refreshes everything; a change to a leaf updates the bindings that read it.
+		var intermediateNames = new HashSet<string>();
+		foreach (var b in binds)
+		{
+			foreach (var path in b.Tracked)
+			{
+				for (var i = 0; i < path.Length - 1; i++)
+					intermediateNames.Add(path.Segments[i]);
+			}
+		}
+		var leafUpdates = new Dictionary<string, List<int>>();
+		for (var i = 0; i < binds.Count; i++)
+		{
+			foreach (var path in binds[i].Tracked)
+			{
+				if (path.Length == 0)
+					continue;
+				var leaf = path.Segments[path.Length - 1];
+				if (intermediateNames.Contains(leaf))
+					continue;
+				if (!leafUpdates.TryGetValue(leaf, out var list))
+					leafUpdates[leaf] = list = [];
+				if (!list.Contains(i))
+					list.Add(i);
+			}
+		}
+		Line("\tprivate void OnPropertyChanged(object? sender, global::System.ComponentModel.PropertyChangedEventArgs e)");
+		Line("\t{");
+		Line("\t\tswitch (e.PropertyName)");
+		Line("\t\t{");
+		foreach (var name in intermediateNames)
+			Line($"\t\t\tcase \"{name}\": Subscribe(); Update(); break;");
+		foreach (var kv in leafUpdates)
+			Line($"\t\t\tcase \"{kv.Key}\": {string.Join(" ", kv.Value.Select(static i => $"Update_{i}();"))} break;");
+		Line("\t\t\tcase null: case \"\": Subscribe(); Update(); break;");
+		Line("\t\t}");
+		Line("\t}");
+		Line("}");
 		return sb.ToString();
 	}
 }
