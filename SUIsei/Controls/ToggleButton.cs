@@ -70,6 +70,13 @@ public class ToggleButton : ButtonBase
 		remove => RemoveHandler(IndeterminateEvent, value);
 	}
 
+	/// <summary>
+	/// Raised whenever <see cref="IsChecked"/> changes, by a click or from code, after <see cref="Checked"/>,
+	/// <see cref="Unchecked"/> or <see cref="Indeterminate"/> and the visual state. It is the change event a
+	/// <c>{x:Bind IsSelected, Mode=TwoWay}</c> on <c>IsChecked</c> writes back through.
+	/// </summary>
+	public event EventHandler? IsCheckedChanged;
+
 	protected override void OnClick()
 	{
 		OnToggle();
@@ -100,6 +107,7 @@ public class ToggleButton : ButtonBase
 	{
 		RaiseEvent(IsChecked switch { true => CheckedEvent, false => UncheckedEvent, _ => IndeterminateEvent }, new RoutedEventArgs());
 		UpdateVisualState();
+		IsCheckedChanged?.Invoke(this, EventArgs.Empty);
 	}
 
 	private void UpdateVisualState(bool useTransitions = true)

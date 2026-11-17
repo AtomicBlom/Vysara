@@ -379,12 +379,30 @@ partial class XamlSourceGenerator
 		if (rootVar is null)
 			return null;
 
+		// A DataTemplate's live {x:Bind}s: a helper made for the element this call builds, holding the item and the
+		// elements it sets, kept with the root so it follows the item while the root is in a live tree.
+		string? helper = null;
+		if (scope.TemplateBindings.Count > 0 && dataRootType is not null)
+		{
+			helper = method + "_Bindings";
+			var elements = string.Join(", ", scope.TemplateBindings.Select(static b => b.TargetVar).Distinct().Select(static v => $"_e_{v} = {v}"));
+			var bindings = NewName(gen, "__bindings");
+			scope.Emit($"var {bindings} = new {helper}({dataRootExpr}) {{ {elements} }};");
+			scope.Emit($"{bindings}.Initialize();");
+			scope.Emit($"global::SUIsei.Controls.DataTemplate.SetBindings({rootVar}, {bindings});");
+		}
+
 		gen.Methods.AppendLine($"\tprivate static {returnType} {method}({paramDecl})");
 		gen.Methods.AppendLine("\t{");
 		gen.Methods.Append(body);
 		gen.Methods.Append(SourceRecordBlock(scope));
 		gen.Methods.AppendLine($"\t\treturn {rootVar};");
 		gen.Methods.AppendLine("\t}");
+		if (helper is not null)
+		{
+			gen.Methods.AppendLine();
+			gen.Methods.Append(BindingsClass(helper, Fq(dataRootType!), scope.TemplateBindings, template: true, "\t"));
+		}
 		return method;
 	}
 
@@ -414,32 +432,6 @@ partial class XamlSourceGenerator
 			if (child.Name.LocalName.Contains('.') && !IsIgnorable(child, child.Name.Namespace))
 				gen.Report(BadPropertyElement, child, child.Name.LocalName);
 		}
-	}
-
-	// A template-scoped {x:Bind} — a OneTime read against the template's data root (the item is fixed for the
-	// realized container's lifetime, so no INPC tracking is wired).
-	private static void EmitTemplateBind(Gen gen, Scope scope, XAttribute attr, string targetVar, IPropertySymbol prop, string[] path, string? fallback, string? targetNull)
-	{
-		if (scope.DataRootType is null)
-		{
-			gen.Report(BindPathUnresolved, attr, string.Join(".", path), "the template data type (set x:DataType)");
-			return;
-		}
-		if (!TryResolvePath(scope.DataRootType, path, out var resultTypes, out var leafType))
-		{
-			gen.Report(BindPathUnresolved, attr, string.Join(".", path), scope.DataRootType.ToDisplayString());
-			return;
-		}
-		if (!gen.Compilation.ClassifyConversion(leafType, prop.Type).IsImplicit)
-		{
-			gen.Report(BindTypeMismatch, attr, leafType.ToDisplayString(), prop.Name, prop.Type.ToDisplayString());
-			return;
-		}
-
-		var sb = new StringBuilder(scope.DataRootExpr);
-		for (var i = 0; i < path.Length; i++)
-			sb.Append(i == 0 ? "." : (resultTypes[i - 1].IsReferenceType ? "?." : ".")).Append(path[i]);
-		scope.Emit($"{targetVar}.{prop.Name} = {CoalesceRead(sb.ToString(), leafType, fallback, targetNull)};");
 	}
 
 	// A {TemplateBinding source} wire: the templated control's property flows OneWay into a template part's property.

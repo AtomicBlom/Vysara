@@ -47,10 +47,25 @@ partial class XamlSourceGenerator
 		if (colon >= 0)
 		{
 			var ns = context.GetNamespaceOfPrefix(name.Substring(0, colon));
+			if (ns == X)
+				return XamlIntrinsicType(gen.Compilation, name.Substring(colon + 1));
 			return ns is null ? null : ResolveType(gen.Compilation, ns, name.Substring(colon + 1));
 		}
 		return gen.Compilation.GetTypeByMetadataName(name) ?? ResolveType(gen.Compilation, name);
 	}
+
+	// The XAML language's own types, as WinUI names them under the x: prefix (x:DataType="x:String" for a list of strings).
+	private static INamedTypeSymbol? XamlIntrinsicType(Compilation c, string name) => name switch
+	{
+		"String" => c.GetSpecialType(SpecialType.System_String),
+		"Boolean" => c.GetSpecialType(SpecialType.System_Boolean),
+		"Int32" => c.GetSpecialType(SpecialType.System_Int32),
+		"Int64" => c.GetSpecialType(SpecialType.System_Int64),
+		"Single" => c.GetSpecialType(SpecialType.System_Single),
+		"Double" => c.GetSpecialType(SpecialType.System_Double),
+		"Object" => c.GetSpecialType(SpecialType.System_Object),
+		_ => null,
+	};
 
 	// A fully-qualified (global::-rooted) reference to a symbol — a type for `new`/casts or a member for a field
 	// access — so generated code never depends on the consuming file's usings or risks namespace shadowing.
@@ -124,53 +139,155 @@ partial class XamlSourceGenerator
 		return true;
 	}
 
-	// Parse "x:Bind path[, Mode=OneTime|OneWay|TwoWay][, FallbackValue=X][, TargetNullValue=Y]".
-	// The path is a dotted member chain of any depth (e.g. Property, Object.Property, A.B.C.D); every reference-typed
-	// intermediate is read null-conditionally so a null anywhere up the chain falls back rather than throwing.
-	private static bool TryParseXBind(string inner, out string[] path, out bool oneWay, out bool twoWay, out string? fallbackValue, out string? targetNullValue)
+	// An {x:Bind} as written: a path (empty for a template's item itself), or a function and its argument paths; its
+	// options. OutsideSubset marks a WinUI form SUIsei doesn't build (Converter=, BindBack=, a literal argument…); Error
+	// says why it is malformed.
+	private sealed class XBindSpec
 	{
-		path = [];
-		oneWay = false;
-		twoWay = false;
-		fallbackValue = null;
-		targetNullValue = null;
+		public string[] Path { get; set; } = [];
+		// "prefix:Type.Method" for a function binding.
+		public string? Function { get; set; }
+		public List<string[]> Arguments { get; } = [];
+		public bool OneWay { get; set; }
+		public bool TwoWay { get; set; }
+		public string? Fallback { get; set; }
+		public string? TargetNull { get; set; }
+		public bool OutsideSubset { get; set; }
+		public string? Error { get; set; }
+	}
 
-		var parts = inner.Split(',');
-		var head = parts[0].Trim();
-		if (!head.StartsWith("x:Bind"))
-			return false;
-		var p = head.Substring("x:Bind".Length).Trim();
-		if (p.Length == 0 || p.Contains('(') || p.Contains(' '))
-			return false;
-		var segs = p.Split('.');
-		foreach (var s in segs)
+	// Parse "x:Bind [path | prefix:Type.Method(path, …)][, Mode=OneTime|OneWay|TwoWay][, FallbackValue=X][, TargetNullValue=Y]";
+	// null when `inner` is not an x:Bind at all. A path is a dotted member chain of any depth (Property, A.B.C.D), read with
+	// every reference-typed intermediate null-conditional so a null anywhere up the chain falls back rather than throwing.
+	// A function names a static method through its type's xmlns prefix, as WinUI's function bindings do, and takes paths;
+	// commas between its arguments are its own, not the options'.
+	private static XBindSpec? ParseXBind(string inner)
+	{
+		var text = inner.Trim();
+		if (!text.StartsWith("x:Bind", StringComparison.Ordinal))
+			return null;
+		var rest = text.Substring("x:Bind".Length);
+		if (rest.Length > 0 && !char.IsWhiteSpace(rest[0]) && rest[0] != ',')
+			return null;
+
+		var spec = new XBindSpec();
+		if (SplitTopLevel(rest) is not { } parts)
 		{
-			if (!IsIdentifier(s))
-				return false;
+			spec.Error = "its parentheses don't match";
+			return spec;
+		}
+		// The first part is the path, unless it is already an option ({x:Bind Mode=OneWay}, the item itself).
+		var head = parts[0].Trim();
+		var firstOption = 1;
+		if (head.IndexOf('=') >= 0 && head.IndexOf('(') < 0)
+		{
+			head = "";
+			firstOption = 0;
 		}
 
-		for (var i = 1; i < parts.Length; i++)
+		var open = head.IndexOf('(');
+		if (open >= 0)
 		{
-			var eqIdx = parts[i].IndexOf('=');
-			if (eqIdx < 0)
-				return false;
-			var key = parts[i].Substring(0, eqIdx).Trim();
-			var val = parts[i].Substring(eqIdx + 1).Trim();
-			switch (key)
+			var name = head.Substring(0, open).Trim();
+			var colon = name.IndexOf(':');
+			var dot = name.LastIndexOf('.');
+			if (!head.EndsWith(")", StringComparison.Ordinal))
+				spec.Error = "a function's arguments end with ')'";
+			else if (colon <= 0 || dot < colon || !IsIdentifier(name.Substring(0, colon)) || ParsePath(name.Substring(colon + 1)) is null)
+				spec.Error = $"a function is a static method named with its type's xmlns prefix, as local:Format.Percent(Level); '{name}' is not";
+			else
 			{
-				case "Mode":
-					if (val == "OneWay") oneWay = true;
-					else if (val == "OneTime") { /* default */ }
-					else if (val == "TwoWay") { twoWay = true; oneWay = true; }
-					else return false;
-					break;
-				case "FallbackValue": fallbackValue = val; break;
-				case "TargetNullValue": targetNullValue = val; break;
-				default: return false; // Converter= and others are unsupported
+				spec.Function = name;
+				var argumentText = head.Substring(open + 1, head.Length - open - 2);
+				if (argumentText.Trim().Length > 0)
+				{
+					foreach (var argument in SplitTopLevel(argumentText)!)
+					{
+						if (ParsePath(argument.Trim()) is { } argumentPath)
+							spec.Arguments.Add(argumentPath);
+						else
+							spec.OutsideSubset = true; // a literal, a cast or a nested call: WinUI takes them, SUIsei takes paths
+					}
+				}
 			}
 		}
-		path = segs;
-		return true;
+		else if (head.Length > 0)
+		{
+			if (ParsePath(head) is { } path)
+				spec.Path = path;
+			else
+				spec.Error = $"'{head}' is not a property path";
+		}
+
+		for (var i = firstOption; i < parts.Count; i++)
+		{
+			var eq = parts[i].IndexOf('=');
+			if (eq < 0)
+			{
+				spec.Error ??= $"'{parts[i].Trim()}' is not an option (Mode=, FallbackValue= or TargetNullValue=)";
+				continue;
+			}
+			var key = parts[i].Substring(0, eq).Trim();
+			var value = parts[i].Substring(eq + 1).Trim();
+			switch (key)
+			{
+				case "Mode" when value == "OneTime":
+					break;
+				case "Mode" when value == "OneWay":
+					spec.OneWay = true;
+					break;
+				case "Mode" when value == "TwoWay":
+					spec.OneWay = spec.TwoWay = true;
+					break;
+				case "Mode":
+					spec.Error ??= $"Mode is OneTime, OneWay or TwoWay, not '{value}'";
+					break;
+				case "FallbackValue":
+					spec.Fallback = value;
+					break;
+				case "TargetNullValue":
+					spec.TargetNull = value;
+					break;
+				default:
+					spec.OutsideSubset = true; // Converter=, BindBack= and the rest
+					break;
+			}
+		}
+		return spec;
+	}
+
+	// A dotted member chain (A, A.B.C), or null when it isn't one.
+	private static string[]? ParsePath(string text)
+	{
+		var segments = text.Split('.');
+		return segments.All(IsIdentifier) ? segments : null;
+	}
+
+	// `text` split at its commas outside parentheses; null when its parentheses don't match.
+	private static List<string>? SplitTopLevel(string text)
+	{
+		var parts = new List<string>();
+		var depth = 0;
+		var start = 0;
+		for (var i = 0; i < text.Length; i++)
+		{
+			switch (text[i])
+			{
+				case '(':
+					depth++;
+					break;
+				case ')' when --depth < 0:
+					return null;
+				case ',' when depth == 0:
+					parts.Add(text.Substring(start, i - start));
+					start = i + 1;
+					break;
+			}
+		}
+		if (depth != 0)
+			return null;
+		parts.Add(text.Substring(start));
+		return parts;
 	}
 
 	private static string Quote(string s) => SyntaxFactory.Literal(s).ToString();

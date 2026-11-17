@@ -45,8 +45,30 @@ public class ItemsControl : Control, IItemContainerSource
 	/// <summary>The template realized for each item; null wraps the item with the default content policy.</summary>
 	public DataTemplate? ItemTemplate { get; set { field = value; Reload(); } }
 
-	/// <summary>The panel the item containers are laid out in. Defaults to a vertical <see cref="StackPanel"/>.</summary>
-	public ItemsPanelTemplate ItemsPanel { get; set; } = ItemsPanelTemplate.DefaultStackPanel;
+	/// <summary>
+	/// The panel the item containers are laid out in. Defaults to a vertical <see cref="StackPanel"/>. Set after the items
+	/// are laid out (an <see cref="ItemsSource"/> set first, as markup sets an attribute before a property element), the
+	/// old panel is let go and the items are laid out again in a new one.
+	/// </summary>
+	public ItemsPanelTemplate ItemsPanel
+	{
+		get;
+		set
+		{
+			ArgumentNullException.ThrowIfNull(value);
+			if (ReferenceEquals(field, value))
+				return;
+			field = value;
+			if (_panel is null)
+				return;
+			DropChild(_panel);
+			_panel = null;
+			_panelList = [];
+			_virtualizing = false;
+			_recyclePool.Clear();
+			Reload();
+		}
+	} = ItemsPanelTemplate.DefaultStackPanel;
 
 	/// <summary>The materialized item list (a snapshot of <see cref="ItemsSource"/>).</summary>
 	protected internal IReadOnlyList<object?> Items => _items;
