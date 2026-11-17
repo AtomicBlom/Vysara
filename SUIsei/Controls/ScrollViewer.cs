@@ -27,6 +27,9 @@ public sealed class ScrollViewer : FrameworkElement
 	private const float ThumbThicknessActive = 11f;
 	private const float ThumbMinLength = 28f;
 	private const float ThumbMargin = 2f;
+	// A scroll bar that shows takes this much from the viewport, down the right or along the bottom, and its thumb runs in
+	// it: the content is never under a thumb, even a grabbed one at its widest.
+	private const float Gutter = ThumbThicknessActive + 2f * ThumbMargin;
 
 	// The thumbs fade between their brushes through their BrushTransition when on a live host, and switch at once when not.
 	// The vertical one runs down the right; the horizontal one along the bottom, short of the vertical one's corner.
@@ -196,9 +199,16 @@ public sealed class ScrollViewer : FrameworkElement
 	/// <summary>Where the horizontal thumb is arranged (test seam): empty while it is hidden.</summary>
 	internal Rect HorizontalThumbRect => _hThumb.Visibility == Visibility.Visible ? _hThumb.LayoutRect : default;
 
+	/// <summary>Where the vertical thumb is arranged (test seam): empty while it is hidden.</summary>
+	internal Rect VerticalThumbRect => _vThumb.Visibility == Visibility.Visible ? _vThumb.LayoutRect : default;
+
 	public void ScrollToVerticalOffset(float offset) => SetVerticalOffset(offset);
 
 	public void ScrollToHorizontalOffset(float offset) => SetHorizontalOffset(offset);
+
+	// A wheel or a finger over a gap between the items still scrolls them: the viewer is hit across its viewport, not only
+	// where its content draws.
+	private protected override bool HitsWholeBounds => true;
 
 	private static bool ShowsThumb(ScrollBarVisibility visibility) => visibility is ScrollBarVisibility.Auto or ScrollBarVisibility.Visible;
 
@@ -237,29 +247,66 @@ public sealed class ScrollViewer : FrameworkElement
 		}
 
 		// Measure the content unbounded along each axis it scrolls, so its full extent is known regardless of the viewport.
-		Content.Measure(new Size(
-			HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled ? available.Width : float.PositiveInfinity,
-			VerticalScrollBarVisibility == ScrollBarVisibility.Disabled ? available.Height : float.PositiveInfinity));
-		ExtentWidth = Content.DesiredSize.Width;
-		ExtentHeight = Content.DesiredSize.Height;
+		MeasureContent(available.Width, available.Height);
+		var (vertical, horizontal) = ShowsBars(available.Width, available.Height);
+		// Along an axis it doesn't scroll, the content takes the viewport, which a scroll bar's gutter makes narrower.
+		var narrower = vertical && HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled;
+		var shorter = horizontal && VerticalScrollBarVisibility == ScrollBarVisibility.Disabled;
+		if (narrower || shorter)
+			MeasureContent(available.Width - (narrower ? Gutter : 0f), available.Height - (shorter ? Gutter : 0f));
 
 		// As WinUI's, it asks for its content's size up to the space there is: a viewer in a star cell is still arranged
-		// to fill it, while one sized to its content (a flyout's, an Auto row's) stays only as big as what it holds.
-		return new Size(MathF.Min(ExtentWidth, available.Width), MathF.Min(ExtentHeight, available.Height));
+		// to fill it, while one sized to its content (a flyout's, an Auto row's) stays only as big as what it holds, with
+		// room for the scroll bars it shows.
+		return new Size(
+			MathF.Min(ExtentWidth + (vertical ? Gutter : 0f), available.Width),
+			MathF.Min(ExtentHeight + (horizontal ? Gutter : 0f), available.Height));
+	}
+
+	// The content measured unbounded along each axis it scrolls and to `width` or `height` along one it doesn't, which is
+	// its extent.
+	private void MeasureContent(float width, float height)
+	{
+		Content!.Measure(new Size(
+			HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled ? MathF.Max(0f, width) : float.PositiveInfinity,
+			VerticalScrollBarVisibility == ScrollBarVisibility.Disabled ? MathF.Max(0f, height) : float.PositiveInfinity));
+		ExtentWidth = Content.DesiredSize.Width;
+		ExtentHeight = Content.DesiredSize.Height;
+	}
+
+	// Which scroll bars show in a viewer of `width` by `height`: one shows where its axis has more than the viewport to scroll
+	// and its visibility shows a thumb. Each takes a gutter from the other's viewport, so the horizontal one can make the
+	// vertical one needed, and the other way round.
+	private (bool Vertical, bool Horizontal) ShowsBars(float width, float height)
+	{
+		var showsVertical = ShowsThumb(VerticalScrollBarVisibility);
+		var showsHorizontal = ShowsThumb(HorizontalScrollBarVisibility);
+		var vertical = showsVertical && ExtentHeight > height;
+		var horizontal = showsHorizontal && ExtentWidth > width - (vertical ? Gutter : 0f);
+		if (horizontal && !vertical)
+		{
+			vertical = showsVertical && ExtentHeight > height - Gutter;
+			horizontal = ExtentWidth > width - (vertical ? Gutter : 0f);
+		}
+		return (vertical, horizontal);
 	}
 
 	protected override Size ArrangeOverride(Size finalSize)
 	{
-		var shrank = finalSize.Height < ViewportHeight;
-		ViewportWidth = finalSize.Width;
-		ViewportHeight = finalSize.Height;
+		// The viewport is what the scroll bars that show leave of the viewer: each takes a gutter that its thumb runs in.
+		var (vertical, horizontal) = Content is null ? (false, false) : ShowsBars(finalSize.Width, finalSize.Height);
+		var viewportWidth = MathF.Max(0f, finalSize.Width - (vertical ? Gutter : 0f));
+		var viewportHeight = MathF.Max(0f, finalSize.Height - (horizontal ? Gutter : 0f));
+		var shrank = viewportHeight < ViewportHeight;
+		ViewportWidth = viewportWidth;
+		ViewportHeight = viewportHeight;
 		VerticalOffset = Math.Clamp(VerticalOffset, 0f, ScrollableHeight);
 		HorizontalOffset = Math.Clamp(HorizontalOffset, 0f, ScrollableWidth);
 
 		if (Content is { } content)
 		{
-			var contentWidth = MathF.Max(ExtentWidth, finalSize.Width);
-			var contentHeight = MathF.Max(ExtentHeight, finalSize.Height);
+			var contentWidth = MathF.Max(ExtentWidth, viewportWidth);
+			var contentHeight = MathF.Max(ExtentHeight, viewportHeight);
 			content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
 
 			// Keep the focused descendant in view as it takes focus and as the viewport shrinks under it: its place is only
@@ -276,44 +323,44 @@ public sealed class ScrollViewer : FrameworkElement
 			}
 		}
 
-		ArrangeThumb(finalSize);
+		ArrangeThumbs(finalSize, vertical, horizontal);
 		return finalSize;
 	}
 
-	// Size each thumb to the visible fraction of the content and slide it in proportion to the scroll position; hide it when
-	// there is nothing to scroll that way or its scroll bar visibility hides it. The horizontal one runs along the bottom,
-	// short of the vertical one's corner.
-	private void ArrangeThumb(Size finalSize)
+	// Size each thumb to the visible fraction of the content and slide it in proportion to the scroll position, in its gutter;
+	// hide it when its scroll bar doesn't show. The vertical one runs down the right, the horizontal one along the bottom, and
+	// each runs the viewport's length, so neither reaches the corner where their gutters meet.
+	private void ArrangeThumbs(Size finalSize, bool vertical, bool horizontal)
 	{
-		var vertical = ShowsThumb(VerticalScrollBarVisibility) && ScrollableHeight > 0f && ViewportHeight > 0f;
-		if (vertical)
+		if (vertical && ViewportHeight > 0f)
 		{
-			_thumbHeight = Math.Clamp(ViewportHeight * (ViewportHeight / ExtentHeight), ThumbMinLength, ViewportHeight);
+			_thumbHeight = Math.Clamp(ViewportHeight * (ViewportHeight / ExtentHeight), MathF.Min(ThumbMinLength, ViewportHeight), ViewportHeight);
 			_thumbTravel = ViewportHeight - _thumbHeight;
-			var y = _thumbTravel > 0f ? VerticalOffset / ScrollableHeight * _thumbTravel : 0f;
+			var y = _thumbTravel > 0f && ScrollableHeight > 0f ? VerticalOffset / ScrollableHeight * _thumbTravel : 0f;
 			var thickness = _thumbOver || _draggingThumb ? ThumbThicknessActive : ThumbThickness; // widen while engaged
 			_vThumb.Visibility = Visibility.Visible;
 			_vThumb.Arrange(new Rect(finalSize.Width - thickness - ThumbMargin, y, thickness, _thumbHeight));
 		}
 		else
 		{
+			_thumbHeight = 0f;
 			_thumbTravel = 0f;
 			_vThumb.Visibility = Visibility.Collapsed;
 			_vThumb.Arrange(new Rect(finalSize.Width, 0f, 0f, 0f));
 		}
 
-		if (ShowsThumb(HorizontalScrollBarVisibility) && ScrollableWidth > 0f && ViewportWidth > 0f)
+		if (horizontal && ViewportWidth > 0f)
 		{
-			var track = ViewportWidth - (vertical ? ThumbThicknessActive + ThumbMargin : 0f);
-			_hThumbWidth = Math.Clamp(track * (ViewportWidth / ExtentWidth), ThumbMinLength, track);
-			_hThumbTravel = track - _hThumbWidth;
-			var x = _hThumbTravel > 0f ? HorizontalOffset / ScrollableWidth * _hThumbTravel : 0f;
+			_hThumbWidth = Math.Clamp(ViewportWidth * (ViewportWidth / ExtentWidth), MathF.Min(ThumbMinLength, ViewportWidth), ViewportWidth);
+			_hThumbTravel = ViewportWidth - _hThumbWidth;
+			var x = _hThumbTravel > 0f && ScrollableWidth > 0f ? HorizontalOffset / ScrollableWidth * _hThumbTravel : 0f;
 			var thickness = _hThumbOver || _draggingHThumb ? ThumbThicknessActive : ThumbThickness;
 			_hThumb.Visibility = Visibility.Visible;
 			_hThumb.Arrange(new Rect(x, finalSize.Height - thickness - ThumbMargin, _hThumbWidth, thickness));
 		}
 		else
 		{
+			_hThumbWidth = 0f;
 			_hThumbTravel = 0f;
 			_hThumb.Visibility = Visibility.Collapsed;
 			_hThumb.Arrange(new Rect(0f, finalSize.Height, 0f, 0f));

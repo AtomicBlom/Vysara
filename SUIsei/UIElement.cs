@@ -708,6 +708,11 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		slot.HandledToo?.Invoke(this, args);
 	}
 
+	/// <summary>Whether the element is hit anywhere in its bounds, not only where its content draws: an element that takes
+	/// input over the space between its children, as a scroll viewer takes a wheel or a finger over the gaps between its
+	/// items.</summary>
+	private protected virtual bool HitsWholeBounds => false;
+
 	/// <summary>
 	/// Return the top-most element of this subtree drawn at <paramref name="surfacePoint"/> (surface pixels). The walk
 	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Composition.Visual.Transform"/>
@@ -738,10 +743,12 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 				return hit;
 		}
 
-		return Visual.Content is { } content && Matrix3x2.Invert(world, out var toLocal)
-			&& ContentContains(content, Vector2.Transform(surfacePoint, toLocal), LayoutRect, world)
-			? this
-			: null;
+		if (!Matrix3x2.Invert(world, out var toLocal))
+			return null;
+		var local = Vector2.Transform(surfacePoint, toLocal);
+		if (Visual.Content is { } content && ContentContains(content, local, LayoutRect, world))
+			return this;
+		return HitsWholeBounds && new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height).Contains(local) ? this : null;
 	}
 
 	/// <summary>

@@ -183,6 +183,115 @@ public sealed class ScrollViewerTests
 	}
 
 	[Test]
+	public void A_scroll_bar_takes_a_gutter_from_the_viewport_and_the_content_stays_clear_of_its_thumb()
+	{
+		var child = new Border { Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
+		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
+		var root = new UIRoot(UISurface.Hud) { Content = viewer };
+		root.LayoutPass(new Size(80f, 100f));
+
+		viewer.ViewportWidth.ShouldBeLessThan(80f);
+		child.LayoutRect.Width.ShouldBe(viewer.ViewportWidth); // measured and arranged short of the gutter
+		viewer.VerticalThumbRect.Height.ShouldBeGreaterThan(0f);
+		viewer.VerticalThumbRect.X.ShouldBeGreaterThanOrEqualTo(child.LayoutRect.Right);
+
+		// Nothing to scroll: no thumb, and the content has the whole width.
+		child.Height = 50f;
+		root.LayoutPass(new Size(80f, 100f));
+		viewer.ViewportWidth.ShouldBe(80f);
+		child.LayoutRect.Width.ShouldBe(80f);
+	}
+
+	[Test]
+	public void A_viewer_sized_to_its_content_makes_room_for_its_horizontal_bar_below_it()
+	{
+		var child = new Border { Width = 400f, Height = 30f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
+		var viewer = new ScrollViewer
+		{
+			Content = child,
+			Width = 100f,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+			VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+		};
+		var stack = new StackPanel();
+		stack.Children.Add(viewer);
+		var root = new UIRoot(UISurface.Hud) { Content = stack };
+		root.LayoutPass(new Size(100f, 200f));
+
+		viewer.ViewportHeight.ShouldBe(30f);
+		viewer.LayoutRect.Height.ShouldBeGreaterThan(30f);
+		viewer.HorizontalThumbRect.Y.ShouldBeGreaterThanOrEqualTo(30f); // under the content, not over it
+	}
+
+	[Test]
+	public void A_wheel_over_a_gap_between_the_items_scrolls_the_viewer()
+	{
+		var items = new StackPanel();
+		for (var i = 0; i < 10; i++)
+			items.Children.Add(new Border { Height = 30f, Margin = new Thickness(0f, 0f, 0f, 20f), Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) });
+		var viewer = new ScrollViewer { Content = items, Width = 80f, Height = 100f };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
+		var surface = new Vector2(80f, 100f);
+		host.Tick(0.016, 0f, surface);
+
+		Wheel(host, new Vector2(40f, 40f), new Vector2(0f, -1f), surface); // between the first item and the second
+		viewer.VerticalOffset.ShouldBeGreaterThan(0f);
+	}
+
+	// A 100 × 100 viewer over a stack: a block, a viewer that scrolls only sideways, then a tall block.
+	private static (ScrollViewer Outer, ScrollViewer Inner, UIHost Host) OverSideways()
+	{
+		var inner = new ScrollViewer
+		{
+			Height = 40f,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+			VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+			Content = new Border { Width = 600f, Background = new SolidColorBrush(HdrColor.FromRgb(90, 90, 90)) },
+		};
+		var stack = new StackPanel();
+		stack.Children.Add(new Border { Height = 60f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) });
+		stack.Children.Add(inner);
+		stack.Children.Add(new Border { Height = 600f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) });
+		var outer = new ScrollViewer { Content = stack, Width = 100f, Height = 100f };
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = outer;
+		host.Tick(0.016, 0f, Square);
+		return (outer, inner, host);
+	}
+
+	[Test]
+	public void A_wheel_gesture_goes_on_scrolling_what_it_began_on_as_another_viewer_slides_under_the_pointer()
+	{
+		var (outer, inner, host) = OverSideways();
+
+		// A trackpad's two fingers: the pointer holds still while the content slides up under it, past the sideways viewer.
+		for (var i = 0; i < 12; i++)
+			Wheel(host, new Vector2(40f, 30f), new Vector2(0f, -0.25f), Square);
+
+		outer.VerticalOffset.ShouldBeGreaterThan(100f);
+		inner.HorizontalOffset.ShouldBe(0f);
+	}
+
+	[Test]
+	public void Moving_the_pointer_ends_a_wheel_gesture()
+	{
+		var (outer, inner, host) = OverSideways();
+		Wheel(host, new Vector2(40f, 30f), new Vector2(0f, -0.25f), Square);
+		var scrolled = outer.VerticalOffset;
+		scrolled.ShouldBeGreaterThan(0f);
+
+		// Moved onto the sideways viewer, a new gesture scrolls it.
+		var over = new Vector2(40f, 80f - scrolled);
+		host.QueuePointer(PointerInput.Move(over));
+		host.Tick(0.016, 0f, Square);
+		Wheel(host, over, new Vector2(0f, -0.25f), Square);
+
+		inner.HorizontalOffset.ShouldBeGreaterThan(0f);
+		outer.VerticalOffset.ShouldBe(scrolled);
+	}
+
+	[Test]
 	public void Dragging_the_horizontal_thumb_scrolls_sideways()
 	{
 		var (viewer, host) = Sideways(400f, 50f);

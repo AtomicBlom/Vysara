@@ -28,6 +28,11 @@ public sealed class InputManager
 	// has yet to raise.
 	private readonly List<(UIElement Element, uint PointerId)> _lostCapture = [];
 	private readonly List<(UIElement Element, uint PointerId)> _exited = [];
+	// A wheel gesture's target, kept while the pointer stays where the gesture began: a trackpad's two fingers or a turned
+	// wheel go on scrolling what they started on as its content slides under the pointer, rather than passing to whatever
+	// element (an inner viewer, a slider) arrives there. Moving the pointer, or pressing, ends the gesture.
+	private (UIElement Target, uint PointerId, Vector2 Position)? _wheelLatch;
+	private const float WheelLatchSlop = 2f;
 
 	/// <summary>Invoked by <see cref="UIHost"/> on every pointer press so it can update keyboard focus.</summary>
 	internal Action<UIElement?>? OnPress { get; set; }
@@ -42,11 +47,15 @@ public sealed class InputManager
 		// element under the pointer and stop.
 		if (e.Wheel != Vector2.Zero)
 		{
-			var wheelTarget = GetCapture(e.PointerId) ?? hit;
+			var wheelTarget = GetCapture(e.PointerId) ?? LatchedWheelTarget(e) ?? hit;
 			if (wheelTarget is not null)
 				RaiseWheel(wheelTarget, e);
+			_wheelLatch = wheelTarget is null ? null : (wheelTarget, e.PointerId, e.Position);
 			return;
 		}
+		if (_wheelLatch is { } latch && (latch.PointerId != e.PointerId || e.Update != PointerUpdateKind.None
+			|| Vector2.DistanceSquared(latch.Position, e.Position) > WheelLatchSlop * WheelLatchSlop))
+			_wheelLatch = null;
 
 		UpdateOverChain(e, hit);
 
@@ -151,6 +160,9 @@ public sealed class InputManager
 	/// </summary>
 	internal void ReleaseWithin(UIElement subtree)
 	{
+		if (_wheelLatch is { } latch && latch.Target.IsWithin(subtree))
+			_wheelLatch = null;
+
 		_pointerIds.Clear();
 		foreach (var (pointerId, captee) in _explicitCapture)
 		{
@@ -270,6 +282,13 @@ public sealed class InputManager
 
 		target.RaiseEvent(evt, _args);
 	}
+
+	// The target of the wheel gesture this event continues: the same pointer, not moved past the slop since the last wheel.
+	private UIElement? LatchedWheelTarget(in PointerInput e) =>
+		_wheelLatch is { } latch && latch.PointerId == e.PointerId
+			&& Vector2.DistanceSquared(latch.Position, e.Position) <= WheelLatchSlop * WheelLatchSlop
+			? latch.Target
+			: null;
 
 	// Raise the wheel event (tunnel Preview then bubble), carrying the scroll delta.
 	private void RaiseWheel(UIElement target, in PointerInput e)
