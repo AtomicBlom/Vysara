@@ -46,6 +46,22 @@ public sealed class FocusTests
 	}
 
 	[Test]
+	public void A_control_takes_focus_through_its_roots_focus_manager_and_not_when_detached()
+	{
+		var host = MakeHost(out var view);
+		var box = new TextBox { Width = 100f, Height = 30f };
+		var got = 0;
+		box.GotFocus += (_, _) => got++;
+		(new TextBox()).Focus().ShouldBeFalse();   // attached to no root
+
+		view.Root.Content = box;
+		box.Focus().ShouldBeTrue();
+		host.Focus.FocusedElement.ShouldBe(box);
+		host.Focus.FocusState.ShouldBe(FocusState.Programmatic);
+		got.ShouldBe(1);
+	}
+
+	[Test]
 	public void GettingFocus_cancel_prevents_transfer()
 	{
 		var host = MakeHost(out var view);

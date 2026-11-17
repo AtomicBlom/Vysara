@@ -283,4 +283,12 @@ public abstract class Control : FrameworkElement
 			root.Arrange(new Rect(0f, 0f, finalSize.Width, finalSize.Height));
 		return finalSize;
 	}
+
+	/// <summary>
+	/// Gives the control keyboard focus, as WinUI's <c>Control.Focus</c>: through its root's focus manager, raising the
+	/// focus events as any move does. False when it isn't attached to a root with one, can't take focus, or a handler
+	/// cancelled the move.
+	/// </summary>
+	public bool Focus(FocusState state = FocusState.Programmatic) =>
+		AttachedRoot?.FocusManager is { } focus && focus.TrySetFocus(this, state);
 }
