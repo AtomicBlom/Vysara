@@ -77,6 +77,19 @@ public sealed class SliderTests
 	}
 
 	[Test]
+	public void Pressing_beside_the_rail_and_away_from_the_thumb_still_sets_the_value()
+	{
+		var (host, slider) = Laid();
+
+		// The rail is 4 tall across the middle of the 20 and the thumb sits at the left end: 3 down is on neither.
+		host.QueuePointer(PointerInput.Press(new Vector2(150f, 3f)));
+		host.Tick(0.016, 0f, Framebuffer);
+
+		slider.Value.ShouldBe(75d, 2d);
+		CommonStates(slider).CurrentState!.Name.ShouldBe("Pressed");
+	}
+
+	[Test]
 	public void Dragging_tracks_the_captured_pointer()
 	{
 		var (host, slider) = Laid();

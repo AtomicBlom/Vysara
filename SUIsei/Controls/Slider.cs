@@ -29,6 +29,7 @@ public sealed class Slider : Control
 	private static readonly SolidColorBrush ThumbPressed = Brush.Sealed(HdrColor.FromRgb(150, 195, 255));
 	private static readonly SolidColorBrush ThumbDisabled = Brush.Sealed(HdrColor.FromRgb(95, 98, 108));
 	private static readonly SolidColorBrush RailDisabled = Brush.Sealed(HdrColor.FromRgb(56, 58, 66));
+	private static readonly SolidColorBrush TrackBackground = Brush.Sealed(HdrColor.Transparent);
 
 	private SliderTrack? _track;
 	private bool _dragging;
@@ -245,18 +246,27 @@ public sealed class Slider : Control
 
 			var rail = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
 			var fill = new Border { CornerRadius = new CornerRadius(RailThickness / 2f) };
-			slider.RegisterTemplateBinding(BackgroundProperty, rail, Border.BackgroundProperty, static value => value ?? RailColor);
+			// As WinUI's, a page recolours the built-in look with SliderTrackFill, SliderTrackValueFill and the thumb's keys
+			// where its resources give them.
+			var railColor = slider.ThemeResource("SliderTrackFill", RailColor);
+			var thumbNormal = slider.ThemeResource("SliderThumbBackground", ThumbNormal);
+			var thumbOver = slider.ThemeResource("SliderThumbBackgroundPointerOver", ThumbOver);
+			var thumbPressed = slider.ThemeResource("SliderThumbBackgroundPressed", ThumbPressed);
+			TemplateStates.ThemedForeground(slider, "SliderTrackValueFill");
+			slider.RegisterTemplateBinding(BackgroundProperty, rail, Border.BackgroundProperty, value => value ?? railColor);
 			slider.RegisterTemplateBinding(ForegroundProperty, fill, Border.BackgroundProperty, static value => value ?? FillColor);
 			var thumb = new Border
 			{
-				Background = ThumbNormal,
+				Background = thumbNormal,
 				BorderBrush = ThumbBorder,
 				BorderThickness = new Thickness(1f),
 				CornerRadius = new CornerRadius(ThumbDiameter / 2f),
 				BackgroundTransition = TemplateStates.Fade(120),
 			};
 
-			var track = new SliderTrack(slider);
+			// A clear background makes the whole track take a press, as WinUI's slider container does, not just the rail and
+			// the thumb: a press beside the thumb or a little off the rail moves the value there.
+			var track = new SliderTrack(slider) { Background = TrackBackground };
 			track.Children.Add(rail);
 			track.Children.Add(fill);
 			track.Children.Add(thumb);
@@ -265,8 +275,8 @@ public sealed class Slider : Control
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
 			common.States.Add(new VisualState { Name = "Normal" });
-			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(thumb, ThumbOver) });
-			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(thumb, ThumbPressed) });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(thumb, thumbOver) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(thumb, thumbPressed) });
 			// Disabled mutes the rail and takes the accent out of the fill and the thumb.
 			common.States.Add(new VisualState
 			{

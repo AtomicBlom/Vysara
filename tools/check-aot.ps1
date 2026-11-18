@@ -62,7 +62,7 @@ foreach ($folder in Get-ChildItem $repo -Directory -Filter 'SUIsei*')
 {
     foreach ($kind in 'obj', 'bin')
     {
-        $stale = "$($folder.FullName)/$kind/$Configuration/net10.0/$Runtime"
+        $stale = "$($folder.FullName)/$kind/$Configuration/net11.0/$Runtime"
         if (Test-Path $stale) { Remove-Item $stale -Recurse -Force }
     }
 }

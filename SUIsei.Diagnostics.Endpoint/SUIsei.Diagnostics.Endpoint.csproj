@@ -9,7 +9,7 @@
        The RoseMCP tap contract (the external/RoseMcp.Tap submodule) is compiled in as source. Its types stay internal,
        so a tap that compiles its own copy of the protocol never clashes with this one. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>SUIsei</RootNamespace>

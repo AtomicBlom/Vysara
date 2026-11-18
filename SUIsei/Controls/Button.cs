@@ -18,10 +18,13 @@ public sealed class Button : ButtonBase
 	private static readonly SolidColorBrush NormalBackground = Brush.Sealed(HdrColor.FromRgb(60, 60, 70));
 	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(80, 80, 95));
 	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(40, 40, 55));
+	// The built-in look's padding, which Padding replaces where it is set.
+	internal static readonly Thickness BuiltInPadding = new(10f, 5f, 10f, 5f);
 
 	public Button()
 	{
 		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		SetBuiltInValue(PaddingProperty, BuiltInPadding);
 		InheritedText.GiveBuiltInLook(this);
 	}
 
@@ -36,12 +39,17 @@ public sealed class Button : ButtonBase
 			var border = new Border
 			{
 				CornerRadius = new CornerRadius(4f),
-				Padding = new Thickness(10f, 5f, 10f, 5f),
 				BackgroundTransition = TemplateStates.Fade(120),
 			};
+			host.RegisterTemplateBinding(PaddingProperty, border, Border.PaddingProperty);
 			var presenter = new ContentPresenter();
 			border.Child = presenter;
-			host.RegisterTemplateBinding(BackgroundProperty, border, Border.BackgroundProperty, static value => value ?? NormalBackground);
+			// As WinUI's, a page recolours the built-in look with ButtonBackground and the rest where its resources give them.
+			var background = host.ThemeResource("ButtonBackground", NormalBackground);
+			var over = host.ThemeResource("ButtonBackgroundPointerOver", OverBackground);
+			var pressed = host.ThemeResource("ButtonBackgroundPressed", PressedBackground);
+			TemplateStates.ThemedForeground(host, "ButtonForeground");
+			host.RegisterTemplateBinding(BackgroundProperty, border, Border.BackgroundProperty, value => value ?? background);
 			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty);
 			host.RegisterTemplateBinding(BorderThicknessProperty, border, Border.BorderThicknessProperty);
 			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
@@ -49,8 +57,8 @@ public sealed class Button : ButtonBase
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
 			common.States.Add(new VisualState { Name = "Normal" });
-			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
-			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, over) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, pressed) });
 			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Disabled(border, TemplateStates.DisabledBackground, presenter) });
 			VisualStateManager.SetVisualStateGroups(border, [common]);
 			return border;

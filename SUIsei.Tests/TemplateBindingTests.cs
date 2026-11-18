@@ -128,6 +128,62 @@ public sealed class TemplateBindingTests
 	}
 
 	[Test]
+	public void Padding_sets_a_button_s_and_a_toggle_s_space_around_their_content()
+	{
+		var button = new Button { Content = "Go" };
+		var toggle = new ToggleButton { Content = "On" };
+		var stack = new StackPanel();
+		stack.Children.Add(button);
+		stack.Children.Add(toggle);
+		var host = Hosted(stack);
+		var chrome = (Border)button.GetTemplateRoot()!;
+		var presenter = (ContentPresenter)((Panel)toggle.GetTemplateRoot()!).Children[2];
+
+		button.Padding.ShouldBe(new Thickness(10f, 5f, 10f, 5f)); // the built-in look's
+		chrome.Padding.ShouldBe(button.Padding);
+		presenter.Margin.ShouldBe(toggle.Padding);
+
+		button.Padding = new Thickness(4f, 1f, 4f, 1f);
+		toggle.Padding = new Thickness(2f);
+		host.Tick(0, 0f, new Vector2(300f, 200f));
+		chrome.Padding.ShouldBe(new Thickness(4f, 1f, 4f, 1f));
+		presenter.Margin.ShouldBe(new Thickness(2f));
+	}
+
+	[Test]
+	public void A_page_s_theme_resources_recolour_the_built_in_controls_under_it()
+	{
+		var amber = new SolidColorBrush(HdrColor.FromRgb(255, 196, 64));
+		var ink = new SolidColorBrush(HdrColor.FromRgb(26, 20, 5));
+		var raised = new SolidColorBrush(HdrColor.FromRgb(37, 41, 54));
+		var resources = new ResourceDictionary();
+		resources.Add("ToggleButtonBackgroundChecked", amber);
+		resources.Add("ToggleButtonForegroundChecked", ink);
+		resources.Add("ButtonBackground", raised);
+		resources.Add("SliderThumbBackground", amber);
+
+		// The toggle is checked, so its template is realized before it joins the page: it is built again there.
+		var toggle = new ToggleButton { Content = "On", IsChecked = true };
+		toggle.GetTemplateRoot();
+		var button = new Button { Content = "Go" };
+		var slider = new Slider { Width = 100f };
+		var stack = new StackPanel { Resources = resources };
+		stack.Children.Add(toggle);
+		stack.Children.Add(button);
+		stack.Children.Add(slider);
+		Hosted(stack);
+
+		var toggleParts = ((Panel)toggle.GetTemplateRoot()!).Children;
+		((Border)toggleParts[1]).Background.ShouldBeSameAs(amber);
+		((ContentPresenter)toggleParts[2]).Foreground.ShouldBeSameAs(ink);
+		((Border)button.GetTemplateRoot()!).Background.ShouldBeSameAs(raised);
+		((Border)((Panel)slider.GetTemplateRoot()!).Children[2]).Background.ShouldBeSameAs(amber);
+
+		toggle.IsChecked = false;
+		((ContentPresenter)toggleParts[2]).Foreground.ShouldBeSameAs(toggle.Foreground);
+	}
+
+	[Test]
 	public void A_visual_state_shows_the_template_s_brush_and_hands_the_control_s_back_without_changing_it()
 	{
 		var own = new SolidColorBrush(HdrColor.FromRgb(200, 30, 30));

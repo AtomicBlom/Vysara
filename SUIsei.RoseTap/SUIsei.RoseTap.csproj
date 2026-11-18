@@ -9,7 +9,7 @@
        the drop-in folder would never be used. The tap compiles its own internal copy of the contract's protocol, which
        never clashes with the copy compiled into the endpoint. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

@@ -62,6 +62,23 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	public bool IsHitTestVisible { get => GetValue(IsHitTestVisibleProperty); set => SetValue(IsHitTestVisibleProperty, value); }
 
 	public bool IsTabStop { get => GetValue(IsTabStopProperty); set => SetValue(IsTabStopProperty, value); }
+
+	/// <summary>
+	/// Attempts to give the element keyboard focus, as WinUI's <c>UIElement.Focus</c>: through its root's focus manager, raising
+	/// the focus events as any move does. False when it isn't attached to a root, can't take focus (not a tab stop, not
+	/// visible, or in a disabled control), or a handler cancelled the move.
+	/// </summary>
+	/// <param name="value">How it takes focus: <see cref="FocusState.Programmatic"/> from code, or as a keyboard or a pointer
+	/// would give it.</param>
+	/// <exception cref="ArgumentException"><paramref name="value"/> is <see cref="FocusState.Unfocused"/>, which is no way to
+	/// take focus.</exception>
+	public bool Focus(FocusState value)
+	{
+		if (value == FocusState.Unfocused)
+			throw new ArgumentException("An element can't take focus as Unfocused.", nameof(value));
+		return AttachedRoot?.FocusManager is { } focus && focus.TrySetFocus(this, value);
+	}
+
 	public int TabIndex { get => GetValue(TabIndexProperty); set => SetValue(TabIndexProperty, value); }
 
 	/// <summary>Where focus goes from here on a d-pad's up, as WinUI's <c>XYFocusUp</c>: overrides the nearest tab stop
@@ -691,6 +708,11 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		slot.HandledToo?.Invoke(this, args);
 	}
 
+	/// <summary>Whether the element is hit anywhere in its bounds, not only where its content draws: an element that takes
+	/// input over the space between its children, as a scroll viewer takes a wheel or a finger over the gaps between its
+	/// items.</summary>
+	private protected virtual bool HitsWholeBounds => false;
+
 	/// <summary>
 	/// Return the top-most element of this subtree drawn at <paramref name="surfacePoint"/> (surface pixels). The walk
 	/// follows the composition exactly as the compositor draws it: each visual's <see cref="SUIsei.Composition.Visual.Transform"/>
@@ -721,10 +743,12 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 				return hit;
 		}
 
-		return Visual.Content is { } content && Matrix3x2.Invert(world, out var toLocal)
-			&& ContentContains(content, Vector2.Transform(surfacePoint, toLocal), LayoutRect, world)
-			? this
-			: null;
+		if (!Matrix3x2.Invert(world, out var toLocal))
+			return null;
+		var local = Vector2.Transform(surfacePoint, toLocal);
+		if (Visual.Content is { } content && ContentContains(content, local, LayoutRect, world))
+			return this;
+		return HitsWholeBounds && new Rect(0f, 0f, LayoutRect.Width, LayoutRect.Height).Contains(local) ? this : null;
 	}
 
 	/// <summary>

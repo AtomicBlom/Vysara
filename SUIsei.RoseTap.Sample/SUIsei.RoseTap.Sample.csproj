@@ -7,7 +7,7 @@
        view on a headless UIHost, ticks it until killed, and opts into SUIsei.Diagnostics, so the diagnostics endpoint
        comes up on suisei-diag-{pid} for a host to attach to and load the tap through. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

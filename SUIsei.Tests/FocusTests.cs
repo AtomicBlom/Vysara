@@ -46,6 +46,45 @@ public sealed class FocusTests
 	}
 
 	[Test]
+	public void An_element_takes_focus_through_its_roots_focus_manager_and_not_when_detached()
+	{
+		var host = MakeHost(out var view);
+		var box = new TextBox { Width = 100f, Height = 30f };
+		var got = 0;
+		box.GotFocus += (_, _) => got++;
+		new TextBox().Focus(FocusState.Programmatic).ShouldBeFalse(); // attached to no root
+
+		view.Root.Content = box;
+		box.Focus(FocusState.Programmatic).ShouldBeTrue();
+		host.Focus.FocusedElement.ShouldBe(box);
+		host.Focus.FocusState.ShouldBe(FocusState.Programmatic);
+		got.ShouldBe(1);
+	}
+
+	[Test]
+	public void Any_element_that_is_a_tab_stop_takes_focus_from_code_as_it_is_told()
+	{
+		var host = MakeHost(out var view);
+		var border = new Border { Width = 50f, Height = 30f, IsTabStop = true };
+		view.Root.Content = border;
+
+		border.Focus(FocusState.Keyboard).ShouldBeTrue();
+		host.Focus.FocusedElement.ShouldBe(border);
+		host.Focus.FocusState.ShouldBe(FocusState.Keyboard);
+	}
+
+	[Test]
+	public void Focus_refuses_Unfocused_as_a_way_to_take_focus()
+	{
+		var host = MakeHost(out var view);
+		var box = new TextBox { Width = 100f, Height = 30f };
+		view.Root.Content = box;
+
+		Should.Throw<ArgumentException>(() => box.Focus(FocusState.Unfocused));
+		host.Focus.FocusedElement.ShouldBeNull();
+	}
+
+	[Test]
 	public void GettingFocus_cancel_prevents_transfer()
 	{
 		var host = MakeHost(out var view);

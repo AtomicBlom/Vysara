@@ -6,8 +6,8 @@ namespace SUIsei.Tests;
 
 /// <summary>
 /// A Grid measures a child in a Star track against that track's share of the extent it is offered, as WinUI does, so
-/// what fits itself to a width (wrapped text) fits the grid's; an Auto track in the same dimension leaves Star tracks
-/// unconstrained, as before.
+/// what fits itself to a width (wrapped text) fits the grid's; beside an Auto track, a Star track's share is what the
+/// Auto tracks leave, measured once they are sized, as WinUI measures star cells after auto ones.
 /// </summary>
 public sealed class GridStarMeasureTests
 {
@@ -55,15 +55,18 @@ public sealed class GridStarMeasureTests
 	}
 
 	[Test]
-	public void An_auto_column_leaves_star_columns_unconstrained()
+	public void A_star_column_beside_an_auto_column_measures_at_what_the_auto_column_leaves()
 	{
 		var text = Wrapped();
+		var label = new Border { Width = 50, Height = 10 };
 		var grid = new Grid { Width = 200 };
 		grid.ColumnDefinitions.Add(GridLength.Auto);
 		grid.ColumnDefinitions.Add(new GridLength(1, GridUnitType.Star));
 		Grid.SetColumn(text, 1);
+		grid.Children.Add(label);
 		grid.Children.Add(text);
 		Lay(grid, 1280);
-		text.DesiredSize.Height.ShouldBeLessThan(FontAtlas.Default.LineHeight * FontSize * 1.5f);
+		text.DesiredSize.Width.ShouldBeLessThanOrEqualTo(150f + 0.01f); // the 200 less the Auto column's 50
+		text.DesiredSize.Height.ShouldBeGreaterThan(FontAtlas.Default.LineHeight * FontSize * 1.5f);
 	}
 }
