@@ -37,17 +37,26 @@ public sealed class InputManager
 	/// <summary>Invoked by <see cref="UIHost"/> on every pointer press so it can update keyboard focus.</summary>
 	internal Action<UIElement?>? OnPress { get; set; }
 
+	/// <summary>Invoked by <see cref="UIHost"/> on every wheel turn, which hides a tooltip.</summary>
+	internal Action? OnWheel { get; set; }
+
+	// The mouse or pen that moved last, whose leaf a tooltip follows; a touch never hovers.
+	private uint? _hoverPointer;
+
 	/// <summary>Route one pointer event over <paramref name="views"/> (called by <see cref="UIHost.Tick"/>).</summary>
 	internal void Process(in PointerInput e, IReadOnlyList<UIView> views)
 	{
 		var hit = HitTest(e.Position, views);
 		_lastInput[e.PointerId] = e;
+		if (e.Device != PointerDeviceType.Touch)
+			_hoverPointer = e.PointerId;
 
 		// A wheel event is its own routed event (no over-chain / move semantics): route it to the captee or the
 		// element under the pointer and stop.
 		if (e.Wheel != Vector2.Zero)
 		{
 			var wheelTarget = GetCapture(e.PointerId) ?? LatchedWheelTarget(e) ?? hit;
+			OnWheel?.Invoke();
 			if (wheelTarget is not null)
 				RaiseWheel(wheelTarget, e);
 			_wheelLatch = wheelTarget is null ? null : (wheelTarget, e.PointerId, e.Position);
@@ -86,6 +95,22 @@ public sealed class InputManager
 			if (target is not null)
 				Raise(UIElement.PointerMovedEvent, target, e);
 		}
+	}
+
+	/// <summary>
+	/// The innermost element the mouse or pen that moved last is over, and where it is (surface pixels); null when it is
+	/// over nothing, held down on something (a press is not a rest), or there has been no such pointer.
+	/// </summary>
+	internal UIElement? HoverLeaf(out Vector2 position)
+	{
+		position = default;
+		if (_hoverPointer is not { } id || !_overChains.TryGetValue(id, out var chain) || chain.Count == 0)
+			return null;
+		var last = _lastInput.GetValueOrDefault(id);
+		if (last.Buttons != PointerButtons.None)
+			return null;
+		position = last.Position;
+		return chain[0];
 	}
 
 	/// <summary>The element currently captured for <paramref name="pointerId"/> — explicit if set, else implicit

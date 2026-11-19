@@ -103,11 +103,14 @@ partial class XamlSourceGenerator
 	{
 		foreach (var attr in el.Attributes())
 		{
-			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X || attr.Name.Namespace != XNamespace.None || attr.Name.LocalName.Contains('.'))
+			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X)
+				continue;
+			// An {x:Bind} on any property, an attached one included, is pushed into the element later, through a field
+			if (IsMarkup(attr.Value, out var inner) && inner.TrimStart().StartsWith("x:Bind"))
+				return true;
+			if (attr.Name.Namespace != XNamespace.None || attr.Name.LocalName.Contains('.'))
 				continue;
 			if (FindEvent(type, attr.Name.LocalName) is not null)
-				return true;
-			if (IsMarkup(attr.Value, out var inner) && inner.TrimStart().StartsWith("x:Bind"))
 				return true;
 		}
 		return false;
@@ -619,6 +622,16 @@ partial class XamlSourceGenerator
 		}
 
 		var valueType = setter.Parameters[1].Type;
+		if (IsMarkup(attr.Value, out var bound) && ParseXBind(bound) is { } spec)
+		{
+			if (spec.OutsideSubset)
+				gen.Report(UnsupportedMarkup, attr, attr.Value.Trim());
+			else if (spec.Error is { } why)
+				gen.Report(BadXBind, attr, attr.Value.Trim(), why);
+			else
+				EmitXBind(gen, scope, attr, targetVar, targetType, new BindTarget(local, valueType, setter, $"{Fq(owner!)}.{setter.Name}"), spec);
+			return;
+		}
 		string? code;
 		if (!IsMarkup(attr.Value, out var inner))
 			code = ConvertOrReport(gen, attr, valueType, attr.Value, local);

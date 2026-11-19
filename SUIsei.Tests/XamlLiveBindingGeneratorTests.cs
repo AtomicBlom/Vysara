@@ -71,6 +71,35 @@ public sealed class XamlLiveBindingGeneratorTests
 	}
 
 	[Test]
+	[Arguments("""<Button ToolTipService.ToolTip="{x:Bind ViewModel.Caption, Mode=OneWay}" />""", "global::SUIsei.Controls.ToolTipService.SetToolTip(_root.")]
+	[Arguments("""<Button ToolTipService.ToolTip="{x:Bind local:Fmt.Percent(Volume)}" />""", "global::SUIsei.Controls.ToolTipService.SetToolTip(")]
+	public void An_attached_property_binds_through_its_owners_setter(string body, string set)
+	{
+		var xaml = View(body);
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain(set);
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_attached_property_binds_in_a_DataTemplate()
+	{
+		var xaml = Row("""<Border ToolTipService.ToolTip="{x:Bind Level, Mode=OneWay}" />""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain("global::SUIsei.Controls.ToolTipService.SetToolTip(_e_");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void TwoWay_on_an_attached_property_is_outside_the_subset() =>
+		XamlGeneratorHarness.Run(View("""<Button ToolTipService.ToolTip="{x:Bind ViewModel.Caption, Mode=TwoWay}" />"""), CodeBehind)
+			.DiagnosticIds().ShouldNotBeEmpty();
+
+	[Test]
 	public void TwoWay_reads_the_source_again_after_writing_it()
 	{
 		var text = XamlGeneratorHarness.Run(View("""<ToggleButton IsChecked="{x:Bind Busy, Mode=TwoWay}" />"""), CodeBehind).AllGeneratedText();
