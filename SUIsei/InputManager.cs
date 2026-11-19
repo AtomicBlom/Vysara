@@ -103,16 +103,17 @@ public sealed class InputManager
 
 	/// <summary>
 	/// The innermost element the mouse or pen that moved last is over, and where it is (surface pixels); null when it is
-	/// over nothing, held down on something (a press is not a rest), or there has been no such pointer.
+	/// over nothing or there has been no such pointer. <paramref name="held"/> says a button is down on it (a press is not
+	/// a rest).
 	/// </summary>
-	internal UIElement? HoverLeaf(out Vector2 position)
+	internal UIElement? HoverLeaf(out Vector2 position, out bool held)
 	{
 		position = default;
+		held = false;
 		if (_hoverPointer is not { } id || !_overChains.TryGetValue(id, out var chain) || chain.Count == 0)
 			return null;
 		var last = _lastInput.GetValueOrDefault(id);
-		if (last.Buttons != PointerButtons.None)
-			return null;
+		held = last.Buttons != PointerButtons.None;
 		position = last.Position;
 		return chain[0];
 	}

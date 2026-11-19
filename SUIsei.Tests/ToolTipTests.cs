@@ -88,6 +88,20 @@ public sealed class ToolTipTests
 	}
 
 	[Test]
+	public void A_press_held_and_let_go_on_the_same_element_doesnt_bring_it_back()
+	{
+		var (host, _, _) = Page();
+		host.QueuePointer(PointerInput.Move(new Vector2(80f, 30f)));
+		host.Tick(0.016, 0f, Surface);
+		host.QueuePointer(PointerInput.Press(new Vector2(80f, 30f)));
+		Rest(host, 0.3);
+		host.QueuePointer(PointerInput.Release(new Vector2(80f, 30f)));
+		Rest(host, 1.0);
+
+		host.ToolTips.Showing.ShouldBeNull();
+	}
+
+	[Test]
 	public void Leaving_or_a_key_hides_it()
 	{
 		var (host, _, root) = Page();

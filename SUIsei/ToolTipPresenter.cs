@@ -35,7 +35,14 @@ internal sealed class ToolTipPresenter(InputManager input)
 	/// <summary>Once a frame, after input: follows the pointer and shows, places or hides the tooltip.</summary>
 	internal void Update(double deltaSeconds)
 	{
-		var owner = Owner(input.HoverLeaf(out var pointer));
+		var leaf = input.HoverLeaf(out var pointer, out var held);
+		// A button held down is no rest: the tooltip goes, and stays gone until the pointer moves to another element
+		if (held)
+		{
+			Dismiss();
+			return;
+		}
+		var owner = Owner(leaf);
 		if (!ReferenceEquals(owner, _owner))
 		{
 			Hide();
