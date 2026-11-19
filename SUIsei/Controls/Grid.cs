@@ -46,6 +46,13 @@ public sealed class Grid : Panel
 	/// <summary>Row track lengths (empty ⇒ a single Star row).</summary>
 	public IList<GridLength> RowDefinitions => _rowDefinitions;
 
+	/// <summary>The size a row (or column) was given at the last arrange, in DIPs; 0 for one that doesn't exist.</summary>
+	internal float TrackSize(bool rows, int index)
+	{
+		var sizes = rows ? _rowSizes : _colSizes;
+		return index >= 0 && index < sizes.Length ? sizes[index] : 0f;
+	}
+
 	// What an empty definition list lays out as.
 	private static readonly GridLength[] OneStar = [GridLength.Star];
 
