@@ -201,6 +201,23 @@ public sealed class ChoiceControlTests
 		grid.RowDefinitions[2].Value.ShouldBe(150f, 0.5f);
 	}
 
+	[Test]
+	public void A_scroll_viewer_tells_of_its_view_moving_by_the_wheel_or_from_code()
+	{
+		var viewer = new ScrollViewer { Height = 100f, Content = new Border { Height = 400f, Background = new Media.SolidColorBrush(HdrColor.FromRgb(1, 1, 1)) } };
+		var host = Hosted(viewer);
+		var moves = 0;
+		viewer.ViewChanged += (_, e) => moves += e.IsIntermediate ? 0 : 1;
+
+		host.QueuePointer(PointerInput.Scroll(new Vector2(50f, 50f), new Vector2(0f, -1f)));
+		host.Tick(0.016, 0f, Surface);
+		viewer.ScrollToVerticalOffset(200f);
+		viewer.ScrollToVerticalOffset(200f);   // already there: no change, no event
+
+		moves.ShouldBe(2);
+		viewer.VerticalOffset.ShouldBe(200f);
+	}
+
 	private static List<T> Children<T>(UIElement element) where T : UIElement
 	{
 		var found = new List<T>();

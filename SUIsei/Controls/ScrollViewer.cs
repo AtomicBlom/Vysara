@@ -204,6 +204,13 @@ public sealed class ScrollViewer : FrameworkElement
 
 	public void ScrollToVerticalOffset(float offset) => SetVerticalOffset(offset);
 
+	/// <summary>
+	/// Raised as the offsets move by input (the wheel, a thumb dragged, a key, a pan) or by <see cref="ScrollToVerticalOffset"/>
+	/// and <see cref="ScrollToHorizontalOffset"/>, as WinUI's. Not raised for what layout does to them (held inside a shrunk
+	/// extent, a focused element brought into view), which runs no app code; read the offsets for those.
+	/// </summary>
+	public event EventHandler<ScrollViewerViewChangedEventArgs>? ViewChanged;
+
 	public void ScrollToHorizontalOffset(float offset) => SetHorizontalOffset(offset);
 
 	// A wheel or a finger over a gap between the items still scrolls them: the viewer is hit across its viewport, not only
@@ -223,6 +230,7 @@ public sealed class ScrollViewer : FrameworkElement
 			return;
 		VerticalOffset = clamped;
 		InvalidateArrange();
+		ViewChanged?.Invoke(this, ScrollViewerViewChangedEventArgs.Final);
 	}
 
 	private void SetHorizontalOffset(float offset)
@@ -232,6 +240,7 @@ public sealed class ScrollViewer : FrameworkElement
 			return;
 		HorizontalOffset = clamped;
 		InvalidateArrange();
+		ViewChanged?.Invoke(this, ScrollViewerViewChangedEventArgs.Final);
 	}
 
 	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
