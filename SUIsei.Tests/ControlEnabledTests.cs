@@ -402,7 +402,7 @@ public sealed class ControlEnabledTests
 		item.SetSelected(false);
 		item.IsEnabled = false;
 		host.Tick(0.016, 0f, Viewport);
-		item.Background.ShouldBeNull(); // unselected, a disabled item paints its own background
+		item.Background.ShouldBeOfType<SolidColorBrush>().Color.A.ShouldBe(0f); // unselected, a disabled item paints its own clear background
 	}
 
 	/// <summary>A disabled text box draws the disabled fill and border over its own, and its text in the disabled brush;

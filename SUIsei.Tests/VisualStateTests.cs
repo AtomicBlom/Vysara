@@ -372,7 +372,7 @@ public sealed class VisualStateTests
 		item.Template = HoldingTemplate(out _);
 		host.Tick(0.016, 0.5f, Surface);
 
-		item.Background.ShouldBeNull();
+		item.Background.ShouldBeOfType<SolidColorBrush>().Color.A.ShouldBe(0f); // its own clear background, the selection let go
 	}
 
 	/// <summary>

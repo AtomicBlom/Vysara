@@ -191,7 +191,7 @@ public sealed class XamlSubsetContractTests
 		("a child its parent's content can't take", """<StackPanel><SolidColorBrush Color="Red" /></StackPanel>""", "SUISEI026"),
 		("an element of an abstract type", """<Border><Border.Background><Brush /></Border.Background></Border>""", "SUISEI025"),
 		("an element with no parameterless constructor the generated class reaches", """<Image><Image.Source><suisei:HostImageSource /></Image.Source></Image>""", "SUISEI025"),
-		("a property with no public setter", """<ListView SelectedIndex="2" />""", "SUISEI004"),
+		("a property with no public setter", """<ListViewItem IsSelected="True" />""", "SUISEI004"),
 		("a property whose setter the generated class can't reach", """<local:Plate Locked="1" />""", "SUISEI025"),
 		("a property with an init-only setter", """<local:Plate><local:Plate.Depth>1</local:Plate.Depth></local:Plate>""", "SUISEI025"),
 		("a composition type, which the default namespace does not map", """<StackPanel><CompositionColorBrush /></StackPanel>""", "SUISEI003"),
