@@ -204,8 +204,8 @@ public sealed class ChoiceControlTests
 	[Test]
 	public void A_scroll_viewer_tells_of_its_view_moving_by_the_wheel_or_from_code()
 	{
-		var viewer = new ScrollViewer { Height = 100f, Content = new Border { Height = 400f, Background = new Media.SolidColorBrush(HdrColor.FromRgb(1, 1, 1)) } };
-		var host = Hosted(viewer);
+		var viewer = new ScrollViewer { Height = 100f, Width = 200f, Content = new Border { Height = 400f, Background = new Media.SolidColorBrush(HdrColor.FromRgb(1, 1, 1)) } };
+		var host = Hosted(Top(viewer));
 		var moves = 0;
 		viewer.ViewChanged += (_, e) => moves += e.IsIntermediate ? 0 : 1;
 
