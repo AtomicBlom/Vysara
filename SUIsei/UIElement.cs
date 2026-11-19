@@ -64,6 +64,12 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 	public bool IsTabStop { get => GetValue(IsTabStopProperty); set => SetValue(IsTabStopProperty, value); }
 
 	/// <summary>
+	/// A flyout opened at the pointer when the element (or anything inside it without one of its own) is right-clicked, or
+	/// against the element when it has focus and Shift+F10 is pressed, as WinUI's <c>ContextFlyout</c>.
+	/// </summary>
+	public Controls.Primitives.FlyoutBase? ContextFlyout { get; set; }
+
+	/// <summary>
 	/// Attempts to give the element keyboard focus, as WinUI's <c>UIElement.Focus</c>: through its root's focus manager, raising
 	/// the focus events as any move does. False when it isn't attached to a root, can't take focus (not a tab stop, not
 	/// visible, or in a disabled control), or a handler cancelled the move.

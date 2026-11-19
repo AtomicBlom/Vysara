@@ -21,6 +21,15 @@ public sealed class Button : ButtonBase
 	// The built-in look's padding, which Padding replaces where it is set.
 	internal static readonly Thickness BuiltInPadding = new(10f, 5f, 10f, 5f);
 
+	/// <summary>A flyout the button opens against itself when clicked, as WinUI's <c>Button.Flyout</c>.</summary>
+	public Primitives.FlyoutBase? Flyout { get; set; }
+
+	protected override void OnClick()
+	{
+		base.OnClick();
+		Flyout?.ShowAt(this);
+	}
+
 	public Button()
 	{
 		SetBuiltInValue(TemplateProperty, DefaultTemplate);

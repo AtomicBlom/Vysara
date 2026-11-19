@@ -38,7 +38,7 @@ public sealed class FocusManager
 
 	// A tab stop that is visible and not in a disabled control (a disabled control, and the parts of its template, take
 	// no focus).
-	private static bool IsFocusable(UIElement el) =>
+	internal static bool IsFocusable(UIElement el) =>
 		el.IsTabStop && el.Visibility == Visibility.Visible && !el.InDisabledControl;
 
 	/// <summary>Clear focus when the focused element has since been disabled (it, or the control it is part of), since a

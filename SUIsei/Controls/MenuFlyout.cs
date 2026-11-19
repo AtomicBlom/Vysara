@@ -1,108 +1,55 @@
-using System.Numerics;
+using SUIsei.Controls.Primitives;
 using SUIsei.Media;
 using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
 
 /// <summary>
-/// A context menu: <see cref="ShowAt"/> opens a list of <see cref="Items"/> in the root's
-/// overlay layer just below the target, with a full-surface light-dismiss layer behind it. Invoking an item (which
-/// fires its <see cref="ButtonBase.Click"/> / <see cref="ButtonBase.Command"/>) or pressing outside closes it.
+/// A menu, as WinUI's <c>MenuFlyout</c>: its <see cref="Items"/> in a list that scrolls where it doesn't fit, opened below
+/// its target with their left edges lined up by default (<see cref="FlyoutBase"/>), or at the pointer as an element's
+/// <see cref="UIElement.ContextFlyout"/>. Invoking an item (which fires its <see cref="ButtonBase.Click"/> /
+/// <see cref="ButtonBase.Command"/>) or pressing outside closes it.
 /// </summary>
-public sealed class MenuFlyout
+public sealed class MenuFlyout : FlyoutBase
 {
-	// Leaves this much room off the bottom edge so a full-height flyout doesn't touch the surface boundary, and
-	// never shrinks a flyout below this even when the anchor sits close to the bottom — a sliver-height scroll
-	// area is unusable, so it's better to let a few items peek past the edge than collapse to nothing.
-	private const float BottomMargin = 8f;
-	private const float MinMenuHeight = 48f;
-
-	// The menu's look, and the light-dismiss layer's transparent (but hit) background. Shared and never changed.
+	// The menu's look. Shared and never changed.
 	private static readonly SolidColorBrush MenuBackground = Brush.Sealed(HdrColor.FromRgb(45, 45, 55));
 	private static readonly SolidColorBrush MenuBorder = Brush.Sealed(HdrColor.FromRgb(80, 80, 95));
-	private static readonly SolidColorBrush DismissBackground = Brush.Sealed(HdrColor.Transparent);
 
-	private UIRoot? _root;
-	private Border? _menu;
-	private Border? _dismissLayer;
+	public MenuFlyout() => Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft;
 
 	public List<MenuFlyoutItem> Items { get; } = [];
 
-	public bool IsOpen => _root is not null;
-
-	/// <summary>Raised when the menu closes (item invoke, light dismiss, or an explicit <see cref="Hide"/>) — lets an
-	/// owner such as <see cref="MenuBar"/> drop its open-item bookkeeping.</summary>
-	public event Action? Closed;
+	// A menu sits against its target, as a menu bar's drops from the bar
+	protected override float Gap => 0f;
 
 	/// <summary>Open the menu anchored under <paramref name="target"/> (which must be attached to a live root).</summary>
-	public void ShowAt(UIElement target)
-	{
-		if (target.AttachedRoot is not { } root)
-			return;
-		Hide();
+	public void ShowAt(UIElement target) => ShowAt(target, null);
 
-		// Under the target as drawn: its bounds in root DIPs, through its composed transforms.
-		var anchor = target.TransformToVisual(null).TransformBounds(new Rect(0f, 0f, target.LayoutRect.Width, target.LayoutRect.Height));
-		var position = new Vector2(anchor.X, anchor.Y);
-		var menuTop = anchor.Bottom;
+	protected override FrameworkElement CreatePresenter()
+	{
 		var panel = new StackPanel { Orientation = Orientation.Vertical };
 		foreach (var item in Items)
 		{
 			item.Click += OnItemClick;
 			panel.Children.Add(item);
 		}
-		var scroll = new ScrollViewer { Content = panel, MaxHeight = MaxMenuHeight(root, menuTop) };
-		_menu = new Border
+		return new Border
 		{
-			Background = MenuBackground,
-			BorderBrush = MenuBorder,
+			Background = Resource(Target!, "MenuFlyoutPresenterBackground", MenuBackground),
+			BorderBrush = Resource(Target!, "MenuFlyoutPresenterBorderBrush", MenuBorder),
 			BorderThickness = new Thickness(1f),
 			CornerRadius = new CornerRadius(4f),
 			Padding = new Thickness(4f),
-			Child = scroll,
+			Child = new ScrollViewer { Content = panel },
 		};
-
-		_dismissLayer = new Border { Background = DismissBackground };
-		_dismissLayer.AddHandler(UIElement.PointerPressedEvent, OnDismissPressed);
-
-		root.AddOverlay(_dismissLayer, Vector2.Zero, fullSurface: true);
-		root.AddOverlay(_menu, new Vector2(position.X, menuTop));
-		_root = root;
 	}
 
-	// The vertical room below the anchor, in DIPs — a menu taller than this scrolls (via the ScrollViewer wrapping
-	// its items) rather than spilling past the surface edge. Unbounded until the first layout pass has run (no
-	// known surface size yet), matching the previous unclamped behaviour for that brief window.
-	private static float MaxMenuHeight(UIRoot root, float menuTop)
+	protected override void OnClosed()
 	{
-		var surfaceHeight = root.Visual.SurfaceSize.Y;
-		if (surfaceHeight <= 0f)
-			return float.PositiveInfinity;
-		var scale = root.LayoutScale > 0f ? root.LayoutScale : 1f;
-		return MathF.Max(surfaceHeight / scale - menuTop - BottomMargin, MinMenuHeight);
-	}
-
-	public void Hide()
-	{
-		if (_root is null)
-			return;
 		foreach (var item in Items)
 			item.Click -= OnItemClick;
-		if (_menu is not null)
-			_root.RemoveOverlay(_menu);
-		if (_dismissLayer is not null)
-			_root.RemoveOverlay(_dismissLayer);
-		_root = null;
-		_menu = null;
-		_dismissLayer = null;
-		Closed?.Invoke();
 	}
 
 	private void OnItemClick(object sender, RoutedEventArgs e) => Hide();
-
-	private void OnDismissPressed(object sender, RoutedEventArgs e)
-	{
-		Hide();
-		e.Handled = true;
-	}
 }

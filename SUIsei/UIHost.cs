@@ -305,6 +305,14 @@ public sealed class UIHost
 			if (e.Down)
 				ToolTips.Dismiss();
 
+			// Shift+F10: the focused element's context flyout, against it, before it sees the key
+			if (e is { Down: true, Key: VirtualKey.F10 } && (e.Modifiers & ModifierKeys.Shift) != 0
+				&& InputManager.ContextOwner(Focus.FocusedElement) is { } owner)
+			{
+				owner.ContextFlyout!.ShowAt(owner, null);
+				continue;
+			}
+
 			// Tab / Shift-Tab: intercept before the focused element sees the key.
 			if (e is { Down: true, Key: VirtualKey.Tab })
 			{

@@ -84,6 +84,10 @@ public sealed class InputManager
 			if (target is not null)
 				Raise(UIElement.PointerReleasedEvent, target, e);
 			_implicitCapture.Remove(e.PointerId);
+			// A right-click released where it was pressed opens the nearest context flyout there
+			if (e.Update == PointerUpdateKind.RightButtonReleased && !_args.Handled && hit is not null && ReferenceEquals(hit, target)
+				&& ContextOwner(hit) is { } owner)
+				OpenContext(owner, e.Position);
 			// A touch or pen lifted is gone, not hovering: it leaves whatever it was over (as WinUI's do), so nothing stays
 			// lit by it and WantsPointer doesn't hold for a contact that will never move again
 			if (e.Device != PointerDeviceType.Mouse)
@@ -111,6 +115,29 @@ public sealed class InputManager
 			return null;
 		position = last.Position;
 		return chain[0];
+	}
+
+	// The element a context flyout opens for: the nearest at or above `hit` with one
+	internal static UIElement? ContextOwner(UIElement? hit)
+	{
+		for (var element = hit; element is not null; element = element.Parent)
+		{
+			if (element.ContextFlyout is not null)
+				return element;
+		}
+		return null;
+	}
+
+	// Opens `owner`'s context flyout at a point on the surface (pixels), given in the owner's own coordinates
+	private static void OpenContext(UIElement owner, Vector2 surfacePoint)
+	{
+		if (owner.AttachedRoot is not { } root)
+			return;
+		var scale = root.LayoutScale > 0f ? root.LayoutScale : 1f;
+		var fromRoot = owner.TransformToVisual(null).Inverse;
+		var rootPoint = new Point(surfacePoint.X / scale, surfacePoint.Y / scale);
+		var local = fromRoot is not null ? fromRoot.TransformPoint(rootPoint) : rootPoint;
+		owner.ContextFlyout!.ShowAt(owner, new Controls.Primitives.FlyoutShowOptions { Position = local });
 	}
 
 	/// <summary>The element currently captured for <paramref name="pointerId"/> — explicit if set, else implicit
