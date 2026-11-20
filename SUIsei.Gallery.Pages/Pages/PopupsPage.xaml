@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-	Lists & popups: a ListView with its selection bound TwoWay and ItemClick counted, in a ScrollViewer whose ViewChanged
-	reports its offset; tooltips on each side of their buttons, one an element, and a ToolTip as it looks; a Button.Flyout
-	holding controls; and a ContextFlyout menu on a card, written as XAML items.
+	Lists & popups: a ListView, which scrolls itself, with its selection bound TwoWay and ItemClick counted; a ScrollViewer
+	whose ViewChanged reports its offset; tooltips on each side of their buttons, one an element and one bound with x:Bind,
+	and a ToolTip as it looks; a Button.Flyout holding controls; and a ContextFlyout menu on a card, written as XAML items.
 -->
 <Border xmlns="https://github.com/AtomicBlom/SUIsei/ui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:SUIsei.Gallery"
         x:Class="SUIsei.Gallery.Pages.PopupsPage"
         Padding="28">
+	<Border.Resources>
+		<SolidColorBrush x:Key="Edge" Color="#3A3F4E" />
+		<SolidColorBrush x:Key="Pane" Color="#2B2F3B" />
+		<SolidColorBrush x:Key="Ink" Color="#ECEFF6" />
+		<SolidColorBrush x:Key="Accent" Color="#78AAFF" />
+	</Border.Resources>
 	<StackPanel Orientation="Vertical">
 		<TextBlock Text="Lists &amp; popups" Style="{x:Static local:GalleryTheme.PageTitle}" />
 		<TextBlock Text="Choosing from a list, and what opens over the page: tooltips, flyouts and menus."
@@ -21,18 +27,22 @@
 					<ColumnDefinition Width="260" />
 					<ColumnDefinition Width="*" />
 				</Grid.ColumnDefinitions>
-				<Border Grid.Column="0" Height="180" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="6">
-					<ScrollViewer x:Name="ListScroller">
-						<ListView ItemsSource="{x:Bind Tracks}" SelectedIndex="{x:Bind Track, Mode=TwoWay}" IsItemClickEnabled="True"
-						          ItemClick="OnTrackClick" Margin="4" />
-					</ScrollViewer>
+				<Border Grid.Column="0" Height="180" BorderBrush="{StaticResource Edge}" BorderThickness="1" CornerRadius="6">
+					<ListView ItemsSource="{x:Bind Tracks}" SelectedIndex="{x:Bind Track, Mode=TwoWay}" IsItemClickEnabled="True"
+					          ItemClick="OnTrackClick" Margin="4" />
 				</Border>
 				<StackPanel Grid.Column="1" Orientation="Vertical" Margin="20,0,0,0">
 					<TextBlock Text="{x:Bind TrackLabel, Mode=OneWay}" Style="{x:Static local:GalleryTheme.Body}" Margin="0,0,0,6" />
-					<TextBlock x:Name="Clicks" Text="Not clicked yet" Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,6" />
-					<TextBlock x:Name="Scrolled" Text="Scrolled 0 px" Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,12" />
-					<TextBlock Text="Click a row, or Tab in and use the arrows, Home, End, Page Up and Page Down. The wheel scrolls, and ViewChanged says how far."
-					           Style="{x:Static local:GalleryTheme.Note}" TextWrapping="Wrap" />
+					<TextBlock Text="{x:Bind ClickLabel, Mode=OneWay}" Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,12" />
+					<TextBlock Text="Click a row, or Tab in and use the arrows, Home, End, Page Up and Page Down. The list scrolls itself, as WinUI's does."
+					           Style="{x:Static local:GalleryTheme.Note}" TextWrapping="Wrap" Margin="0,0,0,12" />
+					<TextBlock Text="{x:Bind ScrollLabel, Mode=OneWay}" Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,6" />
+					<Border Height="64" BorderBrush="{StaticResource Edge}" BorderThickness="1" CornerRadius="6">
+						<ScrollViewer ViewChanged="OnNotesScrolled">
+							<TextBlock Text="A ScrollViewer raises ViewChanged as the wheel, a dragged thumb, a key or a pan moves it, or as ScrollToVerticalOffset does; never for what layout does to its offsets. Scroll this note to see it."
+							           Style="{x:Static local:GalleryTheme.Note}" TextWrapping="Wrap" Margin="8,6" />
+						</ScrollViewer>
+					</Border>
 				</StackPanel>
 			</Grid>
 		</Border>
@@ -44,16 +54,18 @@
 					<Button Content="Below" ToolTipService.ToolTip="Undo the last change (Ctrl Z)" Margin="0,0,8,0" />
 					<Button Content="Above" ToolTipService.ToolTip="Opened above the button" ToolTipService.Placement="Top" Margin="0,0,8,0" />
 					<Button Content="Right" ToolTipService.ToolTip="Opened to its right" ToolTipService.Placement="Right" Margin="0,0,8,0" />
+					<Button Content="Bound" ToolTipService.ToolTip="{x:Bind TrackLabel, Mode=OneWay}" Margin="0,0,8,0" />
 					<Button Content="An element">
 						<ToolTipService.ToolTip>
 							<StackPanel Orientation="Vertical">
-								<TextBlock Text="Lap record" FontSize="13" Foreground="#78AAFF" />
-								<TextBlock Text="1:23.456 on the third lap" FontSize="13" Foreground="#ECEFF6" />
+								<TextBlock Text="Lap record" FontSize="13" Foreground="{StaticResource Accent}" />
+								<TextBlock Text="1:23.456 on the third lap" FontSize="13" Foreground="{StaticResource Ink}" />
 							</StackPanel>
 						</ToolTipService.ToolTip>
 					</Button>
 				</StackPanel>
-				<TextBlock Text="Rest the pointer on a button. What a tooltip looks like:" Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,6" />
+				<TextBlock Text="Rest the pointer on a button; the bound one says which track is chosen. What a tooltip looks like:" TextWrapping="Wrap"
+				           Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,6" />
 				<ToolTip Content="Undo the last change (Ctrl Z)" HorizontalAlignment="Left" />
 			</StackPanel>
 		</Border>
@@ -70,13 +82,13 @@
 						<Flyout x:Name="RenameFlyout" Placement="BottomEdgeAlignedLeft">
 							<StackPanel Orientation="Vertical">
 								<TextBlock Text="A new name" Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,6" />
-								<TextBox x:Name="NewName" Text="Grand loop" Width="200" Margin="0,0,0,8" />
+								<TextBox Text="{x:Bind NewName, Mode=TwoWay}" Width="200" Margin="0,0,0,8" />
 								<Button Content="Rename" Click="OnRename" HorizontalAlignment="Right" />
 							</StackPanel>
 						</Flyout>
 					</Button.Flyout>
 				</Button>
-				<Border Grid.Column="1" Background="#2B2F3B" BorderBrush="#3A3F4E" BorderThickness="1" CornerRadius="6" Padding="14,10,14,12">
+				<Border Grid.Column="1" Background="{StaticResource Pane}" BorderBrush="{StaticResource Edge}" BorderThickness="1" CornerRadius="6" Padding="14,10,14,12">
 					<Border.ContextFlyout>
 						<MenuFlyout>
 							<MenuFlyoutItem Text="Duplicate" Click="OnDuplicate" />
@@ -85,8 +97,8 @@
 						</MenuFlyout>
 					</Border.ContextFlyout>
 					<StackPanel Orientation="Vertical">
-						<TextBlock x:Name="TrackName" Text="Grand loop" Style="{x:Static local:GalleryTheme.Body}" Margin="0,0,0,4" />
-						<TextBlock x:Name="Menued" Text="Right-click here (or Shift F10) for its menu" Style="{x:Static local:GalleryTheme.Note}" />
+						<TextBlock Text="{x:Bind TrackName, Mode=OneWay}" Style="{x:Static local:GalleryTheme.Body}" Margin="0,0,0,4" />
+						<TextBlock Text="{x:Bind MenuLabel, Mode=OneWay}" Style="{x:Static local:GalleryTheme.Note}" />
 					</StackPanel>
 				</Border>
 			</Grid>
