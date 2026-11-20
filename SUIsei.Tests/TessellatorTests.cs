@@ -559,13 +559,14 @@ public sealed class TessellatorTests
 			tessellator.Stroke(path, style, TessellationScale.Identity, stroke);
 		}
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < 20; i++)
+		Allocations.ShouldAllocateNothing(() =>
 		{
-			tessellator.Fill(path, TessellationScale.Identity, fill);
-			tessellator.Stroke(path, style, TessellationScale.Identity, stroke);
-		}
-		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0);
+			for (var i = 0; i < 20; i++)
+			{
+				tessellator.Fill(path, TessellationScale.Identity, fill);
+				tessellator.Stroke(path, style, TessellationScale.Identity, stroke);
+			}
+		});
 		fill.IsCurrentFor(path, null, TessellationScale.Identity).ShouldBeTrue();
 		stroke.IsCurrentFor(path, style, TessellationScale.Identity).ShouldBeTrue();
 		style.Thickness = 4;

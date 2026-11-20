@@ -189,10 +189,11 @@ public sealed class TrimTests
 		for (var i = 0; i < 50; i++)
 			path.Emit(ref sink, new PathTrim(0, i / 50f, i / 25f));
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < 500; i++)
-			path.Emit(ref sink, new PathTrim(0.1f, 0.1f + i / 600f, i / 300f));
-		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0);
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 500; i++)
+				path.Emit(ref sink, new PathTrim(0.1f, 0.1f + i / 600f, i / 300f));
+		});
 		path.Version.ShouldBe(version);
 		sink.Vertices.ShouldBeGreaterThan(0);
 	}

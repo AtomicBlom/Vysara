@@ -112,10 +112,11 @@ public sealed class DiagnosticsTests
 		host.Tick(0.016, 0f, Surface); // both queues now exist, and are empty
 		Diagnostics.RunPosted(host);
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < 100; i++)
-			Diagnostics.RunPosted(host);
-		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0L);
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 100; i++)
+				Diagnostics.RunPosted(host);
+		});
 	}
 
 	/// <summary>Work posted to one host waits for that host's tick: another host ticking never runs it.</summary>

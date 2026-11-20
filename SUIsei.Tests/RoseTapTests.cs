@@ -985,13 +985,14 @@ public sealed class RoseTapTests
 				host.Render();
 			}
 
-			var before = GC.GetAllocatedBytesForCurrentThread();
-			for (var i = 0; i < 20; i++)
+			Allocations.ShouldAllocateNothing(() =>
 			{
-				host.Tick(0.016, 0f, Surface);
-				host.Render();
-			}
-			(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0L);
+				for (var i = 0; i < 20; i++)
+				{
+					host.Tick(0.016, 0f, Surface);
+					host.Render();
+				}
+			});
 		}
 		finally
 		{
