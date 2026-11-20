@@ -7,17 +7,30 @@ namespace SUIsei.Controls;
 /// Lays out one container per item of <see cref="ItemsSource"/> in an <see cref="ItemsPanel"/>.
 /// Each container is realized through <see cref="ItemTemplate"/> (a <see cref="DataTemplate"/>) or, with no
 /// template, by wrapping the item. When the source implements <see cref="INotifyCollectionChanged"/> the realized
-/// containers are updated incrementally (add/remove/replace/move/reset) rather than rebuilt.
+/// containers are updated incrementally (add/remove/replace/move/reset) rather than rebuilt; the control listens only while
+/// it is in a live tree, so a long-lived collection never keeps a removed one alive, and joining a tree again lays the
+/// items out anew if the source changed while it was out.
 /// </summary>
 public class ItemsControl : Control, IItemContainerSource
 {
 	private Panel? _panel;
+	// What the control hosts: the panel, or the scroll viewer holding it.
+	private FrameworkElement? _host;
 	// VisualChildren, set once the panel is built, so reading it allocates nothing.
 	private UIElement[] _panelList = [];
 	private bool _virtualizing;
 	private readonly List<object?> _items = [];
 	private readonly Stack<UIElement> _recyclePool = new();
-	private INotifyCollectionChanged? _incc;
+	private readonly Primitives.SourceSubscription _source;
+
+	public ItemsControl() => _source = new Primitives.SourceSubscription(OnCollectionChanged, ReloadIfChanged);
+
+	/// <summary>Whether the panel is hosted in a <see cref="ScrollViewer"/> of the control's own, as a list's is. A
+	/// virtualizing panel never is: it scrolls itself.</summary>
+	private protected virtual bool ScrollsItems => false;
+
+	/// <summary>The scroll viewer the items are in, where the control has one.</summary>
+	internal ScrollViewer? ItemsScrollViewer => _host as ScrollViewer;
 
 	/// <summary>Containers realized so far (instrumentation for the virtualization tests).</summary>
 	internal int RealizeCount { get; private set; }
@@ -32,12 +45,8 @@ public class ItemsControl : Control, IItemContainerSource
 		{
 			if (ReferenceEquals(field, value))
 				return;
-			if (_incc is not null)
-				_incc.CollectionChanged -= OnCollectionChanged;
 			field = value;
-			_incc = value as INotifyCollectionChanged;
-			if (_incc is not null)
-				_incc.CollectionChanged += OnCollectionChanged;
+			_source.Source = value;
 			Reload();
 		}
 	}
@@ -61,8 +70,9 @@ public class ItemsControl : Control, IItemContainerSource
 			field = value;
 			if (_panel is null)
 				return;
-			DropChild(_panel);
+			DropChild(_host!);
 			_panel = null;
+			_host = null;
 			_panelList = [];
 			_virtualizing = false;
 			_recyclePool.Clear();
@@ -85,13 +95,12 @@ public class ItemsControl : Control, IItemContainerSource
 		if (_panel is null)
 		{
 			_panel = ItemsPanel.Build();
-			_panelList = [_panel];
-			AdoptChild(_panel);
+			_virtualizing = _panel is IVirtualizingItemsHost;
+			_host = ScrollsItems && !_virtualizing ? new ScrollViewer { Content = _panel } : _panel;
+			_panelList = [_host];
+			AdoptChild(_host);
 			if (_panel is IVirtualizingItemsHost host)
-			{
-				_virtualizing = true;
 				host.SetSource(this);
-			}
 		}
 		return _panel;
 	}
@@ -217,14 +226,39 @@ public class ItemsControl : Control, IItemContainerSource
 
 	protected override Size MeasureOverride(Size available)
 	{
-		var panel = EnsurePanel();
-		panel.Measure(available);
-		return panel.DesiredSize;
+		EnsurePanel();
+		_host!.Measure(available);
+		return _host.DesiredSize;
 	}
 
 	protected override Size ArrangeOverride(Size finalSize)
 	{
-		_panel?.Arrange(new Rect(0f, 0f, finalSize.Width, finalSize.Height));
+		_host?.Arrange(new Rect(0f, 0f, finalSize.Width, finalSize.Height));
 		return finalSize;
+	}
+
+	private protected override void OnLiveTreeChanged(bool attached)
+	{
+		base.OnLiveTreeChanged(attached);
+		_source.LiveTreeChanged(attached);
+	}
+
+	// Joined a tree: the items are laid out again only if the source no longer holds what they were laid out from
+	private void ReloadIfChanged()
+	{
+		if (ItemsSource is not { } source || _panel is null)
+			return;
+		var i = 0;
+		foreach (var item in source)
+		{
+			if (i >= _items.Count || !Equals(_items[i], item))
+			{
+				Reload();
+				return;
+			}
+			i++;
+		}
+		if (i != _items.Count)
+			Reload();
 	}
 }

@@ -1,144 +1,146 @@
-using SUIsei.Animation;
+using SUIsei.Controls.Primitives;
 using SUIsei.Media;
+using SUIsei.RoutedEvents;
 
 namespace SUIsei.Controls;
 
 /// <summary>
-/// The container a <see cref="ListView"/> wraps each item in: its content laid out across the row, left-aligned, inside
-/// its <see cref="Control.Padding"/>. A <c>SelectionStates</c> <see cref="VisualStateManager"/> group shows a highlight
-/// behind the content as the pointer passes over it and while it is selected, holding the item's background at the
-/// highlight's brush, faded in and out; the owning list calls <see cref="SetSelected"/> when the selection changes.
-/// Unselected and not hovered, the item paints its own <see cref="Control.Background"/>: clear unless set, but the whole
-/// row takes the pointer. A page recolours the highlights
-/// with WinUI's <c>ListViewItemBackgroundPointerOver</c>, <c>ListViewItemBackgroundSelected</c>,
-/// <c>ListViewItemBackgroundSelectedPointerOver</c> and <c>ListViewItemForegroundSelected</c> resources, read as the item
-/// joins a tree. While disabled, a <c>CommonStates</c> <c>Disabled</c> state holds the item's
-/// <see cref="Control.Foreground"/>, which its content's text inherits, at the disabled text brush, and a selected item
-/// shows <c>SelectedDisabled</c>, a highlight without the accent. An item whose content is collapsed takes no room, so a
-/// list filtered by hiding its items' content closes up.
+/// The container a <see cref="ListView"/> wraps each item in, as WinUI's. Its built-in template is one
+/// <see cref="ListViewItemPresenter"/>, as WinUI's default style is: the content laid out across the row inside the item's
+/// <see cref="Control.Padding"/>, over the item's <see cref="Control.Background"/> (clear unless set, but drawn, so the
+/// whole row takes the pointer), with a highlight as the pointer passes over or presses it and while it is selected. A page
+/// recolours the highlights with WinUI's <c>ListViewItemBackgroundPointerOver</c>, <c>ListViewItemBackgroundPressed</c>,
+/// <c>ListViewItemBackgroundSelected</c>, <c>ListViewItemBackgroundSelectedPointerOver</c>,
+/// <c>ListViewItemBackgroundSelectedPressed</c> and <c>ListViewItemForegroundSelected</c> resources, read as the template is
+/// built. Disabled, its text takes the disabled text brush, and a selected item shows a highlight without the accent.
+/// <see cref="IsSelected"/> is settable, as WinUI's, and selects the item in its list. An item whose content is collapsed
+/// takes no room, so a list filtered by hiding its items' content closes up. A template set on the item replaces the
+/// presenter, and the item's states with it.
 /// </summary>
 public sealed class ListViewItem : ContentControl
 {
 	private static readonly SolidColorBrush SelectedBackground = Brush.Sealed(HdrColor.FromRgb(50, 90, 160));
 	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(255, 255, 255, 18));
+	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(255, 255, 255, 10));
 	private static readonly SolidColorBrush SelectedOverBackground = Brush.Sealed(HdrColor.FromRgb(62, 104, 178));
 	// Clear, but drawn, so the whole row takes the pointer and not only its text
 	private static readonly SolidColorBrush RowBackground = Brush.Sealed(HdrColor.Transparent);
 	private static readonly Thickness BuiltInPadding = new(10f, 5f, 10f, 5f);
 
+	public static readonly DependencyProperty<ListViewItem, bool> IsSelectedProperty =
+		DependencyProperty.Register(nameof(IsSelected),
+			new PropertyMetadata<ListViewItem, bool> { PropertyChanged = static (i, _, selected) => i.OnIsSelectedChanged(selected) });
+
 	private bool _isPointerOver;
-	// The resources the highlights were last built from, so joining a tree rebuilds them only when they differ.
-	private (Brush? Over, Brush? Selected, Brush? SelectedOver, Brush? SelectedText) _built;
+	private bool _isPressed;
+	// True while the owning list sets IsSelected, so the change isn't handed back to it
+	private bool _syncing;
+	private ListViewItemPresenter? _presenter;
+
+	public ListViewItem()
+	{
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		SetBuiltInValue(PaddingProperty, BuiltInPadding);
+		SetBuiltInValue(BackgroundProperty, RowBackground);
+		AddHandler(PointerEnteredEvent, (_, _) => Hover(over: true, pressed: _isPressed));
+		AddHandler(PointerExitedEvent, (_, _) => Hover(over: false, pressed: false));
+		AddHandler(PointerPressedEvent, (_, e) =>
+		{
+			if (e is not PointerRoutedEventArgs { IsSecondaryButton: true })
+				Hover(_isPointerOver, pressed: true);
+		});
+		AddHandler(PointerReleasedEvent, (_, _) => Hover(_isPointerOver, pressed: false));
+	}
 
 	/// <summary>The data item this container represents (used by the list to map selection back to the source).</summary>
 	internal object? DataItem { get; init; }
 
-	/// <summary>Whether this item is currently selected.</summary>
-	public bool IsSelected { get; private set; }
+	/// <summary>The list this item is a container of, if any.</summary>
+	internal ListView? Owner { get; init; }
+
+	/// <summary>Whether this item is selected. Setting it selects (or clears) the item in its list.</summary>
+	public bool IsSelected { get => GetValue(IsSelectedProperty); set => SetValue(IsSelectedProperty, value); }
 
 	/// <summary>Whether the item shows anything: its content is not collapsed.</summary>
 	internal bool ShowsContent => Content is not UIElement { Visibility: Visibility.Collapsed };
 
-	public ListViewItem()
-	{
-		BackgroundTransition = TemplateStates.Fade(80);
-		SetBuiltInValue(PaddingProperty, BuiltInPadding);
-		SetBuiltInValue(BackgroundProperty, RowBackground);
-		BuildStates(null, null, null, null);
-		AddHandler(PointerEnteredEvent, (_, _) => Hover(true));
-		AddHandler(PointerExitedEvent, (_, _) => Hover(false));
-	}
-
+	/// <summary>The list selected or let go of this item.</summary>
 	internal void SetSelected(bool selected)
 	{
-		if (IsSelected == selected)
-			return;
-		IsSelected = selected;
-		VisualStateManager.GoToState(this, SelectionState, useTransitions: true);
+		_syncing = true;
+		try
+		{
+			IsSelected = selected;
+		}
+		finally
+		{
+			_syncing = false;
+		}
 	}
 
-	private string SelectionState => !IsEnabled
-		? IsSelected ? "SelectedDisabled" : "Unselected"
-		: IsSelected ? _isPointerOver ? "SelectedPointerOver" : "Selected"
-		: _isPointerOver ? "UnselectedPointerOver" : "Unselected";
-
-	private void Hover(bool over)
+	private void OnIsSelectedChanged(bool selected)
 	{
-		_isPointerOver = over;
-		VisualStateManager.GoToState(this, SelectionState, useTransitions: true);
+		ShowState(useTransitions: true);
+		if (!_syncing)
+			Owner?.OnItemIsSelectedChanged(this, selected);
 	}
 
-	// The item carries its states itself rather than in a template, so it shows them here as its effective IsEnabled moves.
+	private void Hover(bool over, bool pressed)
+	{
+		if (over == _isPointerOver && pressed == _isPressed)
+			return;
+		_isPointerOver = over;
+		_isPressed = pressed;
+		ShowState(useTransitions: true);
+	}
+
+	// A disabled item sees no input, so a hover or press in progress could never end: both are dropped
 	private protected override void OnIsEnabledChanged(bool isEnabled)
 	{
 		_isPointerOver = false;
-		GoToCommonState(useTransitions: true);
-		VisualStateManager.GoToState(this, SelectionState, useTransitions: true);
+		_isPressed = false;
+		ShowState(useTransitions: true);
 	}
 
-	// Joined a tree: the highlights read the page's resources, rebuilt only where one differs from what they were built from
-	private protected override void OnLiveTreeChanged(bool attached)
-	{
-		base.OnLiveTreeChanged(attached);
-		if (!attached)
-			return;
-		var found = (FindResource("ListViewItemBackgroundPointerOver") as Brush, FindResource("ListViewItemBackgroundSelected") as Brush,
-			FindResource("ListViewItemBackgroundSelectedPointerOver") as Brush, FindResource("ListViewItemForegroundSelected") as Brush);
-		if (found == _built)
-			return;
-		BuildStates(found.Item1, found.Item2, found.Item3, found.Item4);
-		VisualStateManager.GoToState(this, SelectionState, useTransitions: false);
-	}
+	private void ShowState(bool useTransitions) =>
+		_presenter?.Show(new ListViewItemState(IsSelected, _isPointerOver, _isPressed, IsEnabled), useTransitions);
 
-	private void BuildStates(Brush? over, Brush? selected, Brush? selectedOver, Brush? selectedText)
+	protected override Size MeasureOverride(Size available) => ShowsContent ? base.MeasureOverride(available) : Size.Zero;
+
+	private static readonly ControlTemplate DefaultTemplate = new()
 	{
-		_built = (over, selected, selectedOver, selectedText);
-		var common = new VisualStateGroup { Name = "CommonStates" };
-		common.States.Add(new VisualState { Name = "Normal" });
-		common.States.Add(new VisualState
+		Factory = static control =>
 		{
-			Name = "Disabled",
-			Storyboard = TemplateStates.Hold((this, ForegroundProperty, TemplateStates.DisabledForeground)),
-		});
-		var selection = new VisualStateGroup { Name = "SelectionStates" };
-		selection.States.Add(new VisualState { Name = "Unselected" });
-		selection.States.Add(new VisualState { Name = "UnselectedPointerOver", Storyboard = TemplateStates.Background(this, over ?? OverBackground) });
-		selection.States.Add(new VisualState { Name = "Selected", Storyboard = Highlight(selected ?? SelectedBackground, selectedText) });
-		selection.States.Add(new VisualState
-		{
-			Name = "SelectedPointerOver",
-			Storyboard = Highlight(selectedOver ?? (selected is null ? SelectedOverBackground : selected), selectedText),
-		});
-		selection.States.Add(new VisualState
-		{
-			Name = "SelectedDisabled",
-			Storyboard = TemplateStates.Background(this, TemplateStates.DisabledAccent),
-		});
-		SetBuiltInValue(VisualStateManager.VisualStateGroupsProperty, [common, selection]);
-	}
+			var item = (ListViewItem)control;
+			var selected = item.ThemeResourceOrNull("ListViewItemBackgroundSelected");
+			var over = item.ThemeResource("ListViewItemBackgroundPointerOver", OverBackground);
+			var presenter = new ListViewItemPresenter
+			{
+				BackgroundTransition = TemplateStates.Fade(80),
+				PointerOverBackground = over,
+				PressedBackground = item.ThemeResource("ListViewItemBackgroundPressed", PressedBackground),
+				SelectedBackground = selected ?? SelectedBackground,
+				// A page that recolours the selection alone has it hovered in the same colour, not the built-in one
+				SelectedPointerOverBackground = item.ThemeResource("ListViewItemBackgroundSelectedPointerOver", selected ?? SelectedOverBackground),
+				SelectedPressedBackground = item.ThemeResourceOrNull("ListViewItemBackgroundSelectedPressed"),
+				SelectedDisabledBackground = TemplateStates.DisabledAccent,
+				SelectedForeground = item.ThemeResourceOrNull("ListViewItemForegroundSelected"),
+			};
+			item.RegisterTemplateBinding(BackgroundProperty, presenter, ContentPresenter.BackgroundProperty);
+			item.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
+			item.RegisterTemplateBinding(PaddingProperty, presenter, ListViewItemPresenter.ContentMarginProperty);
+			item.RegisterContentTemplateBinding(content => presenter.Content = content);
+			item._presenter = presenter;
+			item.ShowState(useTransitions: false);
+			return presenter;
+		},
+	};
 
-	private Storyboard Highlight(Brush background, Brush? text) => text is null
-		? TemplateStates.Background(this, background)
-		: TemplateStates.Hold((this, BackgroundProperty, background), (this, ForegroundProperty, text));
-
-	protected override Size MeasureOverride(Size available)
+	// A template of the app's own replaces the presenter, which then shows nothing more
+	protected override void OnApplyTemplate()
 	{
-		if (!ShowsContent)
-			return Size.Zero;
-		var padding = Padding;
-		var inner = new Size(MathF.Max(0f, available.Width - padding.Horizontal), MathF.Max(0f, available.Height - padding.Vertical));
-		var content = base.MeasureOverride(inner);
-		return new Size(content.Width + padding.Horizontal, content.Height + padding.Vertical);
-	}
-
-	protected override Size ArrangeOverride(Size finalSize)
-	{
-		var padding = Padding;
-		var inner = new Size(MathF.Max(0f, finalSize.Width - padding.Horizontal), MathF.Max(0f, finalSize.Height - padding.Vertical));
-		if (Content is UIElement element && Template is null)
-			element.Arrange(new Rect(padding.Left, padding.Top, inner.Width, inner.Height));
-		else
-			base.ArrangeOverride(finalSize);
-		return finalSize;
+		base.OnApplyTemplate();
+		if (_presenter is not null && !ReferenceEquals(Template, DefaultTemplate))
+			_presenter = null;
 	}
 }
