@@ -243,10 +243,11 @@ public sealed class SweepFillTests
 		for (var i = 0; i < 4; i++)
 			tessellator.Fill(path, TessellationScale.Identity, output);
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < 20; i++)
-			tessellator.Fill(path, TessellationScale.Identity, output);
-		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0);
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 20; i++)
+				tessellator.Fill(path, TessellationScale.Identity, output);
+		});
 		output.TriangleCount.ShouldBeGreaterThan(0);
 	}
 
