@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 	Layout: a Grid's pixel and star columns, its rows, and a cell spanning two columns through the attached
-	Grid.ColumnSpan.
+	Grid.ColumnSpan; and GridSplitters dragging a grid's columns and rows.
 -->
 <Border xmlns="https://github.com/AtomicBlom/SUIsei/ui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:SUIsei.Gallery"
+        xmlns:suisei="https://github.com/AtomicBlom/SUIsei/extensions"
         x:Class="SUIsei.Gallery.Pages.LayoutPage"
         Padding="28">
 	<StackPanel Orientation="Vertical">
@@ -42,6 +43,37 @@
 					<TextBlock Text="spans 2 cols" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
 				</Border>
 			</Grid>
+		</Border>
+
+		<!-- Each splitter sits in a thin track of its own and resizes the tracks either side of it -->
+		<TextBlock Text="GridSplitter" Style="{x:Static local:GalleryTheme.SectionHeading}" />
+		<Border Style="{x:Static local:GalleryTheme.Card}">
+			<StackPanel Orientation="Vertical">
+				<TextBlock Text="Drag the bars between the panes." Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,8" />
+				<Grid Height="150">
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="180" />
+						<ColumnDefinition Width="8" />
+						<ColumnDefinition Width="*" />
+					</Grid.ColumnDefinitions>
+					<Grid.RowDefinitions>
+						<RowDefinition Height="*" />
+						<RowDefinition Height="8" />
+						<RowDefinition Height="50" />
+					</Grid.RowDefinitions>
+					<Border Grid.Row="0" Grid.Column="0" Grid.RowSpan="3" Background="#3C3250" CornerRadius="4">
+						<TextBlock Text="Library" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+					<suisei:GridSplitter Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" ResizeDirection="Columns" MinimumTrackSize="80" />
+					<Border Grid.Row="0" Grid.Column="2" Background="#324650" CornerRadius="4">
+						<TextBlock Text="Lanes" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+					<suisei:GridSplitter Grid.Row="1" Grid.Column="2" ResizeDirection="Rows" />
+					<Border Grid.Row="2" Grid.Column="2" Background="#463737" CornerRadius="4">
+						<TextBlock Text="Part" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+				</Grid>
+			</StackPanel>
 		</Border>
 	</StackPanel>
 </Border>

@@ -10,6 +10,7 @@ namespace SUIsei.Controls;
 /// <see cref="UIElement.ContextFlyout"/>. Invoking an item (which fires its <see cref="ButtonBase.Click"/> /
 /// <see cref="ButtonBase.Command"/>) or pressing outside closes it.
 /// </summary>
+[ContentProperty(Name = nameof(Items))]
 public sealed class MenuFlyout : FlyoutBase
 {
 	// The menu's look. Shared and never changed.

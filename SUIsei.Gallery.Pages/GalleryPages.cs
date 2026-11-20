@@ -9,6 +9,8 @@ internal static class GalleryPages
 	[
 		new("text", "Text", static () => new TextPage()),
 		new("controls", "Controls", static () => new ControlsPage()),
+		new("choices", "Choices", static () => new ChoicesPage()),
+		new("popups", "Lists & popups", static () => new PopupsPage()),
 		new("layout", "Layout", static () => new LayoutPage()),
 		new("images", "Images", static () => new ImagesPage()),
 	];
