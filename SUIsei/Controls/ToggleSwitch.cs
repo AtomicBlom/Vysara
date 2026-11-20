@@ -10,7 +10,8 @@ namespace SUIsei.Controls;
 /// right, on the accent, when on, beside <see cref="OnContent"/> or <see cref="OffContent"/>, under an optional
 /// <see cref="Header"/>. A click, Enter, Space or the pad's A flips <see cref="IsOn"/>, raising <see cref="Toggled"/>;
 /// <see cref="IsOnChanged"/> lets it bind TwoWay. The track and knob take the <c>ToggleSwitchFillOn</c>,
-/// <c>ToggleSwitchStrokeOff</c>, <c>ToggleSwitchKnobFillOn</c> and <c>ToggleSwitchKnobFillOff</c> resources.
+/// <c>ToggleSwitchStrokeOff</c>, <c>ToggleSwitchKnobFillOn</c> and <c>ToggleSwitchKnobFillOff</c> resources. Disabled,
+/// the track and knob take the shared disabled brushes, on or off, and the text dims.
 /// </summary>
 public sealed class ToggleSwitch : Control
 {
@@ -21,11 +22,21 @@ public sealed class ToggleSwitch : Control
 	private static readonly SolidColorBrush KnobOff = Brush.Sealed(HdrColor.FromRgb(200, 200, 210));
 	private static readonly SolidColorBrush OverFill = Brush.Sealed(HdrColor.FromRgb(255, 255, 255, 20));
 
-	public static readonly RoutedEvent ToggledEvent = RoutedEvent.Register(nameof(Toggled), RoutingStrategy.Bubble);
-
 	public static readonly DependencyProperty<ToggleSwitch, bool> IsOnProperty =
 		DependencyProperty.Register(nameof(IsOn),
 			new PropertyMetadata<ToggleSwitch, bool> { PropertyChanged = static (t, _, _) => t.OnIsOnChanged() });
+
+	public static readonly DependencyProperty<ToggleSwitch, object?> HeaderProperty =
+		DependencyProperty.Register(nameof(Header),
+			new PropertyMetadata<ToggleSwitch, object?> { PropertyChanged = static (t, _, _) => t.Refresh() });
+
+	public static readonly DependencyProperty<ToggleSwitch, object?> OnContentProperty =
+		DependencyProperty.Register(nameof(OnContent),
+			new PropertyMetadata<ToggleSwitch, object?> { DefaultValue = "On", PropertyChanged = static (t, _, _) => t.Refresh() });
+
+	public static readonly DependencyProperty<ToggleSwitch, object?> OffContentProperty =
+		DependencyProperty.Register(nameof(OffContent),
+			new PropertyMetadata<ToggleSwitch, object?> { DefaultValue = "Off", PropertyChanged = static (t, _, _) => t.Refresh() });
 
 	private readonly Pressable _press;
 	private Border? _track;
@@ -45,43 +56,47 @@ public sealed class ToggleSwitch : Control
 	public bool IsOn { get => GetValue(IsOnProperty); set => SetValue(IsOnProperty, value); }
 
 	/// <summary>Shown above the switch, or nothing where null.</summary>
-	public object? Header { get; set { field = value; Refresh(); } }
+	public object? Header { get => GetValue(HeaderProperty); set => SetValue(HeaderProperty, value); }
 
-	/// <summary>Shown beside the switch while it is on.</summary>
-	public object? OnContent { get; set { field = value; Refresh(); } } = "On";
+	/// <summary>Shown beside the switch while it is on. "On" by default.</summary>
+	public object? OnContent { get => GetValue(OnContentProperty); set => SetValue(OnContentProperty, value); }
 
-	/// <summary>Shown beside the switch while it is off.</summary>
-	public object? OffContent { get; set { field = value; Refresh(); } } = "Off";
+	/// <summary>Shown beside the switch while it is off. "Off" by default.</summary>
+	public object? OffContent { get => GetValue(OffContentProperty); set => SetValue(OffContentProperty, value); }
 
-	/// <summary>Raised as <see cref="IsOn"/> changes, by input or by code.</summary>
-	public event RoutedEventHandler Toggled
-	{
-		add => AddHandler(ToggledEvent, value);
-		remove => RemoveHandler(ToggledEvent, value);
-	}
+	/// <summary>Raised as <see cref="IsOn"/> changes, by input or by code, as WinUI's.</summary>
+	public event RoutedEventHandler? Toggled;
 
 	/// <summary>Raised as <see cref="IsOn"/> changes, so it binds TwoWay.</summary>
 	public event EventHandler? IsOnChanged;
 
 	private protected override string CommonVisualState => _press.State(IsEnabled);
 
-	private protected override void OnIsEnabledChanged(bool isEnabled) => _press.Reset();
+	private protected override void OnIsEnabledChanged(bool isEnabled)
+	{
+		_press.Reset();
+		Refresh();
+	}
 
 	private void OnIsOnChanged()
 	{
 		Refresh();
-		RaiseEvent(ToggledEvent, new RoutedEventArgs());
+		Toggled?.Invoke(this, new RoutedEventArgs { OriginalSource = this, Source = this });
 		IsOnChanged?.Invoke(this, EventArgs.Empty);
 	}
 
-	// The parts shown as the switch is now
+	// The parts shown as the switch is now: on or off, enabled or not
 	private void Refresh()
 	{
 		if (_track is null || _knob is null || _state is null || _header is null)
 			return;
-		_track.Background = IsOn ? _brushes.On : FillOff;
-		_track.BorderBrush = IsOn ? _brushes.On : _brushes.Off;
-		_knob.Background = IsOn ? _brushes.KnobOn : _brushes.KnobOff;
+		var enabled = IsEnabled;
+		var on = enabled ? _brushes.On : TemplateStates.DisabledAccent;
+		_track.Background = IsOn ? on : FillOff;
+		_track.BorderBrush = IsOn ? on : enabled ? _brushes.Off : TemplateStates.DisabledBorder;
+		_knob.Background = enabled
+			? IsOn ? _brushes.KnobOn : _brushes.KnobOff
+			: IsOn ? TemplateStates.DisabledBackground : TemplateStates.DisabledAccent;
 		_knob.HorizontalAlignment = IsOn ? HorizontalAlignment.Right : HorizontalAlignment.Left;
 		_state.Content = IsOn ? OnContent : OffContent;
 		_header.Content = Header;
@@ -127,7 +142,7 @@ public sealed class ToggleSwitch : Control
 			{
 				Name = "Disabled",
 				Storyboard = TemplateStates.Hold((state, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground),
-					(knob, Border.BackgroundProperty, TemplateStates.DisabledAccent)),
+					(header, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground)),
 			});
 			VisualStateManager.SetVisualStateGroups(column, [common]);
 			self.Refresh();

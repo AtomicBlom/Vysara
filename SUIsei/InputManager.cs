@@ -325,6 +325,7 @@ public sealed class InputManager
 		_args.Device = e.Device;
 		_args.PointerId = e.PointerId;
 		_args.Wheel = Vector2.Zero;
+		_args.UpdateKind = e.Update;
 
 		var preview = PreviewOf(evt);
 		if (preview is not null)
@@ -350,6 +351,7 @@ public sealed class InputManager
 		_args.Device = e.Device;
 		_args.PointerId = e.PointerId;
 		_args.Wheel = e.Wheel;
+		_args.UpdateKind = PointerUpdateKind.None;
 		target.RaiseEvent(UIElement.PreviewPointerWheelChangedEvent, _args);
 		if (_args.Handled)
 			return;
@@ -363,6 +365,7 @@ public sealed class InputManager
 		_args.Device = e.Device;
 		_args.PointerId = e.PointerId;
 		_args.Wheel = Vector2.Zero;
+		_args.UpdateKind = PointerUpdateKind.None;
 		target.RaiseEvent(evt, _args);
 	}
 
