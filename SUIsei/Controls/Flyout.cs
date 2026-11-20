@@ -13,9 +13,11 @@ public sealed class Flyout : FlyoutBase
 {
 	private static readonly SolidColorBrush PanelBackground = Brush.Sealed(HdrColor.FromRgb(40, 42, 52));
 	private static readonly SolidColorBrush PanelBorder = Brush.Sealed(HdrColor.FromRgb(78, 82, 96));
+	public static readonly DependencyProperty<Flyout, UIElement?> ContentProperty =
+		DependencyProperty.Register(nameof(Content), new PropertyMetadata<Flyout, UIElement?>());
 
 	/// <summary>What the flyout shows.</summary>
-	public UIElement? Content { get; set; }
+	public UIElement? Content { get => GetValue(ContentProperty); set => SetValue(ContentProperty, value); }
 
 	protected override FrameworkElement CreatePresenter()
 	{

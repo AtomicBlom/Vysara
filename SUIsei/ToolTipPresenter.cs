@@ -84,6 +84,7 @@ internal sealed class ToolTipPresenter(InputManager input)
 		if (owner.AttachedRoot is not { } root)
 			return;
 		var tip = value as ToolTip ?? new ToolTip { Content = value };
+		tip.ResourceOwner = owner;
 		root.AddOverlay(tip, Vector2.Zero);
 
 		var scale = root.LayoutScale > 0f ? root.LayoutScale : 1f;

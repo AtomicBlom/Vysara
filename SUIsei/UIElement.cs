@@ -46,6 +46,9 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 		DependencyProperty.Register(nameof(IsTabStop),
 			new PropertyMetadata<UIElement, bool> { DefaultValue = false });
 
+	public static readonly DependencyProperty<UIElement, Controls.Primitives.FlyoutBase?> ContextFlyoutProperty =
+		DependencyProperty.Register(nameof(ContextFlyout), new PropertyMetadata<UIElement, Controls.Primitives.FlyoutBase?>());
+
 	/// <summary>Tab-order index. Lower values tab first; equal values use document order.</summary>
 	public static readonly DependencyProperty<UIElement, int> TabIndexProperty =
 		DependencyProperty.Register(nameof(TabIndex),
@@ -65,9 +68,10 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 
 	/// <summary>
 	/// A flyout opened at the pointer when the element (or anything inside it without one of its own) is right-clicked, or
-	/// against the element when it has focus and Shift+F10 is pressed, as WinUI's <c>ContextFlyout</c>.
+	/// against the element when it has focus and Shift+F10 is pressed, as WinUI's <c>ContextFlyout</c>. A dependency
+	/// property, so an element that sets none holds nothing for it.
 	/// </summary>
-	public Controls.Primitives.FlyoutBase? ContextFlyout { get; set; }
+	public Controls.Primitives.FlyoutBase? ContextFlyout { get => GetValue(ContextFlyoutProperty); set => SetValue(ContextFlyoutProperty, value); }
 
 	/// <summary>
 	/// Attempts to give the element keyboard focus, as WinUI's <c>UIElement.Focus</c>: through its root's focus manager, raising

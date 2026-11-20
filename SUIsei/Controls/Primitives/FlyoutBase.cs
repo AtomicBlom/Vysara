@@ -22,13 +22,16 @@ public abstract class FlyoutBase : DependencyObject
 
 	private static readonly SolidColorBrush DismissBackground = Brush.Sealed(HdrColor.Transparent);
 
+	public static readonly DependencyProperty<FlyoutBase, FlyoutPlacementMode> PlacementProperty =
+		DependencyProperty.Register(nameof(Placement), new PropertyMetadata<FlyoutBase, FlyoutPlacementMode> { DefaultValue = FlyoutPlacementMode.Top });
+
 	private UIRoot? _root;
 	private FrameworkElement? _presenter;
 	private Border? _dismissLayer;
 	private UIElement? _restoreFocus;
 
-	/// <summary>Which side of its target the flyout opens on, as WinUI's.</summary>
-	public FlyoutPlacementMode Placement { get; set; } = FlyoutPlacementMode.Top;
+	/// <summary>Which side of its target the flyout opens on, as WinUI's. Top by default.</summary>
+	public FlyoutPlacementMode Placement { get => GetValue(PlacementProperty); set => SetValue(PlacementProperty, value); }
 
 	/// <summary>Whether the flyout is showing.</summary>
 	public bool IsOpen => _root is not null;
@@ -132,15 +135,8 @@ public abstract class FlyoutBase : DependencyObject
 
 	/// <summary>The brush under <paramref name="key"/> from the target up, or <paramref name="fallback"/>: what a presenter
 	/// is coloured by, as a built-in template reads a theme resource.</summary>
-	protected Brush Resource(UIElement target, string key, Brush fallback)
-	{
-		for (var element = target; element is not null; element = element.Parent)
-		{
-			if (element is FrameworkElement { Resources: { } resources } && resources.TryFind(key, out var found) && found is Brush brush)
-				return brush;
-		}
-		return fallback;
-	}
+	protected static Brush Resource(UIElement target, string key, Brush fallback) =>
+		(target as FrameworkElement ?? target.Parent as FrameworkElement)?.FindResource(key) as Brush ?? fallback;
 
 	private static (PlacementMode Side, EdgeAlignment Align) Sides(FlyoutPlacementMode placement) => placement switch
 	{

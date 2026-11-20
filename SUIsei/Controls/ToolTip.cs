@@ -4,14 +4,14 @@ namespace SUIsei.Controls;
 
 /// <summary>
 /// The small panel <see cref="ToolTipService.ToolTipProperty"/> shows over an element the pointer rests on: its
-/// <see cref="ContentControl.Content"/>, text or an element, on a rounded panel no wider than <see cref="MaxWidthDefault"/>.
+/// <see cref="ContentControl.Content"/>, text or an element, on a rounded panel no wider than 320 DIPs unless its MaxWidth is set.
 /// It never takes the pointer, so what is under it stays hovered. A page recolours it with the <c>ToolTipBackground</c>,
 /// <c>ToolTipBorderBrush</c> and <c>ToolTipForeground</c> resources, as WinUI's lightweight styling does.
 /// </summary>
 public sealed class ToolTip : ContentControl
 {
 	/// <summary>How wide a tooltip grows before its text wraps, unless its MaxWidth is set.</summary>
-	public const float MaxWidthDefault = 320f;
+	internal const float MaxWidthDefault = 320f;
 
 	// The built-in look's brushes, shared by every default tooltip and never changed.
 	private static readonly SolidColorBrush PanelBackground = Brush.Sealed(HdrColor.FromRgb(43, 45, 54));
