@@ -172,6 +172,19 @@ public sealed class UIRoot
 		return [.. result];
 	}
 
+	/// <summary>Move a positioned overlay to <paramref name="position"/> (DIPs) and arrange it there at once, at the size it
+	/// was last measured to, so something placed by its own size (a tooltip) shows where it belongs this frame.</summary>
+	internal void MoveOverlay(UIElement element, Vector2 position)
+	{
+		var index = _overlays.FindIndex(o => ReferenceEquals(o.Element, element));
+		if (index < 0 || _overlays[index].FullSurface)
+			return;
+		_overlays[index] = (element, position, false);
+		element.Arrange(new Rect(position.X, position.Y, element.DesiredSize.Width, element.DesiredSize.Height));
+		SyncRootChildren();
+		Visual.MarkDirty();
+	}
+
 	/// <summary>Remove a previously-added overlay element, a diagnostics overlay included. Marks the tree dirty so it
 	/// disappears on the next composite.</summary>
 	internal void RemoveOverlay(UIElement element)

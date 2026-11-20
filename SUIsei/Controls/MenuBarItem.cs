@@ -75,7 +75,7 @@ public sealed class MenuBarItem : ButtonBase
 			OpenMenu();
 	}
 
-	private void OnFlyoutClosed() => OwningBar?.NotifyClosed(this);
+	private void OnFlyoutClosed(object? sender, object e) => OwningBar?.NotifyClosed(this);
 
 	private static readonly ControlTemplate DefaultTemplate = new()
 	{

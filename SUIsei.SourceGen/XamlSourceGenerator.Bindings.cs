@@ -18,11 +18,11 @@ partial class XamlSourceGenerator
 	// it joins the page's bindings (OneTime ones assigned in InitializeComponent, the rest tracked by the _Bindings helper);
 	// in a template a OneTime one is assigned in the factory, and a OneWay or TwoWay one in a DataTemplate is tracked by the
 	// template's own helper, one per realized element.
-	private static void EmitXBind(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop, XBindSpec spec)
+	private static void EmitXBind(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, BindTarget prop, XBindSpec spec)
 	{
 		// FallbackValue / TargetNullValue are values of the property, converted like any other.
-		var fallbackCode = spec.Fallback is null ? null : ConvertOrReport(gen, attr, prop.Type, spec.Fallback, $"{prop.Name} FallbackValue", prop);
-		var targetNullCode = spec.TargetNull is null ? null : ConvertOrReport(gen, attr, prop.Type, spec.TargetNull, $"{prop.Name} TargetNullValue", prop);
+		var fallbackCode = spec.Fallback is null ? null : ConvertOrReport(gen, attr, prop.Type, spec.Fallback, $"{prop.Name} FallbackValue", prop.Member);
+		var targetNullCode = spec.TargetNull is null ? null : ConvertOrReport(gen, attr, prop.Type, spec.TargetNull, $"{prop.Name} TargetNullValue", prop.Member);
 		if ((spec.Fallback is not null && fallbackCode is null) || (spec.TargetNull is not null && targetNullCode is null))
 			return;
 
@@ -30,6 +30,11 @@ partial class XamlSourceGenerator
 		{
 			gen.Report(OutsideSubset, attr, $"Mode={(spec.TwoWay ? "TwoWay" : "OneWay")} on an {{x:Bind}} in a ControlTemplate",
 				" (a ControlTemplate's {x:Bind} is read once, against the templated control; follow one of its properties with {TemplateBinding})");
+			return;
+		}
+		if (prop.AttachedSetter is not null && spec.TwoWay)
+		{
+			gen.Report(TwoWayNoWriteBack, attr, prop.Name, "an attached property has no change event to write back from; bind it OneWay");
 			return;
 		}
 
@@ -45,6 +50,8 @@ partial class XamlSourceGenerator
 			return;
 		bind.FallbackValue = fallbackCode;
 		bind.TargetNullValue = targetNullCode;
+		if (scope.IsControlTemplate)
+			ResolveTemplateRung(gen, attr, targetType, prop, bind);
 
 		if (!scope.IsTemplate)
 			gen.Bindings.Add(bind);
@@ -55,7 +62,7 @@ partial class XamlSourceGenerator
 	}
 
 	// A path binding: the path read from the root, or the root itself where there is no path (a template's item).
-	private static Bind? ResolvePathBind(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop,
+	private static Bind? ResolvePathBind(Gen gen, Scope scope, XAttribute attr, string targetVar, INamedTypeSymbol targetType, BindTarget prop,
 		XBindSpec spec, INamedTypeSymbol? rootType, string rootName)
 	{
 		BindPath path;
@@ -86,6 +93,7 @@ partial class XamlSourceGenerator
 		{
 			TargetVar = targetVar,
 			TargetProp = prop.Name,
+			AttachedSetter = prop.AttachedSetter,
 			TargetElementType = targetType,
 			Path = path,
 			LeafType = leafType,
@@ -120,7 +128,7 @@ partial class XamlSourceGenerator
 
 	// A function binding: a static method, named through its type's xmlns prefix, called with the values of its argument
 	// paths, each read from the binding's root. OneTime or OneWay; it has nothing to write a TwoWay value back to.
-	private static Bind? ResolveFunctionBind(Gen gen, XAttribute attr, string targetVar, INamedTypeSymbol targetType, IPropertySymbol prop,
+	private static Bind? ResolveFunctionBind(Gen gen, XAttribute attr, string targetVar, INamedTypeSymbol targetType, BindTarget prop,
 		XBindSpec spec, INamedTypeSymbol? rootType, string rootName)
 	{
 		var function = spec.Function!;
@@ -180,6 +188,7 @@ partial class XamlSourceGenerator
 		{
 			TargetVar = targetVar,
 			TargetProp = prop.Name,
+			AttachedSetter = prop.AttachedSetter,
 			TargetElementType = targetType,
 			Function = method,
 			Arguments = arguments,
@@ -191,7 +200,7 @@ partial class XamlSourceGenerator
 
 	// Whether a value of `source` reaches the property: as it is, or a bool shown as a Visibility, as WinUI's x:Bind
 	// converts it (true Visible, false Collapsed).
-	private static bool ForwardConversion(Gen gen, XAttribute attr, IPropertySymbol prop, ITypeSymbol source, out bool toVisibility)
+	private static bool ForwardConversion(Gen gen, XAttribute attr, BindTarget prop, ITypeSymbol source, out bool toVisibility)
 	{
 		toVisibility = false;
 		if (gen.Compilation.ClassifyConversion(source, prop.Type).IsImplicit)
@@ -255,25 +264,62 @@ partial class XamlSourceGenerator
 	// or a block where it needs locals of its own, so statements side by side never share one.
 	private static string AssignStatement(Bind b, string root, string target)
 	{
-		var dest = $"{target}.{b.TargetProp}";
 		if (b.Function is { } function)
-			return FunctionStatement(b, function, root, dest);
+			return FunctionStatement(b, function, root, target);
 
 		var read = PathRead(root, b.Path!, b.Path!.Length);
 		if (!b.ToVisibility)
-			return $"{dest} = {CoalesceRead(read, b.LeafType, b.FallbackValue, b.TargetNullValue)};";
+			return Set(b, target, CoalesceRead(read, b.LeafType, b.FallbackValue, b.TargetNullValue));
 		if (!read.Contains("?.") && NullableUnderlying(b.LeafType) is null)
-			return $"{dest} = ({read}) ? {Visible} : {Collapsed};";
+			return Set(b, target, $"({read}) ? {Visible} : {Collapsed}");
 		var whenNull = b.TargetNullValue ?? b.FallbackValue;
 		return whenNull is null
-			? $"{dest} = ({read}) == true ? {Visible} : {Collapsed};"
-			: $"{{ var __v = {read}; {dest} = __v is null ? ({whenNull}) : (__v == true ? {Visible} : {Collapsed}); }}";
+			? Set(b, target, $"({read}) == true ? {Visible} : {Collapsed}")
+			: $"{{ var __v = {read}; {Set(b, target, $"__v is null ? ({whenNull}) : (__v == true ? {Visible} : {Collapsed})")} }}";
+	}
+
+	// The statement that gives `target` the binding's value: its property assigned, or an attached property's owner's
+	// Set<Prop>(target, value) called.
+	private static string Set(Bind b, string target, string value) =>
+		b.TemplateDp is { } dp ? $"global::SUIsei.Generated.TemplateValues.Set({target}, {dp}, {(b.TemplateCast is { } cast ? $"({cast})({value})" : value)});"
+		: b.AttachedSetter is { } setter ? $"{setter}({target}, {value});"
+		: $"{target}.{b.TargetProp} = {value};";
+
+	// A ControlTemplate's {x:Bind} gives its part a value as the template's other values do: on the part's Template rung,
+	// through the dependency property behind the property (an attached one's owner's), converted where its type differs
+	// implicitly. A plain CLR property with no dependency property has no levels and is set through its setter; any other
+	// value that can't reach the Template rung is set as the part's own and reported (SUISEI027), as a plain value is.
+	private static void ResolveTemplateRung(Gen gen, XAttribute attr, INamedTypeSymbol targetType, BindTarget prop, Bind bind)
+	{
+		// An attached property's name is Owner.Prop in the markup; its dependency property is named after its setter's Set<Prop>
+		var (owner, name) = prop.AttachedSetter is not null && prop.Member is IMethodSymbol setter
+			? (setter.ContainingType, setter.Name.Substring("Set".Length))
+			: (targetType, prop.Name);
+		var found = FindDependencyProperty(owner, name);
+		if (found is null && prop.AttachedSetter is null)
+			return;
+		if (found is { } dp && DependencyValueType(dp) is { } valueType)
+		{
+			if (SymbolEqualityComparer.Default.Equals(valueType, prop.Type))
+			{
+				bind.TemplateDp = $"{Fq(dp.ContainingType!)}.{dp.Name}";
+				return;
+			}
+			if (prop.AttachedSetter is null && gen.Compilation.ClassifyConversion(prop.Type, valueType).IsImplicit)
+			{
+				bind.TemplateDp = $"{Fq(dp.ContainingType!)}.{dp.Name}";
+				bind.TemplateCast = Fq(valueType);
+				return;
+			}
+		}
+		gen.Report(TemplateValueOnLocal, attr, $"{owner.Name}.{name}",
+			found is null ? $"{owner.Name} declares no dependency property {name}Property" : $"its value's type, {prop.Type.ToDisplayString()}, does not convert implicitly to its dependency property's");
 	}
 
 	// A function binding's push: each argument read from `root`; where an argument's path passes through an object that
 	// may be null, the call waits for it, and the target takes the FallbackValue meanwhile (or keeps what it shows), as
 	// WinUI's x:Bind does.
-	private static string FunctionStatement(Bind b, IMethodSymbol function, string root, string dest)
+	private static string FunctionStatement(Bind b, IMethodSymbol function, string root, string target)
 	{
 		var checks = new List<string>();
 		var args = new List<string>();
@@ -299,10 +345,10 @@ partial class XamlSourceGenerator
 		var value = b.ToVisibility
 			? NullableUnderlying(function.ReturnType) is null ? $"({call}) ? {Visible} : {Collapsed}" : $"({call}) == true ? {Visible} : {Collapsed}"
 			: CoalesceRead(call, function.ReturnType, null, returnsNullable ? b.TargetNullValue : null);
-		var assign = $"{dest} = {value};";
+		var assign = Set(b, target, value);
 		if (checks.Count == 0)
 			return assign;
-		var otherwise = b.FallbackValue is null ? "" : $" else {dest} = {b.FallbackValue};";
+		var otherwise = b.FallbackValue is null ? "" : $" else {Set(b, target, b.FallbackValue)}";
 		return $"{{ if ({string.Join(" && ", checks)}) {assign}{otherwise} }}";
 	}
 

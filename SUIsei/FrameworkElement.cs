@@ -143,16 +143,21 @@ public abstract class FrameworkElement : UIElement
 
 	/// <summary>Walk the element tree from this element to the root, returning the first resource with
 	/// <paramref name="key"/>, or null. Used by the generated <c>InitializeComponent</c> for
-	/// <c>{StaticResource key}</c> references.</summary>
+	/// <c>{StaticResource key}</c> references. An element shown over the page for another (a tooltip in the overlay layer)
+	/// goes on from that element's tree once its own runs out, as WinUI's tooltip finds its owner's resources.</summary>
 	public object? FindResource(string key)
 	{
-		for (UIElement? el = this; el is not null; el = el.Parent)
+		for (UIElement? el = this; el is not null; el = el.Parent ?? (el as FrameworkElement)?.ResourceOwner)
 		{
 			if (el is FrameworkElement fe && fe.Resources?.TryFind(key, out var v) == true)
 				return v;
 		}
 		return null;
 	}
+
+	/// <summary>The element whose resources this one goes on to find where its own tree has none: the element a tooltip
+	/// belongs to.</summary>
+	internal UIElement? ResourceOwner { get; set; }
 
 	protected override Size MeasureCore(Size availableSize)
 	{

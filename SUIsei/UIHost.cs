@@ -36,15 +36,24 @@ public sealed class UIHost
 	public UIHost()
 	{
 		_textures = new TextureResidency(_views);
+		ToolTips = new ToolTipPresenter(Input);
 		// A press focuses the nearest focusable element at or above the hit (e.g. a templated control whose hit
-		// target is its non-focusable template root), matching WinUI.
-		Input.OnPress = el => Focus.FocusFromPointer(el);
+		// target is its non-focusable template root), matching WinUI. It, and a wheel turn, hide a tooltip.
+		Input.OnPress = el =>
+		{
+			ToolTips.Dismiss();
+			Focus.FocusFromPointer(el);
+		};
+		Input.OnWheel = ToolTips.Dismiss;
 		HotReload.TrackHost(this);
 		Diagnostics.ViewsChanged();
 	}
 
 	/// <summary>Pointer routing + over-tracking + press-capture (persistent host state).</summary>
 	public InputManager Input { get; } = new();
+
+	/// <summary>The tooltips shown over elements the pointer rests on (<see cref="Controls.ToolTipService"/>).</summary>
+	internal ToolTipPresenter ToolTips { get; }
 
 	/// <summary>Keyboard focus state machine.</summary>
 	public FocusManager Focus { get; } = new();
@@ -176,6 +185,7 @@ public sealed class UIHost
 		Focus.ReleaseDisabledFocus();
 		DrainPointers();
 		DrainKeyboard();
+		ToolTips.Update(deltaSeconds);
 		RaiseReleased();
 
 		// Resolve the coarse capture report after routing/focus settle, so it is O(1) reads of this frame's state.
@@ -292,6 +302,16 @@ public sealed class UIHost
 		while (_keyQueue.Count > 0)
 		{
 			var e = _keyQueue.Dequeue();
+			if (e.Down)
+				ToolTips.Dismiss();
+
+			// Shift+F10: the focused element's context flyout, against it, before it sees the key
+			if (e is { Down: true, Key: VirtualKey.F10 } && (e.Modifiers & ModifierKeys.Shift) != 0
+				&& InputManager.ContextOwner(Focus.FocusedElement) is { } owner)
+			{
+				owner.ContextFlyout!.ShowAt(owner, null);
+				continue;
+			}
 
 			// Tab / Shift-Tab: intercept before the focused element sees the key.
 			if (e is { Down: true, Key: VirtualKey.Tab })

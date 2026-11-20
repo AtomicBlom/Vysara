@@ -362,25 +362,45 @@ public sealed class DrawListCompositor : IUICompositor, IDrawListSource
 			list.AddVector(path, trim, matrix, tint, clip, groupOpacity, source, localToUv, keepMin, keepMax);
 	}
 
-	// A rect painted by a colour or a linear gradient: one quad for a colour, as many bands as the gradient needs.
+	// A rect prim painted by a colour or a gradient. The rounded-box prims ramp their edge over a pixel, half of it outside
+	// the box, so their quad reaches a device pixel past the rect, its uv past 0..1 by as much: a box at a fractional
+	// position keeps the fringe that falls in the pixels beyond its rect instead of being cut flat there.
 	private static void AddPaintedRect(UIDrawList list, CompositionBrush paint, in Rect rect, in Matrix3x2 matrix, float alpha, UIPrimKind kind,
 		Vector4 prm, in Rect clip)
 	{
+		var quad = rect;
+		Vector2 uv0 = Vector2.Zero, uv1 = Vector2.One;
+		if (kind is UIPrimKind.RoundedRect or UIPrimKind.Border && rect.Width > 0f && rect.Height > 0f)
+		{
+			var margin = new Vector2(PixelInLocal(matrix.M11, matrix.M12), PixelInLocal(matrix.M21, matrix.M22));
+			quad = new Rect(rect.X - margin.X, rect.Y - margin.Y, rect.Width + 2f * margin.X, rect.Height + 2f * margin.Y);
+			var reach = margin / new Vector2(rect.Width, rect.Height);
+			(uv0, uv1) = (-reach, Vector2.One + reach);
+		}
+
 		switch (paint)
 		{
 			case CompositionColorBrush color:
-				list.AddRect(rect, matrix, color.Color.ToPremultiplied(alpha * color.Opacity), kind, prm, clip);
+				list.AddRect(quad, uv0, uv1, matrix, color.Color.ToPremultiplied(alpha * color.Opacity), kind, prm, clip);
 				break;
 			case CompositionLinearGradientBrush gradient:
 				{
-					Span<Vector2> corners = [new(rect.X, rect.Y), new(rect.Right, rect.Y), new(rect.Right, rect.Bottom), new(rect.X, rect.Bottom)];
-					Span<Vector2> uvs = [new(0f, 0f), new(1f, 0f), new(1f, 1f), new(0f, 1f)];
+					Span<Vector2> corners = [new(quad.X, quad.Y), new(quad.Right, quad.Y), new(quad.Right, quad.Bottom), new(quad.X, quad.Bottom)];
+					Span<Vector2> uvs = [new(uv0.X, uv0.Y), new(uv1.X, uv0.Y), new(uv1.X, uv1.Y), new(uv0.X, uv1.Y)];
 					GradientSplitter.AddPolygon(list, corners, uvs, gradient, GradientLine.For(gradient, new Vector2(rect.Width, rect.Height)),
 						alpha * gradient.Opacity, matrix, kind, prm, clip, slot: 0);
 					break;
 				}
 			default:
 				throw new NotSupportedException($"The compositor cannot paint a {paint.GetType().Name}.");
+		}
+
+		// One device pixel along a local axis, in local units: the axis's length once transformed, inverted; none when the
+		// transform collapses it.
+		static float PixelInLocal(float x, float y)
+		{
+			var length = MathF.Sqrt(x * x + y * y);
+			return length > 1e-6f ? 1f / length : 0f;
 		}
 	}
 

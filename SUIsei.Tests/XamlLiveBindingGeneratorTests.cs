@@ -71,6 +71,64 @@ public sealed class XamlLiveBindingGeneratorTests
 	}
 
 	[Test]
+	[Arguments("""<Button ToolTipService.ToolTip="{x:Bind ViewModel.Caption, Mode=OneWay}" />""", "global::SUIsei.Controls.ToolTipService.SetToolTip(_root.")]
+	[Arguments("""<Button ToolTipService.ToolTip="{x:Bind local:Fmt.Percent(Volume)}" />""", "global::SUIsei.Controls.ToolTipService.SetToolTip(")]
+	public void An_attached_property_binds_through_its_owners_setter(string body, string set)
+	{
+		var xaml = View(body);
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain(set);
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
+	public void An_attached_property_binds_in_a_DataTemplate()
+	{
+		var xaml = Row("""<Border ToolTipService.ToolTip="{x:Bind Level, Mode=OneWay}" />""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain("global::SUIsei.Controls.ToolTipService.SetToolTip(_e_");
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	/// <summary>An attached property has no change event, so a TwoWay binding on it can't write back: SUISEI028, as for any
+	/// binding that can't, at its XAML line.</summary>
+	[Test]
+	public void TwoWay_on_an_attached_property_cannot_write_back()
+	{
+		var xaml = View("""
+			<Button
+			    ToolTipService.ToolTip="{x:Bind ViewModel.Caption, Mode=TwoWay}" />
+			""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+
+		var diagnostic = result.Diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("SUISEI028");
+		diagnostic.GetMessage().ShouldContain("ToolTip");
+		var line = Array.FindIndex(xaml.Split('\n'), l => l.Contains("ToolTipService.ToolTip"));
+		diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(line);
+	}
+
+	/// <summary>A ControlTemplate's {x:Bind} gives its part a value as the template's other values do, on the part's Template
+	/// rung, an attached property's and a plain one's alike, so a value the app sets on the part wins.</summary>
+	[Test]
+	[Arguments("""<Border ToolTipService.ToolTip="{x:Bind Tag}" />""", "global::SUIsei.Controls.ToolTipService.ToolTipProperty")]
+	[Arguments("""<Border Opacity="{x:Bind Opacity}" />""", "global::SUIsei.UIElement.OpacityProperty")]
+	public void A_ControlTemplates_xBind_goes_on_the_parts_Template_rung(string part, string dp)
+	{
+		var xaml = View($$"""<ContentControl><ContentControl.Template><ControlTemplate TargetType="ContentControl">{{part}}</ControlTemplate></ContentControl.Template></ContentControl>""");
+		var result = XamlGeneratorHarness.Run(xaml, CodeBehind);
+
+		result.DiagnosticIds().ShouldBeEmpty();
+		result.AllGeneratedText().ShouldContain($"global::SUIsei.Generated.TemplateValues.Set(");
+		result.AllGeneratedText().ShouldContain(dp);
+		XamlGeneratorHarness.CompileErrors(xaml, CodeBehind).ShouldBeEmpty();
+	}
+
+	[Test]
 	public void TwoWay_reads_the_source_again_after_writing_it()
 	{
 		var text = XamlGeneratorHarness.Run(View("""<ToggleButton IsChecked="{x:Bind Busy, Mode=TwoWay}" />"""), CodeBehind).AllGeneratedText();

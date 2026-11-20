@@ -37,17 +37,26 @@ public sealed class InputManager
 	/// <summary>Invoked by <see cref="UIHost"/> on every pointer press so it can update keyboard focus.</summary>
 	internal Action<UIElement?>? OnPress { get; set; }
 
+	/// <summary>Invoked by <see cref="UIHost"/> on every wheel turn, which hides a tooltip.</summary>
+	internal Action? OnWheel { get; set; }
+
+	// The mouse or pen that moved last, whose leaf a tooltip follows; a touch never hovers.
+	private uint? _hoverPointer;
+
 	/// <summary>Route one pointer event over <paramref name="views"/> (called by <see cref="UIHost.Tick"/>).</summary>
 	internal void Process(in PointerInput e, IReadOnlyList<UIView> views)
 	{
 		var hit = HitTest(e.Position, views);
 		_lastInput[e.PointerId] = e;
+		if (e.Device != PointerDeviceType.Touch)
+			_hoverPointer = e.PointerId;
 
 		// A wheel event is its own routed event (no over-chain / move semantics): route it to the captee or the
 		// element under the pointer and stop.
 		if (e.Wheel != Vector2.Zero)
 		{
 			var wheelTarget = GetCapture(e.PointerId) ?? LatchedWheelTarget(e) ?? hit;
+			OnWheel?.Invoke();
 			if (wheelTarget is not null)
 				RaiseWheel(wheelTarget, e);
 			_wheelLatch = wheelTarget is null ? null : (wheelTarget, e.PointerId, e.Position);
@@ -75,6 +84,10 @@ public sealed class InputManager
 			if (target is not null)
 				Raise(UIElement.PointerReleasedEvent, target, e);
 			_implicitCapture.Remove(e.PointerId);
+			// A right-click released where it was pressed opens the nearest context flyout there
+			if (e.Update == PointerUpdateKind.RightButtonReleased && !_args.Handled && hit is not null && ReferenceEquals(hit, target)
+				&& ContextOwner(hit) is { } owner)
+				OpenContext(owner, e.Position);
 			// A touch or pen lifted is gone, not hovering: it leaves whatever it was over (as WinUI's do), so nothing stays
 			// lit by it and WantsPointer doesn't hold for a contact that will never move again
 			if (e.Device != PointerDeviceType.Mouse)
@@ -86,6 +99,46 @@ public sealed class InputManager
 			if (target is not null)
 				Raise(UIElement.PointerMovedEvent, target, e);
 		}
+	}
+
+	/// <summary>
+	/// The innermost element the mouse or pen that moved last is over, and where it is (surface pixels); null when it is
+	/// over nothing or there has been no such pointer. <paramref name="held"/> says a button is down on it (a press is not
+	/// a rest).
+	/// </summary>
+	internal UIElement? HoverLeaf(out Vector2 position, out bool held)
+	{
+		position = default;
+		held = false;
+		if (_hoverPointer is not { } id || !_overChains.TryGetValue(id, out var chain) || chain.Count == 0)
+			return null;
+		var last = _lastInput.GetValueOrDefault(id);
+		held = last.Buttons != PointerButtons.None;
+		position = last.Position;
+		return chain[0];
+	}
+
+	// The element a context flyout opens for: the nearest at or above `hit` with one
+	internal static UIElement? ContextOwner(UIElement? hit)
+	{
+		for (var element = hit; element is not null; element = element.Parent)
+		{
+			if (element.ContextFlyout is not null)
+				return element;
+		}
+		return null;
+	}
+
+	// Opens `owner`'s context flyout at a point on the surface (pixels), given in the owner's own coordinates
+	private static void OpenContext(UIElement owner, Vector2 surfacePoint)
+	{
+		if (owner.AttachedRoot is not { } root)
+			return;
+		var scale = root.LayoutScale > 0f ? root.LayoutScale : 1f;
+		var fromRoot = owner.TransformToVisual(null).Inverse;
+		var rootPoint = new Point(surfacePoint.X / scale, surfacePoint.Y / scale);
+		var local = fromRoot is not null ? fromRoot.TransformPoint(rootPoint) : rootPoint;
+		owner.ContextFlyout!.ShowAt(owner, new Controls.Primitives.FlyoutShowOptions { Position = local });
 	}
 
 	/// <summary>The element currently captured for <paramref name="pointerId"/> — explicit if set, else implicit
@@ -272,6 +325,7 @@ public sealed class InputManager
 		_args.Device = e.Device;
 		_args.PointerId = e.PointerId;
 		_args.Wheel = Vector2.Zero;
+		_args.UpdateKind = e.Update;
 
 		var preview = PreviewOf(evt);
 		if (preview is not null)
@@ -297,6 +351,7 @@ public sealed class InputManager
 		_args.Device = e.Device;
 		_args.PointerId = e.PointerId;
 		_args.Wheel = e.Wheel;
+		_args.UpdateKind = PointerUpdateKind.None;
 		target.RaiseEvent(UIElement.PreviewPointerWheelChangedEvent, _args);
 		if (_args.Handled)
 			return;
@@ -310,6 +365,7 @@ public sealed class InputManager
 		_args.Device = e.Device;
 		_args.PointerId = e.PointerId;
 		_args.Wheel = Vector2.Zero;
+		_args.UpdateKind = PointerUpdateKind.None;
 		target.RaiseEvent(evt, _args);
 	}
 

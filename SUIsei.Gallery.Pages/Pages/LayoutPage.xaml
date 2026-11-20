@@ -1,13 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 	Layout: a Grid's pixel and star columns, its rows, and a cell spanning two columns through the attached
-	Grid.ColumnSpan.
+	Grid.ColumnSpan; and GridSplitters dragging a grid's columns and rows.
 -->
 <Border xmlns="https://github.com/AtomicBlom/SUIsei/ui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:SUIsei.Gallery"
+        xmlns:suisei="https://github.com/AtomicBlom/SUIsei/extensions"
         x:Class="SUIsei.Gallery.Pages.LayoutPage"
         Padding="28">
+	<Border.Resources>
+		<!-- The panes' fills, and how a pane's label reads -->
+		<SolidColorBrush x:Key="Violet" Color="#3C3250" />
+		<SolidColorBrush x:Key="Teal" Color="#324650" />
+		<SolidColorBrush x:Key="Rust" Color="#463737" />
+		<SolidColorBrush x:Key="Slate" Color="#373C4B" />
+		<Style x:Key="CellLabel" TargetType="TextBlock">
+			<Setter Property="FontSize" Value="13" />
+			<Setter Property="Foreground" Value="#ECEFF6" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+	</Border.Resources>
 	<StackPanel Orientation="Vertical">
 		<TextBlock Text="Layout" Style="{x:Static local:GalleryTheme.PageTitle}" />
 		<TextBlock Text="Panels measure, then arrange, in two passes that allocate nothing."
@@ -26,22 +40,53 @@
 					<RowDefinition Height="40" />
 					<RowDefinition Height="40" />
 				</Grid.RowDefinitions>
-				<Border Grid.Row="0" Grid.Column="0" Background="#3C3250" CornerRadius="4" Margin="3">
-					<TextBlock Text="Pixel(120)" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				<Border Grid.Row="0" Grid.Column="0" Background="{StaticResource Violet}" CornerRadius="4" Margin="3">
+					<TextBlock Text="Pixel(120)" Style="{StaticResource CellLabel}" />
 				</Border>
-				<Border Grid.Row="0" Grid.Column="1" Background="#324650" CornerRadius="4" Margin="3">
-					<TextBlock Text="Star" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				<Border Grid.Row="0" Grid.Column="1" Background="{StaticResource Teal}" CornerRadius="4" Margin="3">
+					<TextBlock Text="Star" Style="{StaticResource CellLabel}" />
 				</Border>
-				<Border Grid.Row="0" Grid.Column="2" Background="#324650" CornerRadius="4" Margin="3">
-					<TextBlock Text="Star" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				<Border Grid.Row="0" Grid.Column="2" Background="{StaticResource Teal}" CornerRadius="4" Margin="3">
+					<TextBlock Text="Star" Style="{StaticResource CellLabel}" />
 				</Border>
-				<Border Grid.Row="1" Grid.Column="0" Background="#463737" CornerRadius="4" Margin="3">
-					<TextBlock Text="Row 2" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				<Border Grid.Row="1" Grid.Column="0" Background="{StaticResource Rust}" CornerRadius="4" Margin="3">
+					<TextBlock Text="Row 2" Style="{StaticResource CellLabel}" />
 				</Border>
-				<Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Background="#373C4B" CornerRadius="4" Margin="3">
-					<TextBlock Text="spans 2 cols" FontSize="13" Foreground="#ECEFF6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+				<Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Background="{StaticResource Slate}" CornerRadius="4" Margin="3">
+					<TextBlock Text="spans 2 cols" Style="{StaticResource CellLabel}" />
 				</Border>
 			</Grid>
+		</Border>
+
+		<!-- Each splitter sits in a thin track of its own and resizes the tracks either side of it -->
+		<TextBlock Text="GridSplitter" Style="{x:Static local:GalleryTheme.SectionHeading}" />
+		<Border Style="{x:Static local:GalleryTheme.Card}">
+			<StackPanel Orientation="Vertical">
+				<TextBlock Text="Drag the bars between the panes." Style="{x:Static local:GalleryTheme.Note}" Margin="0,0,0,8" />
+				<Grid Height="150">
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="180" />
+						<ColumnDefinition Width="8" />
+						<ColumnDefinition Width="*" />
+					</Grid.ColumnDefinitions>
+					<Grid.RowDefinitions>
+						<RowDefinition Height="*" />
+						<RowDefinition Height="8" />
+						<RowDefinition Height="50" />
+					</Grid.RowDefinitions>
+					<Border Grid.Row="0" Grid.Column="0" Grid.RowSpan="3" Background="{StaticResource Violet}" CornerRadius="4">
+						<TextBlock Text="Library" Style="{StaticResource CellLabel}" />
+					</Border>
+					<suisei:GridSplitter Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" ResizeDirection="Columns" MinimumTrackSize="80" />
+					<Border Grid.Row="0" Grid.Column="2" Background="{StaticResource Teal}" CornerRadius="4">
+						<TextBlock Text="Lanes" Style="{StaticResource CellLabel}" />
+					</Border>
+					<suisei:GridSplitter Grid.Row="1" Grid.Column="2" ResizeDirection="Rows" />
+					<Border Grid.Row="2" Grid.Column="2" Background="{StaticResource Rust}" CornerRadius="4">
+						<TextBlock Text="Part" Style="{StaticResource CellLabel}" />
+					</Border>
+				</Grid>
+			</StackPanel>
 		</Border>
 	</StackPanel>
 </Border>

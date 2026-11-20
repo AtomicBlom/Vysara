@@ -164,6 +164,12 @@ internal sealed class UIDrawList
 	public void AddRect(in Rect local, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind, Vector4 @params, in Rect clip, int slot = 0) =>
 		AddQuad(local, Vector2.Zero, Vector2.One, matrix, color, kind, @params, clip, slot);
 
+	/// <summary>As <see cref="AddRect(in Rect, in Matrix3x2, PremultipliedHdrColor, UIPrimKind, Vector4, in Rect, int)"/>, with the
+	/// corners' uv given: a quad wider than what it shades, its uv running past 0..1 by as much.</summary>
+	public void AddRect(in Rect local, Vector2 uv0, Vector2 uv1, in Matrix3x2 matrix, PremultipliedHdrColor color, UIPrimKind kind,
+		Vector4 @params, in Rect clip) =>
+		AddQuad(local, uv0, uv1, matrix, color, kind, @params, clip, 0);
+
 	/// <summary>Append a tinted image quad sampling the part of <paramref name="source"/> from <paramref name="uv0"/> to
 	/// <paramref name="uv1"/>, through the source's slot in this list's slot table.</summary>
 	public void AddImage(in Rect local, Vector2 uv0, Vector2 uv1, in Matrix3x2 matrix, PremultipliedHdrColor tint, TextureSource source, in Rect clip)

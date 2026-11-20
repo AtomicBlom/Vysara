@@ -20,6 +20,17 @@ public sealed class Button : ButtonBase
 	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(40, 40, 55));
 	// The built-in look's padding, which Padding replaces where it is set.
 	internal static readonly Thickness BuiltInPadding = new(10f, 5f, 10f, 5f);
+	public static readonly DependencyProperty<Button, Primitives.FlyoutBase?> FlyoutProperty =
+		DependencyProperty.Register(nameof(Flyout), new PropertyMetadata<Button, Primitives.FlyoutBase?>());
+
+	/// <summary>A flyout the button opens against itself when clicked, as WinUI's <c>Button.Flyout</c>.</summary>
+	public Primitives.FlyoutBase? Flyout { get => GetValue(FlyoutProperty); set => SetValue(FlyoutProperty, value); }
+
+	protected override void OnClick()
+	{
+		base.OnClick();
+		Flyout?.ShowAt(this);
+	}
 
 	public Button()
 	{

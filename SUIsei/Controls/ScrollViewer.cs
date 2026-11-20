@@ -204,6 +204,13 @@ public sealed class ScrollViewer : FrameworkElement
 
 	public void ScrollToVerticalOffset(float offset) => SetVerticalOffset(offset);
 
+	/// <summary>
+	/// Raised as the offsets move by input (the wheel, a thumb dragged, a key, a pan) or by <see cref="ScrollToVerticalOffset"/>
+	/// and <see cref="ScrollToHorizontalOffset"/>, as WinUI's. Not raised for what layout does to them (held inside a shrunk
+	/// extent, a focused element brought into view), which runs no app code; read the offsets for those.
+	/// </summary>
+	public event EventHandler<ScrollViewerViewChangedEventArgs>? ViewChanged;
+
 	public void ScrollToHorizontalOffset(float offset) => SetHorizontalOffset(offset);
 
 	// A wheel or a finger over a gap between the items still scrolls them: the viewer is hit across its viewport, not only
@@ -223,6 +230,7 @@ public sealed class ScrollViewer : FrameworkElement
 			return;
 		VerticalOffset = clamped;
 		InvalidateArrange();
+		RaiseViewChanged();
 	}
 
 	private void SetHorizontalOffset(float offset)
@@ -232,6 +240,28 @@ public sealed class ScrollViewer : FrameworkElement
 			return;
 		HorizontalOffset = clamped;
 		InvalidateArrange();
+		RaiseViewChanged();
+	}
+
+	// Set while one input moves both offsets (a diagonal wheel or pan), so ViewChanged is raised once for the move
+	private bool _batchingView;
+	private bool _viewMoved;
+
+	private void RaiseViewChanged()
+	{
+		if (_batchingView)
+			_viewMoved = true;
+		else
+			ViewChanged?.Invoke(this, ScrollViewerViewChangedEventArgs.Final);
+	}
+
+	private void BeginViewChange() => (_batchingView, _viewMoved) = (true, false);
+
+	private void EndViewChange()
+	{
+		_batchingView = false;
+		if (_viewMoved)
+			ViewChanged?.Invoke(this, ScrollViewerViewChangedEventArgs.Final);
 	}
 
 	internal override IReadOnlyList<UIElement> VisualChildren => _visualChildren;
@@ -491,6 +521,7 @@ public sealed class ScrollViewer : FrameworkElement
 			return;
 		var amount = Scrolling.GetWheelScrollAmount(this);
 		var (horizontal, vertical) = (HorizontalOffset, VerticalOffset);
+		BeginViewChange();
 		if (pointer.Wheel.X != 0f)
 			SetHorizontalOffset(HorizontalOffset - pointer.Wheel.X * amount);
 		if (pointer.Wheel.Y != 0f)
@@ -501,6 +532,7 @@ public sealed class ScrollViewer : FrameworkElement
 			else
 				SetHorizontalOffset(HorizontalOffset - pointer.Wheel.Y * amount);
 		}
+		EndViewChange();
 		if (HorizontalOffset != horizontal || VerticalOffset != vertical)
 			e.Handled = true;
 	}
@@ -580,10 +612,12 @@ public sealed class ScrollViewer : FrameworkElement
 			_panStartOffset = VerticalOffset;
 			CapturePointer(_panPointer);
 		}
+		BeginViewChange();
 		if (horizontally)
 			SetHorizontalOffset(_panStartHOffset + (_panStartX - position.X));
 		if (vertically)
 			SetVerticalOffset(_panStartOffset + (_panStartY - position.Y));
+		EndViewChange();
 		e.Handled = true;
 	}
 

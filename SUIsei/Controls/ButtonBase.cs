@@ -116,17 +116,25 @@ public abstract class ButtonBase : ContentControl
 		GoToCommonState(useTransitions: true);
 	}
 
+	// A primary press presses the button, handled as WinUI's buttons handle it, so what the button sits in doesn't act on
+	// it too; a right or middle press is left to what's around it (a context menu).
 	private void OnPointerPressed(object sender, RoutedEventArgs e)
 	{
+		if (e is PointerRoutedEventArgs { IsSecondaryButton: true })
+			return;
 		_isPressed = true;
+		e.Handled = true;
 		GoToCommonState(useTransitions: true);
 	}
 
 	private void OnPointerReleased(object sender, RoutedEventArgs e)
 	{
+		if (e is PointerRoutedEventArgs { IsSecondaryButton: true })
+			return;
 		if (_isPressed)
 		{
 			_isPressed = false;
+			e.Handled = true;
 			OnClick();
 		}
 		GoToCommonState(useTransitions: true);
@@ -135,6 +143,9 @@ public abstract class ButtonBase : ContentControl
 	private void OnKeyDown(object sender, RoutedEventArgs e)
 	{
 		if (e is KeyRoutedEventArgs key && key.Key is VirtualKey.Enter or VirtualKey.Space or VirtualKey.GamepadA)
+		{
+			e.Handled = true;
 			OnClick();
+		}
 	}
 }

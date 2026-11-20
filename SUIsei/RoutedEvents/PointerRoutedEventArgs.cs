@@ -22,6 +22,15 @@ public sealed class PointerRoutedEventArgs : RoutedEventArgs
 	/// y vertical); zero otherwise.</summary>
 	public Vector2 Wheel { get; internal set; }
 
+	/// <summary>The button edge this event carries (<see cref="PointerUpdateKind.None"/> for a move, a wheel turn, an enter or
+	/// an exit), as WinUI's <c>PointerPointProperties.PointerUpdateKind</c>.</summary>
+	internal PointerUpdateKind UpdateKind { get; set; }
+
+	/// <summary>Whether this is a press or release of a button other than the primary one (a right or middle click), which
+	/// the built-in controls leave alone, as WinUI's buttons do.</summary>
+	internal bool IsSecondaryButton => UpdateKind is PointerUpdateKind.RightButtonPressed or PointerUpdateKind.RightButtonReleased
+		or PointerUpdateKind.MiddleButtonPressed or PointerUpdateKind.MiddleButtonReleased;
+
 	/// <summary>
 	/// The pointer with its position in <paramref name="relativeTo"/>'s local space (DIPs), or in its root's DIP space
 	/// when null, as WinUI's <c>GetCurrentPoint</c>. It maps through the same composed visual transforms hit-testing

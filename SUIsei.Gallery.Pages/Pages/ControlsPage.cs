@@ -65,7 +65,7 @@ internal sealed partial class ControlsPage : IGalleryView, INotifyPropertyChange
 		reset.Click += OnReset;
 		flyout.Items.Add(increment);
 		flyout.Items.Add(reset);
-		flyout.ShowAt((UIElement)sender);
+		flyout.ShowAt((FrameworkElement)sender);
 	}
 
 	private void Increment()

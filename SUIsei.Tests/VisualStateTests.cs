@@ -357,22 +357,26 @@ public sealed class VisualStateTests
 		float.IsNaN(control.Width).ShouldBeTrue(); // and released when left
 	}
 
-	/// <summary>A control whose own groups carry its states, with no template, as a ListViewItem's built-in selection does,
-	/// leaves them when it is given a template, whose groups take over.</summary>
+	/// <summary>A list item shows its states through its built-in template's presenter, so a template of the app's own
+	/// replaces them with the template: the item's own background shows, and its selection no longer paints.</summary>
 	[Test]
-	public void Giving_a_template_to_a_control_showing_its_own_states_leaves_them()
+	public void Giving_a_list_item_a_template_replaces_its_presenter_and_its_states()
 	{
 		var host = new UIHost();
 		var item = new ListViewItem { Content = "Row", Width = 20, Height = 20 };
 		host.CreateRoot(UILayer.Default).Root.Content = item;
 		item.SetSelected(true);
 		host.Tick(0.5, 0f, Surface);
-		item.Background.ShouldNotBeNull(); // the selection brush, held by the item's own Selected state
+		var presenter = item.GetTemplateRoot().ShouldBeOfType<SUIsei.Controls.Primitives.ListViewItemPresenter>();
+		presenter.Background.ShouldBeSameAs(presenter.SelectedBackground);
 
-		item.Template = HoldingTemplate(out _);
+		item.Template = HoldingTemplate(out var part);
 		host.Tick(0.016, 0.5f, Surface);
 
-		item.Background.ShouldBeNull();
+		item.GetTemplateRoot().ShouldBeSameAs(part());
+		part().Background.ShouldBeOfType<SolidColorBrush>().Color.A.ShouldBe(0f); // the item's own clear background
+		item.IsSelected = false;
+		item.IsSelected = true; // nothing left to show it on, and nothing throws
 	}
 
 	/// <summary>
