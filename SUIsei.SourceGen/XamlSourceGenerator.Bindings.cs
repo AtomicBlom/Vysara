@@ -34,7 +34,7 @@ partial class XamlSourceGenerator
 		}
 		if (prop.AttachedSetter is not null && spec.TwoWay)
 		{
-			gen.Report(OutsideSubset, attr, $"Mode=TwoWay on the attached property {prop.Name}", " (an attached property has no change event to write back from; bind it OneWay)");
+			gen.Report(TwoWayNoWriteBack, attr, prop.Name, "an attached property has no change event to write back from; bind it OneWay");
 			return;
 		}
 
@@ -50,6 +50,8 @@ partial class XamlSourceGenerator
 			return;
 		bind.FallbackValue = fallbackCode;
 		bind.TargetNullValue = targetNullCode;
+		if (scope.IsControlTemplate)
+			ResolveTemplateRung(gen, attr, targetType, prop, bind);
 
 		if (!scope.IsTemplate)
 			gen.Bindings.Add(bind);
@@ -279,7 +281,40 @@ partial class XamlSourceGenerator
 	// The statement that gives `target` the binding's value: its property assigned, or an attached property's owner's
 	// Set<Prop>(target, value) called.
 	private static string Set(Bind b, string target, string value) =>
-		b.AttachedSetter is { } setter ? $"{setter}({target}, {value});" : $"{target}.{b.TargetProp} = {value};";
+		b.TemplateDp is { } dp ? $"global::SUIsei.Generated.TemplateValues.Set({target}, {dp}, {(b.TemplateCast is { } cast ? $"({cast})({value})" : value)});"
+		: b.AttachedSetter is { } setter ? $"{setter}({target}, {value});"
+		: $"{target}.{b.TargetProp} = {value};";
+
+	// A ControlTemplate's {x:Bind} gives its part a value as the template's other values do: on the part's Template rung,
+	// through the dependency property behind the property (an attached one's owner's), converted where its type differs
+	// implicitly. A plain CLR property with no dependency property has no levels and is set through its setter; any other
+	// value that can't reach the Template rung is set as the part's own and reported (SUISEI027), as a plain value is.
+	private static void ResolveTemplateRung(Gen gen, XAttribute attr, INamedTypeSymbol targetType, BindTarget prop, Bind bind)
+	{
+		// An attached property's name is Owner.Prop in the markup; its dependency property is named after its setter's Set<Prop>
+		var (owner, name) = prop.AttachedSetter is not null && prop.Member is IMethodSymbol setter
+			? (setter.ContainingType, setter.Name.Substring("Set".Length))
+			: (targetType, prop.Name);
+		var found = FindDependencyProperty(owner, name);
+		if (found is null && prop.AttachedSetter is null)
+			return;
+		if (found is { } dp && DependencyValueType(dp) is { } valueType)
+		{
+			if (SymbolEqualityComparer.Default.Equals(valueType, prop.Type))
+			{
+				bind.TemplateDp = $"{Fq(dp.ContainingType!)}.{dp.Name}";
+				return;
+			}
+			if (prop.AttachedSetter is null && gen.Compilation.ClassifyConversion(prop.Type, valueType).IsImplicit)
+			{
+				bind.TemplateDp = $"{Fq(dp.ContainingType!)}.{dp.Name}";
+				bind.TemplateCast = Fq(valueType);
+				return;
+			}
+		}
+		gen.Report(TemplateValueOnLocal, attr, $"{owner.Name}.{name}",
+			found is null ? $"{owner.Name} declares no dependency property {name}Property" : $"its value's type, {prop.Type.ToDisplayString()}, does not convert implicitly to its dependency property's");
+	}
 
 	// A function binding's push: each argument read from `root`; where an argument's path passes through an object that
 	// may be null, the call waits for it, and the target takes the FallbackValue meanwhile (or keeps what it shows), as
