@@ -55,6 +55,42 @@ public sealed class ToolTipTests
 	}
 
 	[Test]
+	public void Long_text_wraps_inside_it()
+	{
+		var (host, button, _) = Page();
+		ToolTipService.SetToolTip(button, string.Join(' ', Enumerable.Repeat("A bar to each line, one chord or two sharing it.", 6)));
+		host.QueuePointer(PointerInput.Move(new Vector2(80f, 30f)));
+		Rest(host, 1.0);
+
+		var tip = host.ToolTips.Showing!;
+		tip.LayoutRect.Width.ShouldBeLessThanOrEqualTo(ToolTip.MaxWidthDefault);
+		var text = Text(tip);
+		text.TextWrapping.ShouldBe(TextWrapping.Wrap);
+		text.LayoutRect.Width.ShouldBeLessThanOrEqualTo(tip.LayoutRect.Width);
+		text.LayoutRect.Height.ShouldBeGreaterThan(text.FontSize * 2f);
+	}
+
+	private static TextBlock Text(UIElement element)
+	{
+		if (element is TextBlock text)
+			return text;
+		foreach (var child in element.VisualChildren)
+			if (Find(child) is { } found)
+				return found;
+		throw new InvalidOperationException("No text in the tooltip.");
+
+		static TextBlock? Find(UIElement e)
+		{
+			if (e is TextBlock text)
+				return text;
+			foreach (var child in e.VisualChildren)
+				if (Find(child) is { } found)
+					return found;
+			return null;
+		}
+	}
+
+	[Test]
 	public void It_opens_below_its_element_and_above_where_there_is_no_room()
 	{
 		var (host, button, _) = Page();

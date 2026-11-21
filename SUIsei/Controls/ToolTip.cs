@@ -43,7 +43,10 @@ public sealed class ToolTip : ContentControl
 			host.RegisterTemplateBinding(BackgroundProperty, border, Border.BackgroundProperty, value => value ?? background);
 			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty, value => value ?? edge);
 			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
-			host.RegisterContentTemplateBinding(content => presenter.Content = content);
+			// Text wraps inside the tooltip's width rather than running out past its edge
+			host.RegisterContentTemplateBinding(content => presenter.Content = content is string text
+				? new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap }
+				: content);
 			return border;
 		},
 	};

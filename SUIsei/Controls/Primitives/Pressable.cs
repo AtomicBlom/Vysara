@@ -7,34 +7,44 @@ namespace SUIsei.Controls.Primitives;
 /// The pointer and key handling a control that acts on a press takes from <see cref="ButtonBase"/> without being one (a
 /// toggle switch, an expander's header): whether the pointer is over it and pressed on it, and the press released over
 /// it, Enter, Space or the pad's A, each acting once. The control shows <see cref="IsPointerOver"/> and
-/// <see cref="IsPressed"/> in its <c>CommonStates</c>; <paramref name="changed"/> is told as they move.
+/// <see cref="IsPressed"/> in its <c>CommonStates</c>; <c>changed</c> is told as they move. A control that
+/// hosts other controls (an expander's content) passes <c>presses</c>, which says whether an element the
+/// pointer is over is part of what presses it; and a key acts only when the control itself has focus, not something in it.
 /// </summary>
 internal sealed class Pressable
 {
 	private readonly Action _act;
 	private readonly Action _changed;
 
-	public Pressable(UIElement owner, Action act, Action changed)
+	public Pressable(UIElement owner, Action act, Action changed, Func<object?, bool>? presses = null)
 	{
 		_act = act;
 		_changed = changed;
-		owner.AddHandler(UIElement.PointerEnteredEvent, (_, _) => Set(over: true, pressed: IsPressed));
+		presses ??= static _ => true;
+		owner.AddHandler(UIElement.PointerEnteredEvent, (_, e) => Set(over: presses(e.OriginalSource), pressed: IsPressed));
+		owner.AddHandler(UIElement.PointerMovedEvent, (_, e) =>
+		{
+			var over = presses(e.OriginalSource);
+			Set(over, pressed: IsPressed && over);
+		});
 		owner.AddHandler(UIElement.PointerExitedEvent, (_, _) => Set(over: false, pressed: false));
 		owner.AddHandler(UIElement.PointerPressedEvent, (_, e) =>
 		{
-			Set(IsPointerOver, pressed: true);
+			if (!presses(e.OriginalSource))
+				return;
+			Set(over: true, pressed: true);
 			e.Handled = true;
 		});
-		owner.AddHandler(UIElement.PointerReleasedEvent, (_, _) =>
+		owner.AddHandler(UIElement.PointerReleasedEvent, (_, e) =>
 		{
 			var was = IsPressed;
 			Set(IsPointerOver, pressed: false);
-			if (was)
+			if (was && presses(e.OriginalSource))
 				_act();
 		});
 		owner.AddHandler(UIElement.KeyDownEvent, (_, e) =>
 		{
-			if (e is KeyRoutedEventArgs { Key: VirtualKey.Enter or VirtualKey.Space or VirtualKey.GamepadA })
+			if (ReferenceEquals(e.OriginalSource, owner) && e is KeyRoutedEventArgs { Key: VirtualKey.Enter or VirtualKey.Space or VirtualKey.GamepadA })
 			{
 				_act();
 				e.Handled = true;

@@ -7,7 +7,7 @@ namespace SUIsei.Controls;
 /// <summary>
 /// A header that opens and closes the content under it, as WinUI's <c>Expander</c>: the header row (its
 /// <see cref="Header"/> and a chevron, down while closed and up while open) is clicked, or Enter, Space or the pad's A
-/// pressed on it, to flip <see cref="IsExpanded"/>, which shows or collapses <see cref="ContentControl.Content"/> below.
+/// pressed on it, to flip <see cref="IsExpanded"/> (a press on the content leaves it as it is), which shows or collapses <see cref="ContentControl.Content"/> below.
 /// <see cref="Expanding"/> and <see cref="Collapsed"/> say which way it went; <see cref="IsExpandedChanged"/> lets it bind
 /// TwoWay. The header takes <c>ExpanderHeaderBackground</c> and the content <c>ExpanderContentBackground</c>.
 /// </summary>
@@ -26,12 +26,13 @@ public sealed class Expander : ContentControl
 	private Border? _content;
 	private Grid? _chevrons;
 	private ContentPresenter? _header;
+	private Border? _headerRow;
 
 	public Expander()
 	{
 		SetBuiltInValue(TemplateProperty, DefaultTemplate);
 		InheritedText.GiveBuiltInLook(this);
-		_press = new Pressable(this, () => IsExpanded = !IsExpanded, () => GoToCommonState(useTransitions: true));
+		_press = new Pressable(this, () => IsExpanded = !IsExpanded, () => GoToCommonState(useTransitions: true), InHeader);
 	}
 
 	/// <summary>Whether the content shows.</summary>
@@ -52,6 +53,17 @@ public sealed class Expander : ContentControl
 	private protected override string CommonVisualState => _press.State(IsEnabled);
 
 	private protected override void OnIsEnabledChanged(bool isEnabled) => _press.Reset();
+
+	// Only the header row opens and closes it: a press on its content (a text box, a list) is that content's own
+	private bool InHeader(object? source)
+	{
+		for (var element = source as UIElement; element is not null && !ReferenceEquals(element, this); element = element.Parent)
+		{
+			if (ReferenceEquals(element, _headerRow))
+				return true;
+		}
+		return false;
+	}
 
 	private void OnIsExpandedChanged()
 	{
@@ -106,7 +118,7 @@ public sealed class Expander : ContentControl
 			self.RegisterTemplateBinding(ForegroundProperty, header, ContentPresenter.ForegroundProperty);
 			column.Children.Add(headerRow);
 			column.Children.Add(content);
-			(self._content, self._chevrons, self._header) = (content, chevrons, header);
+			(self._content, self._chevrons, self._header, self._headerRow) = (content, chevrons, header, headerRow);
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
 			common.States.Add(new VisualState { Name = "Normal" });
