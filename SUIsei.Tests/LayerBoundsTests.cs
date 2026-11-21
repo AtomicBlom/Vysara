@@ -139,10 +139,11 @@ public sealed class LayerBoundsTests
 		raster.Render(draw);
 		raster.Render(draw);
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < 5; i++)
-			raster.Render(draw);
-		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0);
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 5; i++)
+				raster.Render(draw);
+		});
 		raster.LayersComposited.ShouldBe(1);
 	}
 

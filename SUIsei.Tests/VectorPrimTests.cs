@@ -343,10 +343,11 @@ public sealed class VectorPrimTests
 		for (var i = 0; i < 8; i++)
 			Frame(i);
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < 200; i++)
-			Frame(i);
-		(GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0);
+		Allocations.ShouldAllocateNothing(() =>
+		{
+			for (var i = 0; i < 200; i++)
+				Frame(i);
+		});
 
 		void Frame(int i)
 		{

@@ -239,8 +239,6 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		public ITypeSymbol Leaf => ResultTypes[ResultTypes.Length - 1];
 	}
 
-	// One resolved x:Bind binding: a path, or a static function of paths; the property it sets; how its value converts on
-	// the way in (a bool shown as a Visibility) and, for TwoWay, on the way back.
 	// What an {x:Bind} sets: a property of the element, or an attached property through its owner's static setter. Member
 	// is the property, or the setter, for diagnostics that name it.
 	private sealed record BindTarget(string Name, ITypeSymbol Type, ISymbol Member, string? AttachedSetter)
@@ -248,12 +246,18 @@ public sealed partial class XamlSourceGenerator : IIncrementalGenerator
 		public static BindTarget Of(IPropertySymbol property) => new(property.Name, property.Type, property, null);
 	}
 
+	// One resolved x:Bind binding: a path, or a static function of paths; the property it sets; how its value converts on
+	// the way in (a bool shown as a Visibility) and, for TwoWay, on the way back.
 	private sealed class Bind
 	{
 		public string TargetVar { get; set; } = "";
 		public string TargetProp { get; set; } = "";
 		// For an attached property, the owner's static Set<Prop>, fully qualified, which the value is set through.
 		public string? AttachedSetter { get; set; }
+		// In a ControlTemplate, the dependency property the value goes on the part's Template rung of, fully qualified, and
+		// the type it is converted to on the way, where that differs from the property's.
+		public string? TemplateDp { get; set; }
+		public string? TemplateCast { get; set; }
 		// The target element's type, which a template's helper keeps it in a field of.
 		public INamedTypeSymbol TargetElementType { get; set; } = null!;
 		public BindPath? Path { get; set; }

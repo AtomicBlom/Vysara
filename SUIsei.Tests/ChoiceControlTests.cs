@@ -68,14 +68,13 @@ public sealed class ChoiceControlTests
 	{
 		var a = new RadioButton { Content = "a" };
 		var b = new RadioButton { Content = "b" };
-		var host = Hosted(Top(a, b));
+		Hosted(Top(a, b));
 
 		a.PerformClick();
 		b.PerformClick();
 		(a.IsChecked, b.IsChecked).ShouldBe((false, true));
 		b.PerformClick();
 		b.IsChecked.ShouldBe(true);   // a click never unchecks
-		host.ShouldNotBeNull();
 	}
 
 	[Test]
@@ -180,14 +179,13 @@ public sealed class ChoiceControlTests
 	public void An_info_bar_closes_from_its_button()
 	{
 		var bar = new InfoBar { IsOpen = true, Title = "Build failed", Message = "Songs.cs(4): expected ;", Severity = InfoBarSeverity.Error };
-		var host = Hosted(Top(bar));
+		Hosted(Top(bar));
 		var closed = 0;
 		bar.Closed += (_, _) => closed++;
 
 		Children<Button>(bar)[0].PerformClick();
 		bar.IsOpen.ShouldBeFalse();
 		closed.ShouldBe(1);
-		host.ShouldNotBeNull();
 	}
 
 	[Test]

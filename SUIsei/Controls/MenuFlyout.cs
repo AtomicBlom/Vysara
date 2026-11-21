@@ -24,9 +24,6 @@ public sealed class MenuFlyout : FlyoutBase
 	// A menu sits against its target, as a menu bar's drops from the bar
 	protected override float Gap => 0f;
 
-	/// <summary>Open the menu anchored under <paramref name="target"/> (which must be attached to a live root).</summary>
-	public void ShowAt(UIElement target) => ShowAt(target, null);
-
 	protected override FrameworkElement CreatePresenter()
 	{
 		var panel = new StackPanel { Orientation = Orientation.Vertical };

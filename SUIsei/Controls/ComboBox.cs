@@ -13,10 +13,13 @@ namespace SUIsei.Controls;
 /// <see cref="ItemTemplate"/>, or as text; <see cref="PlaceholderText"/> while there is none) and a chevron, under an
 /// optional <see cref="Header"/>. A click, Enter, Space, F4, Alt+Down or the pad's A opens the list of
 /// <see cref="ItemsSource"/> (or <see cref="Items"/>) below it, at least as wide as the box, the choice focused; a click,
-/// Enter or Space there chooses, Escape or a press outside closes it. Closed, Up and Down step the choice.
-/// <see cref="SelectedIndex"/> and <see cref="SelectedItem"/> are dependency properties with change events, so they bind
-/// TwoWay. The box takes the <c>ComboBoxBackground</c>, <c>ComboBoxBackgroundPointerOver</c> and
-/// <c>ComboBoxBackgroundPressed</c> resources.
+/// Enter or Space there chooses, Escape or a press outside closes it. <see cref="IsDropDownOpen"/> opens and closes it
+/// from code. Closed, Up and Down step the choice. <see cref="SelectedIndex"/> and <see cref="SelectedItem"/> are
+/// dependency properties with change events, so they bind TwoWay, and the choice follows an items source that changes
+/// (<see cref="System.Collections.Specialized.INotifyCollectionChanged"/>), kept where its item is still there. The box
+/// takes the <c>ComboBoxBackground</c>, <c>ComboBoxBackgroundPointerOver</c>, <c>ComboBoxBackgroundPressed</c> and
+/// <c>ComboBoxPlaceHolderForeground</c> resources, and the list <c>ComboBoxDropDownBackground</c> and
+/// <c>ComboBoxDropDownBorderBrush</c>.
 /// </summary>
 public sealed class ComboBox : Control
 {
@@ -34,18 +37,42 @@ public sealed class ComboBox : Control
 		DependencyProperty.Register(nameof(SelectedItem),
 			new PropertyMetadata<ComboBox, object?> { PropertyChanged = static (c, _, _) => c.OnSelectedItemChanged() });
 
+	public static readonly DependencyProperty<ComboBox, IEnumerable?> ItemsSourceProperty =
+		DependencyProperty.Register(nameof(ItemsSource),
+			new PropertyMetadata<ComboBox, IEnumerable?> { PropertyChanged = static (c, _, source) => c.OnItemsSourceChanged(source) });
+
+	public static readonly DependencyProperty<ComboBox, DataTemplate?> ItemTemplateProperty =
+		DependencyProperty.Register(nameof(ItemTemplate),
+			new PropertyMetadata<ComboBox, DataTemplate?> { PropertyChanged = static (c, _, _) => c.ShowChoice() });
+
+	public static readonly DependencyProperty<ComboBox, string?> PlaceholderTextProperty =
+		DependencyProperty.Register(nameof(PlaceholderText),
+			new PropertyMetadata<ComboBox, string?> { PropertyChanged = static (c, _, _) => c.ShowChoice() });
+
+	public static readonly DependencyProperty<ComboBox, object?> HeaderProperty =
+		DependencyProperty.Register(nameof(Header),
+			new PropertyMetadata<ComboBox, object?> { PropertyChanged = static (c, _, _) => c.ShowChoice() });
+
+	public static readonly DependencyProperty<ComboBox, bool> IsDropDownOpenProperty =
+		DependencyProperty.Register(nameof(IsDropDownOpen),
+			new PropertyMetadata<ComboBox, bool> { PropertyChanged = static (c, _, open) => c.OnIsDropDownOpenChanged(open) });
+
 	private readonly Pressable _press;
 	private readonly DropDown _dropDown;
+	private readonly SourceSubscription _source;
 	private ContentPresenter? _shown;
+	private TextBlock? _placeholder;
 	private ContentPresenter? _header;
 	private bool _syncing;
+	private bool _syncingOpen;
 
 	public ComboBox()
 	{
 		SetBuiltInValue(TemplateProperty, DefaultTemplate);
 		InheritedText.GiveBuiltInLook(this);
 		_dropDown = new DropDown(this);
-		_press = new Pressable(this, Open, () => GoToCommonState(useTransitions: true));
+		_source = new SourceSubscription((_, _) => Reconcile(), Reconcile);
+		_press = new Pressable(this, () => IsDropDownOpen = true, () => GoToCommonState(useTransitions: true));
 		AddHandler(KeyDownEvent, OnKeyDown);
 		Items.CollectionChanged += (_, _) => Reconcile();
 	}
@@ -54,19 +81,19 @@ public sealed class ComboBox : Control
 	public ObservableCollection<object?> Items { get; } = [];
 
 	/// <summary>The choices; replaces <see cref="Items"/> while set.</summary>
-	public IEnumerable? ItemsSource { get; set { field = value; Reconcile(); } }
+	public IEnumerable? ItemsSource { get => GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
 
 	/// <summary>How each choice is shown, in the box and the list; null shows it as text.</summary>
-	public DataTemplate? ItemTemplate { get; set { field = value; ShowChoice(); } }
+	public DataTemplate? ItemTemplate { get => GetValue(ItemTemplateProperty); set => SetValue(ItemTemplateProperty, value); }
 
 	/// <summary>Shown in the box while nothing is chosen.</summary>
-	public string? PlaceholderText { get; set { field = value; ShowChoice(); } }
+	public string? PlaceholderText { get => GetValue(PlaceholderTextProperty); set => SetValue(PlaceholderTextProperty, value); }
 
 	/// <summary>Shown above the box, or nothing where null.</summary>
-	public object? Header { get; set { field = value; ShowChoice(); } }
+	public object? Header { get => GetValue(HeaderProperty); set => SetValue(HeaderProperty, value); }
 
-	/// <summary>Whether the list is open.</summary>
-	public bool IsDropDownOpen => _dropDown.IsOpen;
+	/// <summary>Whether the list is open; set it to open or close the list.</summary>
+	public bool IsDropDownOpen { get => GetValue(IsDropDownOpenProperty); set => SetValue(IsDropDownOpenProperty, value); }
 
 	/// <summary>The index of the choice, or -1.</summary>
 	public int SelectedIndex { get => GetValue(SelectedIndexProperty); set => SetValue(SelectedIndexProperty, value); }
@@ -94,22 +121,61 @@ public sealed class ComboBox : Control
 	private protected override void OnIsEnabledChanged(bool isEnabled)
 	{
 		_press.Reset();
-		_dropDown.Hide();
+		IsDropDownOpen = false;
+	}
+
+	private protected override void OnLiveTreeChanged(bool attached)
+	{
+		base.OnLiveTreeChanged(attached);
+		_source.LiveTreeChanged(attached);
+		if (!attached)
+			IsDropDownOpen = false;
 	}
 
 	internal List<object?> Choices() => (ItemsSource ?? Items).Cast<object?>().ToList();
 
-	/// <summary>Opens the list.</summary>
-	public void Open()
+	private void OnItemsSourceChanged(IEnumerable? source)
 	{
-		if (!IsEnabled || _dropDown.IsOpen)
+		_source.Source = source;
+		Reconcile();
+	}
+
+	// Opened only while enabled and in a tree: a list that can't open puts the property back
+	private void OnIsDropDownOpenChanged(bool open)
+	{
+		if (_syncingOpen)
 			return;
-		_dropDown.ShowAt(this);
-		DropDownOpened?.Invoke(this, EventArgs.Empty);
+		if (open)
+		{
+			if (IsEnabled && !_dropDown.IsOpen)
+				_dropDown.ShowAt(this);
+			if (!_dropDown.IsOpen)
+			{
+				SetOpen(false);
+				return;
+			}
+			DropDownOpened?.Invoke(this, EventArgs.Empty);
+		}
+		else
+			_dropDown.Hide();
+	}
+
+	private void SetOpen(bool open)
+	{
+		_syncingOpen = true;
+		try
+		{
+			IsDropDownOpen = open;
+		}
+		finally
+		{
+			_syncingOpen = false;
+		}
 	}
 
 	internal void OnDropDownClosed()
 	{
+		SetOpen(false);
 		if (FocusManager.IsFocusable(this))
 			Focus(FocusState.Programmatic);
 		DropDownClosed?.Invoke(this, EventArgs.Empty);
@@ -122,10 +188,19 @@ public sealed class ComboBox : Control
 		Choose(SelectedItem is { } item ? choices.IndexOf(item) : -1, choices);
 	}
 
+	// An index set from outside that names no choice is taken as none, raising the change once, as -1
 	private void OnSelectedIndexChanged()
 	{
 		if (!_syncing)
-			Choose(SelectedIndex, Choices());
+		{
+			var choices = Choices();
+			if (SelectedIndex < -1 || SelectedIndex >= choices.Count)
+			{
+				SelectedIndex = -1;
+				return;
+			}
+			Choose(SelectedIndex, choices);
+		}
 		SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
 	}
 
@@ -163,16 +238,15 @@ public sealed class ComboBox : Control
 
 	private void ShowChoice()
 	{
-		if (_shown is null || _header is null)
+		if (_shown is null || _header is null || _placeholder is null)
 			return;
 		_header.Content = Header;
 		_header.Visibility = Header is null ? Visibility.Collapsed : Visibility.Visible;
-		if (SelectedIndex < 0)
-		{
-			_shown.Content = new TextBlock { Text = PlaceholderText ?? "", Foreground = Placeholder };
-			return;
-		}
-		_shown.Content = ItemTemplate is { } template ? template.Factory(SelectedItem) : SelectedItem?.ToString() ?? "";
+		var none = SelectedIndex < 0;
+		_placeholder.Text = PlaceholderText ?? "";
+		_placeholder.Visibility = none ? Visibility.Visible : Visibility.Collapsed;
+		_shown.Visibility = none ? Visibility.Collapsed : Visibility.Visible;
+		_shown.Content = none ? null : ItemTemplate is { } template ? template.Factory(SelectedItem) : SelectedItem?.ToString() ?? "";
 	}
 
 	private void OnKeyDown(object sender, RoutedEventArgs e)
@@ -184,7 +258,7 @@ public sealed class ComboBox : Control
 		{
 			case VirtualKey.F4:
 			case VirtualKey.Down when alt:
-				Open();
+				IsDropDownOpen = true;
 				break;
 			case VirtualKey.Up or VirtualKey.GamepadDPadUp:
 				Choose(Math.Max(0, SelectedIndex - 1), Choices());
@@ -219,17 +293,23 @@ public sealed class ComboBox : Control
 			grid.ColumnDefinitions.Add(GridLength.Star);
 			grid.ColumnDefinitions.Add(GridLength.Auto);
 			var shown = new ContentPresenter { VerticalAlignment = VerticalAlignment.Center };
+			var placeholder = new TextBlock
+			{
+				VerticalAlignment = VerticalAlignment.Center,
+				Foreground = self.ThemeResource("ComboBoxPlaceHolderForeground", Placeholder),
+			};
 			var chevron = Marks.ChevronDown(10f, ChevronStroke);
 			chevron.Margin = new Thickness(10f, 0f, 0f, 0f);
 			Grid.SetColumn(chevron, 1);
 			grid.Children.Add(shown);
+			grid.Children.Add(placeholder);
 			grid.Children.Add(chevron);
 			box.Child = grid;
 			self.RegisterTemplateBinding(ForegroundProperty, shown, ContentPresenter.ForegroundProperty);
 			self.RegisterTemplateBinding(ForegroundProperty, header, ContentPresenter.ForegroundProperty);
 			column.Children.Add(header);
 			column.Children.Add(box);
-			(self._shown, self._header) = (shown, header);
+			(self._shown, self._placeholder, self._header) = (shown, placeholder, header);
 
 			var common = new VisualStateGroup { Name = "CommonStates" };
 			common.States.Add(new VisualState { Name = "Normal" });
@@ -239,7 +319,10 @@ public sealed class ComboBox : Control
 			{
 				Name = "Disabled",
 				Storyboard = TemplateStates.Hold((box, Border.BackgroundProperty, TemplateStates.DisabledBackground),
-					(shown, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground)),
+					(shown, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground),
+					(placeholder, TextBlock.ForegroundProperty, TemplateStates.DisabledForeground),
+					(header, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground),
+					(chevron, Shapes.Shape.StrokeProperty, TemplateStates.DisabledForeground)),
 			});
 			VisualStateManager.SetVisualStateGroups(column, [common]);
 			self.ShowChoice();
@@ -282,7 +365,7 @@ public sealed class ComboBox : Control
 				CornerRadius = new CornerRadius(4f),
 				Padding = new Thickness(3f),
 				MinWidth = _owner.LayoutRect.Width,
-				Child = new ScrollViewer { Content = list },
+				Child = list,
 			};
 		}
 

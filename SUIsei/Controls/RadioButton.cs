@@ -15,6 +15,8 @@ public sealed class RadioButton : ToggleButton
 	private static readonly SolidColorBrush RingFill = Brush.Sealed(HdrColor.FromRgb(40, 40, 48));
 	private static readonly SolidColorBrush RingHover = Brush.Sealed(HdrColor.FromRgb(58, 58, 70));
 	private static readonly SolidColorBrush DotFill = Brush.Sealed(HdrColor.FromRgb(80, 150, 240));
+	public static readonly DependencyProperty<RadioButton, string?> GroupNameProperty =
+		DependencyProperty.Register(nameof(GroupName), new PropertyMetadata<RadioButton, string?>());
 
 	private Border? _ring;
 	private Border? _dot;
@@ -23,7 +25,7 @@ public sealed class RadioButton : ToggleButton
 	public RadioButton() => SetBuiltInValue(TemplateProperty, DefaultTemplate);
 
 	/// <summary>The name of the group it is one of; null for the buttons sharing its parent.</summary>
-	public string? GroupName { get; set; }
+	public string? GroupName { get => GetValue(GroupNameProperty); set => SetValue(GroupNameProperty, value); }
 
 	/// <summary>A radio button is only ever checked by a click.</summary>
 	protected override void OnToggle()
@@ -113,6 +115,8 @@ public sealed class RadioButton : ToggleButton
 			{
 				Name = "Disabled",
 				Storyboard = TemplateStates.Hold((dot, Border.BackgroundProperty, TemplateStates.DisabledAccent),
+					(ring, Border.BackgroundProperty, TemplateStates.DisabledBackground),
+					(ring, Border.BorderBrushProperty, TemplateStates.DisabledBorder),
 					(presenter, ContentPresenter.ForegroundProperty, TemplateStates.DisabledForeground)),
 			});
 			VisualStateManager.SetVisualStateGroups(row, [common]);

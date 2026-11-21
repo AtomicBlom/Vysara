@@ -21,6 +21,7 @@ internal static class AnchoredPlacement
 			// Below and right of the pointer, as a cursor's tip is; a point anchor has no sides to turn round
 			anchor = new Rect(pointer.X, pointer.Y, 0f, 16f);
 			mode = PlacementMode.Bottom;
+			align = EdgeAlignment.Start;
 		}
 
 		float x, y;

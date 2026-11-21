@@ -302,16 +302,18 @@ public sealed class GeometryTests
 		}
 		listener.Changes.ShouldBe(4);
 
-		var before = GC.GetAllocatedBytesForCurrentThread();
-		for (var i = 0; i < 100; i++)
+		var windows = 0;
+		Allocations.ShouldAllocateNothing(() =>
 		{
-			segment.Points.SetAll(i % 2 == 0 ? a : b);
-			_ = geometry.CompositionPath.Bounds;
-		}
-		var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+			windows++;
+			for (var i = 0; i < 100; i++)
+			{
+				segment.Points.SetAll(i % 2 == 0 ? a : b);
+				_ = geometry.CompositionPath.Bounds;
+			}
+		});
 
-		allocated.ShouldBe(0);
-		listener.Changes.ShouldBe(104);
+		listener.Changes.ShouldBe(4 + 100 * windows);
 		geometry.CompositionPath.Points.Length.ShouldBe(501);
 	}
 

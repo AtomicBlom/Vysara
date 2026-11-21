@@ -11,6 +11,35 @@ namespace SUIsei.Tests;
 /// </summary>
 public sealed class ItemsControlTests
 {
+	// An items control follows its source while it is in a live tree; this puts it in one and returns the root
+	private static UIRoot Live(UIElement element)
+	{
+		var root = new UIHost().CreateRoot(UILayer.Default).Root;
+		root.Content = element;
+		return root;
+	}
+
+	/// <summary>Out of a live tree an items control doesn't listen to its source, so a long-lived collection keeps no removed
+	/// control alive; joining a tree again lays out what the source holds now.</summary>
+	[Test]
+	public void A_control_out_of_the_tree_lets_its_source_go_and_catches_up_as_it_returns()
+	{
+		var items = new ObservableCollection<string> { "a", "b" };
+		var ic = new ItemsControl { ItemsSource = items };
+		var root = Live(ic);
+
+		root.Content = null;
+		items.Add("c");
+		ic.ItemsHost!.Children.Count.ShouldBe(2); // not heard while out
+
+		root.Content = ic;
+		ic.ItemsHost.Children.Count.ShouldBe(3);
+		((TextBlock)ic.ItemsHost.Children[2]).Text.ShouldBe("c");
+
+		items.RemoveAt(0); // heard again
+		ic.ItemsHost.Children.Count.ShouldBe(2);
+	}
+
 	[Test]
 	public void Items_control_realizes_one_container_per_item_via_the_data_template()
 	{
@@ -29,6 +58,7 @@ public sealed class ItemsControlTests
 	{
 		var items = new ObservableCollection<string> { "a", "b" };
 		var ic = new ItemsControl { ItemsSource = items };
+		Live(ic);
 		ic.ItemsHost!.Children.Count.ShouldBe(2);
 
 		items.Insert(1, "x"); // [a, x, b]
@@ -45,6 +75,7 @@ public sealed class ItemsControlTests
 	{
 		var items = new ObservableCollection<string> { "a", "b", "c" };
 		var ic = new ItemsControl { ItemsSource = items };
+		Live(ic);
 
 		items[1] = "B"; // Replace
 		((TextBlock)ic.ItemsHost!.Children[1]).Text.ShouldBe("B");

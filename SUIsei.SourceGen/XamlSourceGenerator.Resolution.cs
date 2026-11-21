@@ -105,8 +105,10 @@ partial class XamlSourceGenerator
 		{
 			if (attr.IsNamespaceDeclaration || attr.Name.Namespace == X)
 				continue;
-			// An {x:Bind} on any property, an attached one included, is pushed into the element later, through a field
-			if (IsMarkup(attr.Value, out var inner) && inner.TrimStart().StartsWith("x:Bind"))
+			// An {x:Bind} on any property, an attached one included (a suisei: one too), is pushed into the element later,
+			// through a field. Foreign and design-time attributes are skipped, so they make none.
+			if ((attr.Name.Namespace == XNamespace.None || attr.Name.Namespace == ExtensionNs)
+				&& IsMarkup(attr.Value, out var inner) && inner.TrimStart().StartsWith("x:Bind"))
 				return true;
 			if (attr.Name.Namespace != XNamespace.None || attr.Name.LocalName.Contains('.'))
 				continue;

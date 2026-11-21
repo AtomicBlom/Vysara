@@ -5,14 +5,14 @@ namespace SUIsei.Controls;
 /// <summary>
 /// An element's tooltip, as WinUI's <c>ToolTipService</c>: <c>ToolTipService.ToolTip="Undo (Ctrl Z)"</c> in XAML, or any
 /// element or <see cref="ToolTip"/>. Once the pointer has rested on the element (or anything inside it without a tooltip
-/// of its own) for <see cref="InitialShowDelay"/>, the host shows it by the element's <see cref="PlacementProperty"/>
+/// of its own) for 0.6 s, the host shows it by the element's <see cref="PlacementProperty"/>
 /// side; it goes as the pointer leaves, presses, scrolls or a key is pressed, and doesn't come back until the pointer
 /// leaves and returns.
 /// </summary>
 public sealed class ToolTipService : DependencyObject
 {
 	/// <summary>How long the pointer rests on an element before its tooltip shows, in seconds.</summary>
-	public const double InitialShowDelay = 0.6;
+	internal const double InitialShowDelay = 0.6;
 
 	private ToolTipService()
 	{

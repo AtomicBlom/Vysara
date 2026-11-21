@@ -386,23 +386,25 @@ public sealed class ControlEnabledTests
 		var host = Hosting(item);
 		item.SetSelected(true);
 		host.Tick(0.016, 0f, Viewport);
-		var selected = item.Background;
-		selected.ShouldNotBeNull();
+		var presenter = item.GetTemplateRoot().ShouldBeOfType<SUIsei.Controls.Primitives.ListViewItemPresenter>();
+		var selected = presenter.Background;
+		selected.ShouldBeSameAs(presenter.SelectedBackground);
 
 		item.IsEnabled = false;
 		host.Tick(0.016, 0f, Viewport);
-		item.Foreground.ShouldBeSameAs(TemplateStates.DisabledForeground);
-		item.Background.ShouldBeSameAs(TemplateStates.DisabledAccent);
+		presenter.Foreground.ShouldBeSameAs(TemplateStates.DisabledForeground);
+		presenter.Background.ShouldBeSameAs(TemplateStates.DisabledAccent);
 
 		item.IsEnabled = true;
 		host.Tick(0.016, 0f, Viewport);
-		item.Foreground.ShouldBeNull();
-		item.Background.ShouldBeSameAs(selected);
+		presenter.Foreground.ShouldBeNull();
+		presenter.Background.ShouldBeSameAs(selected);
 
 		item.SetSelected(false);
 		item.IsEnabled = false;
 		host.Tick(0.016, 0f, Viewport);
-		item.Background.ShouldBeOfType<SolidColorBrush>().Color.A.ShouldBe(0f); // unselected, a disabled item paints its own clear background
+		presenter.Background.ShouldBeOfType<SolidColorBrush>().Color.A.ShouldBe(0f); // unselected, a disabled item paints its own clear background
+		item.Background.ShouldBeSameAs(presenter.Background); // the item's own values are never written: the presenter's states sit above them
 	}
 
 	/// <summary>A disabled text box draws the disabled fill and border over its own, and its text in the disabled brush;

@@ -269,17 +269,17 @@ public sealed class TemplateBindingTests
 	{
 		var item = new ListViewItem { Content = "Row", Background = Red, Width = 100f, Height = 20f };
 		var host = Hosted(item);
-		item.ShownColor().ShouldBe(Red.Color);
+		var presenter = item.GetTemplateRoot()!;
+		presenter.ShownColor().ShouldBe(Red.Color);
 
 		item.SetSelected(true);
 		host.Tick(0.1, 0f, new Vector2(300f, 200f));
-		item.ShownColor().ShouldBe(HdrColor.FromRgb(50, 90, 160));
-		item.Background.ShouldNotBeSameAs(Red); // the selection holds the background while selected
+		presenter.ShownColor().ShouldBe(HdrColor.FromRgb(50, 90, 160));
+		item.Background.ShouldBeSameAs(Red); // the item's own background stays; the presenter shows the selection over it
 
 		item.SetSelected(false);
 		host.Tick(0.1, 0f, new Vector2(300f, 200f));
-		item.Background.ShouldBeSameAs(Red);
-		item.ShownColor().ShouldBe(Red.Color);
+		presenter.ShownColor().ShouldBe(Red.Color);
 	}
 
 	[Test]

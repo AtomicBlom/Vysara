@@ -142,6 +142,9 @@ public sealed class ListViewTests
 
 		list.SelectIndex(0);
 		host.Tick(0.2, 0f, Surface);
-		Item(list, 0).Background.ShouldBeSameAs(accent);
+		var presenter = Item(list, 0).GetTemplateRoot().ShouldBeOfType<SUIsei.Controls.Primitives.ListViewItemPresenter>();
+		presenter.SelectedBackground.ShouldBeSameAs(accent);
+		presenter.Background.ShouldBeSameAs(accent);
+		presenter.SelectedPointerOverBackground.ShouldBeSameAs(accent); // hovered, the page's selection colour still
 	}
 }
