@@ -41,6 +41,22 @@ public sealed class UIElementCollection
 		_owner.InvalidateMeasure();
 	}
 
+	/// <summary>Where <paramref name="child"/> is in the collection, or -1.</summary>
+	public int IndexOf(UIElement child) => _items.IndexOf(child);
+
+	/// <summary>Whether <paramref name="child"/> is in the collection.</summary>
+	public bool Contains(UIElement child) => _items.Contains(child);
+
+	/// <summary>Remove <paramref name="child"/>, un-parenting it; false when it isn't in the collection.</summary>
+	public bool Remove(UIElement child)
+	{
+		var index = _items.IndexOf(child);
+		if (index < 0)
+			return false;
+		RemoveAt(index);
+		return true;
+	}
+
 	public void Clear()
 	{
 		foreach (var c in _items)

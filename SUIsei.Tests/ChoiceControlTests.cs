@@ -162,6 +162,20 @@ public sealed class ChoiceControlTests
 	}
 
 	[Test]
+	public void A_press_on_an_expanders_content_leaves_it_open()
+	{
+		var content = new Border { Height = 40f, Width = 120f, Background = Media.Brush.Sealed(HdrColor.FromRgb(10, 10, 10)) };
+		var expander = new Expander { Header = "Chords", Content = content, IsExpanded = true };
+		var host = Hosted(Top(expander));
+
+		Click(host, content);
+		expander.IsExpanded.ShouldBeTrue();
+
+		Click(host, Children<ContentPresenter>(expander)[0]);
+		expander.IsExpanded.ShouldBeFalse();
+	}
+
+	[Test]
 	public void An_info_bar_closes_from_its_button()
 	{
 		var bar = new InfoBar { IsOpen = true, Title = "Build failed", Message = "Songs.cs(4): expected ;", Severity = InfoBarSeverity.Error };
