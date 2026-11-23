@@ -1,0 +1,18 @@
+<Solution>
+  <Project Path="BinaryVibrance.Vysara\BinaryVibrance.Vysara.csproj" />
+  <Folder Name="/Build/">
+    <File Path="build/Vysara.props" />
+    <File Path="build/Vysara.targets" />
+  </Folder>
+  <Project Path="BinaryVibrance.Vysara.RoseTap.Sample\BinaryVibrance.Vysara.RoseTap.Sample.csproj" />
+  <Project Path="BinaryVibrance.Vysara.RoseTap\BinaryVibrance.Vysara.RoseTap.csproj" />
+  <Project Path="BinaryVibrance.Vysara.SourceGen\BinaryVibrance.Vysara.SourceGen.csproj" />
+  <Project Path="BinaryVibrance.Vysara.Tests.DiagnosticsOff\BinaryVibrance.Vysara.Tests.DiagnosticsOff.csproj" />
+  <Project Path="BinaryVibrance.Vysara.Tests\BinaryVibrance.Vysara.Tests.csproj" />
+  <Project Path="BinaryVibrance.Vysara.Diagnostics.Endpoint\BinaryVibrance.Vysara.Diagnostics.Endpoint.csproj" />
+  <Project Path="BinaryVibrance.Vysara.Gallery\BinaryVibrance.Vysara.Gallery.csproj" />
+  <Project Path="BinaryVibrance.Vysara.Gallery.Pages\BinaryVibrance.Vysara.Gallery.Pages.csproj" />
+  <Project Path="BinaryVibrance.Vysara.Text\BinaryVibrance.Vysara.Text.csproj" />
+  <Project Path="BinaryVibrance.Vysara.Text.Tool\BinaryVibrance.Vysara.Text.Tool.csproj" />
+  <Project Path="BinaryVibrance.Vysara.HarfBuzz\BinaryVibrance.Vysara.HarfBuzz.csproj" />
+</Solution>

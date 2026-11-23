@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Brushes as resources: a SolidColorBrush and a LinearGradientBrush kept in the view's ResourceDictionary and shared by
+	the elements that name them with {StaticResource}, directly and through a style's setter. The brush tests check that
+	every user shows a change to one, and that the dictionary keeps no removed element (or hot-reload rebuild) alive.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            x:Class="BinaryVibrance.Vysara.Tests.Sample.SharedBrushView">
+	<StackPanel.Resources>
+		<SolidColorBrush x:Key="Accent" Color="#3366CC" />
+		<LinearGradientBrush x:Key="Fade" EndPoint="1,0" ColorInterpolationMode="ScRgbLinearInterpolation">
+			<GradientStop Color="#FF0000" Offset="0" />
+			<GradientStop x:Name="FadeEnd" Color="#0000FF" Offset="1" />
+		</LinearGradientBrush>
+		<Style x:Key="Card" TargetType="Border">
+			<Setter Property="Background" Value="{StaticResource Accent}" />
+		</Style>
+	</StackPanel.Resources>
+
+	<Border x:Name="First" Width="20" Height="10" Background="{StaticResource Accent}" />
+	<Border x:Name="Second" Width="20" Height="10" Background="{StaticResource Accent}" />
+	<TextBlock x:Name="Label" Text="Shared" Foreground="{StaticResource Accent}" />
+	<Border x:Name="Styled" Width="20" Height="10" Style="{StaticResource Card}" />
+	<Border x:Name="Graded" Width="40" Height="10" Background="{StaticResource Fade}">
+		<VisualStateManager.VisualStateGroups>
+			<VisualStateGroup x:Name="Pulse">
+				<VisualState x:Name="Bright">
+					<Storyboard>
+						<ColorAnimation Storyboard.TargetName="FadeEnd" Storyboard.TargetProperty="Color" To="#00FF00" Duration="0:0:1" />
+					</Storyboard>
+				</VisualState>
+			</VisualStateGroup>
+		</VisualStateManager.VisualStateGroups>
+	</Border>
+</StackPanel>

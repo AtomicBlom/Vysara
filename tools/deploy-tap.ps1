@@ -9,12 +9,12 @@
     $env:ROSEMCP_TAPS names. The first tap found for a framework is the one that serves it.
 
     The tap is built into a fresh stage under artifacts/, so a failed build leaves the deployed tap in
-    place. Only Vysara.RoseTap.dll and its pdb are copied. The game's diagnostics endpoint hands the tap
-    the game's own Vysara, so a Vysara.dll in the taps folder would never be used, and a stale one would
+    place. Only BinaryVibrance.Vysara.RoseTap.dll and its pdb are copied. The game's diagnostics endpoint hands the tap
+    the game's own Vysara, so a BinaryVibrance.Vysara.dll in the taps folder would never be used, and a stale one would
     only confuse whoever reads the folder.
 
-    A game opens that endpoint only when its runtime config turns Vysara.Diagnostics.Enabled on (see
-    Vysara.RoseTap/README.md), and by default loads a tap only from this taps folder and the folders
+    A game opens that endpoint only when its runtime config turns BinaryVibrance.Vysara.Diagnostics.Enabled on (see
+    BinaryVibrance.Vysara.RoseTap/README.md), and by default loads a tap only from this taps folder and the folders
     $env:ROSEMCP_TAPS names. RoseMCP keeps its taps folder beside its settings wherever it is installed, so
     $env:ROSEMCP_DEPLOY_ROOT doesn't move it. A game that has loaded the tap holds the file open, so close it
     before deploying again.
@@ -55,12 +55,12 @@ $taps = $Destination.Replace('\', '/')
 $stage = "$repo/artifacts/tap"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 
-Write-Host "  building Vysara.RoseTap ($Configuration) -> $stage"
-& dotnet build "$repo/Vysara.RoseTap/Vysara.RoseTap.csproj" -c $Configuration -o $stage | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "Vysara.RoseTap failed to build (dotnet exited $LASTEXITCODE)" }
+Write-Host "  building BinaryVibrance.Vysara.RoseTap ($Configuration) -> $stage"
+& dotnet build "$repo/BinaryVibrance.Vysara.RoseTap/BinaryVibrance.Vysara.RoseTap.csproj" -c $Configuration -o $stage | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "BinaryVibrance.Vysara.RoseTap failed to build (dotnet exited $LASTEXITCODE)" }
 
 New-Item -ItemType Directory -Force -Path $taps | Out-Null
-foreach ($file in 'Vysara.RoseTap.dll', 'Vysara.RoseTap.pdb')
+foreach ($file in 'BinaryVibrance.Vysara.RoseTap.dll', 'BinaryVibrance.Vysara.RoseTap.pdb')
 {
     try
     {
@@ -73,4 +73,4 @@ foreach ($file in 'Vysara.RoseTap.dll', 'Vysara.RoseTap.pdb')
     }
 }
 
-Write-Host "deployed Vysara.RoseTap to $taps; it serves games RoseMCP attaches to or launches from now on"
+Write-Host "deployed BinaryVibrance.Vysara.RoseTap to $taps; it serves games RoseMCP attaches to or launches from now on"

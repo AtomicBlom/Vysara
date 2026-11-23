@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- XAML -> typed control-tree generator wiring (registers *.xaml as AdditionalFiles + the analyzer ref). -->
+  <Import Project="..\build\Vysara.props" />
+
+  <!-- The gallery's pages, its shell and the renderer that draws them through Vysara's CPU rasterizer, with no window:
+       the Win32 host (BinaryVibrance.Vysara.Gallery) shows them, and BinaryVibrance.Vysara.Tests renders each page and compares it with its golden
+       image, so the gallery the window shows is the one the tests check. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <RootNamespace>BinaryVibrance.Vysara.Gallery</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BinaryVibrance.Vysara\BinaryVibrance.Vysara.csproj" />
+    <ProjectReference Include="..\BinaryVibrance.Vysara.Rasterizer\BinaryVibrance.Vysara.Rasterizer.csproj" />
+    <!-- The gallery showcases HarfBuzz shaping: it bakes a glyph-id Cascadia atlas (BinaryVibrance.Vysara.Text) and drives it with the
+         HarfBuzz shaper (BinaryVibrance.Vysara.HarfBuzz) so programming ligatures render. -->
+    <ProjectReference Include="..\BinaryVibrance.Vysara.Text\BinaryVibrance.Vysara.Text.csproj" />
+    <ProjectReference Include="..\BinaryVibrance.Vysara.HarfBuzz\BinaryVibrance.Vysara.HarfBuzz.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BinaryVibrance.Vysara.Gallery" />
+    <InternalsVisibleTo Include="BinaryVibrance.Vysara.Tests" />
+  </ItemGroup>
+
+  <!-- The font program the gallery shapes with (HarfBuzz reads its GSUB) and bakes the glyph-id atlas from. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\BinaryVibrance.Vysara\Assets\Fonts\CascadiaCode.ttf" LogicalName="CascadiaCode.ttf" />
+  </ItemGroup>
+
+  <Import Project="..\build\Vysara.targets" />
+
+</Project>

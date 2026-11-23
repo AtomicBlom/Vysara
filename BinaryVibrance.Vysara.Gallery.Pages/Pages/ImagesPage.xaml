@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Images: a decoded bitmap, and a straight-alpha WriteableBitmap rewritten in place every frame.
+-->
+<Border xmlns="https://github.com/AtomicBlom/Vysara/ui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:BinaryVibrance.Vysara.Gallery"
+        x:Class="BinaryVibrance.Vysara.Gallery.Pages.ImagesPage"
+        Padding="28">
+	<StackPanel Orientation="Vertical">
+		<TextBlock Text="Images" Style="{x:Static local:GalleryTheme.PageTitle}" />
+		<TextBlock Text="Bitmaps placed by their stretch, and rewritten in place with no layout."
+		           Style="{x:Static local:GalleryTheme.PageSummary}" />
+
+		<TextBlock Text="Still and live" Style="{x:Static local:GalleryTheme.SectionHeading}" />
+		<Border Style="{x:Static local:GalleryTheme.Card}">
+			<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+				<StackPanel Orientation="Vertical">
+					<Image Source="{x:Bind LogoSource}" Width="120" Height="72" Stretch="Uniform" Margin="0,0,0,6" />
+					<TextBlock Text="A bitmap" Style="{x:Static local:GalleryTheme.Note}" HorizontalAlignment="Center" />
+				</StackPanel>
+				<StackPanel Orientation="Vertical" Margin="24,0,0,0">
+					<Image Source="{x:Bind LiveBitmap}" Width="120" Height="72" Stretch="Uniform" Margin="0,0,0,6" />
+					<TextBlock Text="Rewritten every frame" Style="{x:Static local:GalleryTheme.Note}" HorizontalAlignment="Center" />
+				</StackPanel>
+			</StackPanel>
+		</Border>
+	</StackPanel>
+</Border>

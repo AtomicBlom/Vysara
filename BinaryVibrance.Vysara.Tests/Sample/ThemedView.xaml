@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Hot-reload fixture for resources on an unsealed root. The view derives from ContentControl, so a rebuild re-runs
+	InitializeComponent on the same object, whose resource dictionary survives: the merged dictionaries must be rebuilt,
+	not appended to, and {StaticResource} must still resolve through them.
+-->
+<ContentControl xmlns="https://github.com/AtomicBlom/Vysara/ui"
+				xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+				x:Class="BinaryVibrance.Vysara.Tests.Sample.ThemedView">
+	<ContentControl.Resources>
+		<ResourceDictionary>
+			<ResourceDictionary.MergedDictionaries>
+				<ResourceDictionary>
+					<Style x:Key="Heading" TargetType="TextBlock">
+						<Setter Property="FontSize" Value="24" />
+					</Style>
+				</ResourceDictionary>
+			</ResourceDictionary.MergedDictionaries>
+			<Style x:Key="Emphasis" TargetType="TextBlock" BasedOn="{StaticResource Heading}">
+				<Setter Property="Opacity" Value="0.5" />
+			</Style>
+		</ResourceDictionary>
+	</ContentControl.Resources>
+	<Border>
+		<TextBlock x:Name="Heading" Style="{StaticResource Emphasis}" Text="Themed" />
+	</Border>
+</ContentControl>

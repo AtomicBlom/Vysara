@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A view whose generated InitializeComponent records each element's and setter's position, which does nothing here. -->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			x:Class="BinaryVibrance.Vysara.Tests.DiagnosticsOff.OffView">
+	<StackPanel.Resources>
+		<Style x:Key="Heading" TargetType="TextBlock">
+			<Setter Property="FontSize" Value="24" />
+		</Style>
+	</StackPanel.Resources>
+	<TextBlock x:Name="Title" Text="Off" Style="{StaticResource Heading}" />
+	<Button Content="Press" />
+</StackPanel>

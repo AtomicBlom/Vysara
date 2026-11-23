@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Geometry end-to-end fixture. BinaryVibrance.Vysara.SourceGen turns this into a partial BinaryVibrance.Vysara.Tests.Sample.GeometryView at build
+	time, so its compilation proves the emitted geometry code is valid C#; GeometryViewTests then checks the tree it
+	builds. It covers UIElement.Clip as a property element, one of them through its geometry's Transform, path markup
+	checked at compile time and parsed at runtime, the same figure written as elements, and the point and number list
+	converters.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			xmlns:local="using:BinaryVibrance.Vysara.Tests.Sample"
+			x:Class="BinaryVibrance.Vysara.Tests.Sample.GeometryView">
+	<Border x:Name="Clipped" Width="40" Height="40" Background="Red">
+		<Border.Clip>
+			<RectangleGeometry Rect="5,5,20,10" />
+		</Border.Clip>
+	</Border>
+	<Border x:Name="SlidClip" Width="40" Height="40" Background="Blue">
+		<Border.Clip>
+			<RectangleGeometry Rect="0,0,10,10">
+				<RectangleGeometry.Transform>
+					<TranslateTransform X="6" Y="2" />
+				</RectangleGeometry.Transform>
+			</RectangleGeometry>
+		</Border.Clip>
+	</Border>
+	<local:GeometryHost x:Name="FromMarkup"
+						Data="F1 M 0,0 L 10,0 10,10 Z M 20,20 A 5,5 0 1 1 30,20"
+						Points="0,0 1,1 2,0"
+						Dashes="2 1" />
+	<local:GeometryHost x:Name="FromElements">
+		<local:GeometryHost.Data>
+			<PathGeometry FillRule="Nonzero">
+				<PathFigure StartPoint="0,0" IsClosed="True">
+					<PolyLineSegment Points="10,0 10,10" />
+				</PathFigure>
+				<PathFigure StartPoint="20,20">
+					<ArcSegment Point="30,20" Size="5,5" IsLargeArc="True" SweepDirection="Clockwise" />
+				</PathFigure>
+			</PathGeometry>
+		</local:GeometryHost.Data>
+	</local:GeometryHost>
+</StackPanel>

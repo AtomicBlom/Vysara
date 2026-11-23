@@ -4,24 +4,24 @@
     Vysara XAML build machinery — property defaults.
 
     Imported by any project that authors Vysara XAML views: Vysara itself (real views, later milestones)
-    and Vysara.Tests (the generator proof). It carries NO runtime/backend reference — the Vysara.SourceGen
-    generator is a build-time analyzer only — so it sits beside Vysara.Shaders.props in build/Vysara.Sdk and can be
+    and BinaryVibrance.Vysara.Tests (the generator proof). It carries NO runtime/backend reference — the BinaryVibrance.Vysara.SourceGen
+    generator is a build-time analyzer only — so it sits beside BinaryVibrance.Vysara.Shaders.props in build/BinaryVibrance.Vysara.Sdk and can be
     imported without pulling in the backend selection.
 
     A consuming project just writes the two imports (props near the top, targets near the bottom):
-        <Import Project="..\build\Vysara.Sdk\Vysara.props" />
+        <Import Project="..\build\BinaryVibrance.Vysara.Sdk\Vysara.props" />
         ... body ...
-        <Import Project="..\build\Vysara.Sdk\Vysara.targets" />
+        <Import Project="..\build\BinaryVibrance.Vysara.Sdk\Vysara.targets" />
     The targets half then registers every *.xaml under the project as AdditionalFiles and references the
-    XAML -> typed control-tree generator (Vysara.SourceGen) as an analyzer.
+    XAML -> typed control-tree generator (BinaryVibrance.Vysara.SourceGen) as an analyzer.
   -->
 
   <PropertyGroup>
     <!-- On by default; a project can set VysaraXamlEnable=false to opt a build out of XAML codegen. -->
     <VysaraXamlEnable Condition="'$(VysaraXamlEnable)' == ''">true</VysaraXamlEnable>
 
-    <!-- Repo root, resolved from this file's location (build/Vysara.Sdk/ -> two levels up). Used to locate the
-         Vysara.SourceGen analyzer project. Overridable via $(VysaraUIRepoRoot). -->
+    <!-- Repo root, resolved from this file's location (build/BinaryVibrance.Vysara.Sdk/ -> two levels up). Used to locate the
+         BinaryVibrance.Vysara.SourceGen analyzer project. Overridable via $(VysaraUIRepoRoot). -->
     <VysaraUIRepoRoot Condition="'$(VysaraUIRepoRoot)' == ''">$(MSBuildThisFileDirectory)..\</VysaraUIRepoRoot>
 
     <!-- Folder scanned for *.xaml views (recursively). Defaults to the consuming project's directory. -->
