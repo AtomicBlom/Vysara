@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Optional HarfBuzz shaping backend for Vysara: a HarfBuzzTextShaper : ITextShaper. Kept in its own project so
+    Vysara core stays dependency-light (only StbImageSharp) and NativeAOT-clean; a consumer references this package
+    only when it wants real shaping. Native HarfBuzz binaries come from the per-RID NativeAssets packages — Win32
+    here (covers win-x64/arm64); add HarfBuzzSharp.NativeAssets.{Linux,macOS} for those platforms.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\BinaryVibrance.Vysara\BinaryVibrance.Vysara.csproj" />
+    <PackageReference Include="HarfBuzzSharp" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Win32" />
+  </ItemGroup>
+
+</Project>

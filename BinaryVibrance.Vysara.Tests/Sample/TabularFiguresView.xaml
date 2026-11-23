@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	WinUI's Typography.NumeralAlignment on text: two tabular lines of different digits, which must land at the same
+	steps, and a proportional line to compare them with. BinaryVibrance.Vysara.SourceGen turns it into a partial
+	BinaryVibrance.Vysara.Tests.Sample.TabularFiguresView at build time; TabularFiguresTests lays it out and checks the pixels.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            x:Class="BinaryVibrance.Vysara.Tests.Sample.TabularFiguresView">
+	<TextBlock x:Name="TabularOnes" Text="1111" FontSize="32" Typography.NumeralAlignment="Tabular" />
+	<TextBlock x:Name="TabularEights" Text="8888" FontSize="32" Typography.NumeralAlignment="Tabular" />
+	<TextBlock x:Name="ProportionalOnes" Text="1111" FontSize="32" />
+</StackPanel>

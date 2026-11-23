@@ -4,11 +4,11 @@
     Vysara XAML build machinery — targets.
 
     Imported AFTER the project body (so $(VysaraXamlSourceDir) is already set). Does two things:
-      1. Registers every *.xaml under the project as <AdditionalFiles> so the Vysara.SourceGen incremental
+      1. Registers every *.xaml under the project as <AdditionalFiles> so the BinaryVibrance.Vysara.SourceGen incremental
          generator's AdditionalTextsProvider can see them, and as <UpToDateCheckInput> so the IDE
          fast-up-to-date check never serves a stale generated tree after a .xaml edit (the same rationale as
-         the shader UpToDateCheckInput in Vysara.Shaders.targets).
-      2. References Vysara.SourceGen as a build-time ANALYZER (OutputItemType=Analyzer,
+         the shader UpToDateCheckInput in BinaryVibrance.Vysara.Shaders.targets).
+      2. References BinaryVibrance.Vysara.SourceGen as a build-time ANALYZER (OutputItemType=Analyzer,
          ReferenceOutputAssembly=false) — it emits the partial x:Class with typed x:Name fields and
          InitializeComponent(); it is never a runtime dependency.
 
@@ -17,7 +17,7 @@
   -->
 
   <PropertyGroup>
-    <_VysaraUISourceGen>$(VysaraUIRepoRoot)Vysara.SourceGen\Vysara.SourceGen.csproj</_VysaraUISourceGen>
+    <_VysaraUISourceGen>$(VysaraUIRepoRoot)BinaryVibrance.Vysara.SourceGen\BinaryVibrance.Vysara.SourceGen.csproj</_VysaraUISourceGen>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(VysaraXamlEnable)' == 'true'">
@@ -47,19 +47,19 @@
                       UndefineProperties="PublishAot;RuntimeIdentifier;SelfContained" />
   </ItemGroup>
 
-  <!-- No diagnostics in a browser: their endpoint (Vysara.Diagnostics.Endpoint) listens on a named pipe and loads a
+  <!-- No diagnostics in a browser: their endpoint (BinaryVibrance.Vysara.Diagnostics.Endpoint) listens on a named pipe and loads a
        tap's assembly by name, neither of which a page can do. The switch is set false there whatever the app asked
        for, and set at all so the trimmer can see it is off and remove the code it guards (Diagnostics.Enabled); left
        unset, the trimmer has to keep that code. -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
-    <RuntimeHostConfigurationOption Remove="Vysara.Diagnostics.Enabled" />
-    <RuntimeHostConfigurationOption Include="Vysara.Diagnostics.Enabled" Value="false" Trim="true" />
+    <RuntimeHostConfigurationOption Remove="BinaryVibrance.Vysara.Diagnostics.Enabled" />
+    <RuntimeHostConfigurationOption Include="BinaryVibrance.Vysara.Diagnostics.Enabled" Value="false" Trim="true" />
   </ItemGroup>
 
   <Target Name="_VysaraWarnMissingXamlGen"
           BeforeTargets="ResolveProjectReferences"
           Condition="'$(VysaraXamlEnable)' == 'true' And !Exists('$(_VysaraUISourceGen)')">
-    <Warning Text="VysaraXamlEnable=true but Vysara.SourceGen does not exist at '$(_VysaraUISourceGen)'; .xaml views will not be code-generated." />
+    <Warning Text="VysaraXamlEnable=true but BinaryVibrance.Vysara.SourceGen does not exist at '$(_VysaraUISourceGen)'; .xaml views will not be code-generated." />
   </Target>
 
 </Project>

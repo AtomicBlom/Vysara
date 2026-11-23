@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The diagnostics endpoint a RoseMCP host loads BinaryVibrance.Vysara.RoseTap through: a named pipe, vysara-diag-{pid}, and the
+       loader behind it, which loads a tap assembly and calls into it. Kept out of the core so BinaryVibrance.Vysara.dll carries no
+       pipe, no assembly loader and no RoseMCP wire protocol, and needs no submodule to build. A game references this in
+       the configurations it debugs in and calls DiagnosticsEndpoint.Start() once; it starts nothing unless
+       BinaryVibrance.Vysara.Diagnostics.Enabled is also on, and never under NativeAOT.
+
+       The RoseMCP tap contract (the external/RoseMcp.Tap submodule) is compiled in as source. Its types stay internal,
+       so a tap that compiles its own copy of the protocol never clashes with this one. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Vysara</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <PropertyGroup Label="NuGet">
+    <PackageId>BinaryVibrance.Vysara.Diagnostics.Endpoint</PackageId>
+    <Version>0.1.0-preview.1</Version>
+    <Authors>AtomicBlom</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/AtomicBlom/Vysara</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/AtomicBlom/Vysara</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Description>The diagnostics endpoint a RoseMCP host loads Vysara's tap through, for a Vysara game's debug builds.</Description>
+    <PackageTags>ui;xaml;diagnostics;rosemcp</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BinaryVibrance.Vysara\BinaryVibrance.Vysara.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BinaryVibrance.Vysara.Tests" />
+  </ItemGroup>
+
+  <!-- The RoseMcp.Tap code compiled in below is under its own licence, whose notice ships with this package. -->
+  <ItemGroup>
+    <None Include="..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="THIRD-PARTY-NOTICES.md" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <RoseMcpTapDir>$(MSBuildThisFileDirectory)..\external\RoseMcp.Tap\</RoseMcpTapDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(RoseMcpTapDir)Protocol\*.cs" Link="RoseMcp.Tap\Protocol\%(Filename)%(Extension)" />
+    <Compile Include="$(RoseMcpTapDir)Endpoint\*.cs" Link="RoseMcp.Tap\Endpoint\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <Target Name="RequireRoseMcpTap" BeforeTargets="BeforeBuild" Condition="!Exists('$(RoseMcpTapDir)Endpoint\TapEndpoint.cs')">
+    <Error Text="BinaryVibrance.Vysara.Diagnostics.Endpoint compiles the RoseMCP tap contract from the external/RoseMcp.Tap submodule, which is not checked out. Run: git submodule update --init external/RoseMcp.Tap" />
+  </Target>
+
+</Project>

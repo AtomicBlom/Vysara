@@ -6,7 +6,7 @@ there is no XAML-specific tooling to install.
 
 ## How it works
 
-1. The build registers each `.xaml` as an `AdditionalFiles` input to the `Vysara.SourceGen` incremental
+1. The build registers each `.xaml` as an `AdditionalFiles` input to the `BinaryVibrance.Vysara.SourceGen` incremental
    generator, and (via `build/Vysara.targets`) as a `Watch` item so `dotnet watch` re-runs the generator on edit.
 2. Editing a `.xaml` re-runs the generator, producing a new `InitializeComponent()` body that ships in the
    metadata delta.

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	MU0 Phase C end-to-end fixture (PlanningUI.md §D1.4). BinaryVibrance.Vysara.SourceGen turns this into a partial
+	BinaryVibrance.Vysara.Tests.Sample.SampleView with typed x:Name fields + InitializeComponent(). It deliberately
+	exercises: element resolution (Controls.*), x:Name fields, the Children container model (StackPanel),
+	the Content container model (Button), and string / float / enum literal properties.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			x:Class="BinaryVibrance.Vysara.Tests.Sample.SampleView"
+			Orientation="Vertical">
+	<TextBlock x:Name="Title" Text="Hello, Vysara" FontSize="24" />
+	<Button x:Name="Ok">
+		<TextBlock x:Name="OkLabel" Text="OK" />
+	</Button>
+</StackPanel>

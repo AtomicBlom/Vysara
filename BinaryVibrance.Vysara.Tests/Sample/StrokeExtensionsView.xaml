@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	The vysara: stroke extensions end to end: a polyline drawn on by a storyboard on (vysara:StrokeTrim.End), its gradient
+	running along its length (vysara:StrokeBrushMapping.Mode="AlongLength"). BinaryVibrance.Vysara.SourceGen turns it into a partial
+	BinaryVibrance.Vysara.Tests.Sample.StrokeExtensionsView at build time; StrokeExtensionsTests runs the storyboard and checks the pixels.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:vysara="https://github.com/AtomicBlom/Vysara/extensions"
+            x:Class="BinaryVibrance.Vysara.Tests.Sample.StrokeExtensionsView">
+	<Canvas Width="100" Height="100">
+		<Polyline x:Name="Trail" Points="10,50 50,50 50,90" StrokeThickness="6"
+		          vysara:StrokeTrim.End="0" vysara:StrokeBrushMapping.Mode="AlongLength">
+			<Polyline.Stroke>
+				<LinearGradientBrush ColorInterpolationMode="ScRgbLinearInterpolation">
+					<GradientStop Color="#FF0000" Offset="0" />
+					<GradientStop Color="#00FF00" Offset="0.5" />
+					<GradientStop Color="#0000FF" Offset="1" />
+				</LinearGradientBrush>
+			</Polyline.Stroke>
+		</Polyline>
+	</Canvas>
+	<ContentControl x:Name="Host">
+		<VisualStateManager.VisualStateGroups>
+			<VisualStateGroup x:Name="Reveal">
+				<VisualState x:Name="Hidden" />
+				<VisualState x:Name="Drawn">
+					<Storyboard>
+						<DoubleAnimation Storyboard.TargetName="Trail" Storyboard.TargetProperty="(vysara:StrokeTrim.End)"
+						                 To="1" Duration="0:0:1" />
+					</Storyboard>
+				</VisualState>
+			</VisualStateGroup>
+		</VisualStateManager.VisualStateGroups>
+	</ContentControl>
+</StackPanel>

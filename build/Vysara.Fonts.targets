@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    Native MTSDF font baking for Vysara (the vysara-msdf tool / Vysara.Text library). Opt-in and self-contained:
+    Native MTSDF font baking for Vysara (the vysara-msdf tool / BinaryVibrance.Vysara.Text library). Opt-in and self-contained:
     nothing imports this automatically, so it cannot affect a project that doesn't ask for it. A consuming project
     imports this file, lists its *.fontset.json inputs, and picks an output mode:
 
@@ -25,7 +25,7 @@
   <PropertyGroup>
     <VysaraFontOutputMode Condition="'$(VysaraFontOutputMode)' == ''">None</VysaraFontOutputMode>
     <VysaraFontOutDir Condition="'$(VysaraFontOutDir)' == ''">$(IntermediateOutputPath)fonts\</VysaraFontOutDir>
-    <VysaraMsdfToolProject Condition="'$(VysaraMsdfToolProject)' == ''">$(MSBuildThisFileDirectory)..\Vysara.Text.Tool\Vysara.Text.Tool.csproj</VysaraMsdfToolProject>
+    <VysaraMsdfToolProject Condition="'$(VysaraMsdfToolProject)' == ''">$(MSBuildThisFileDirectory)..\BinaryVibrance.Vysara.Text.Tool\BinaryVibrance.Vysara.Text.Tool.csproj</VysaraMsdfToolProject>
     <VysaraMsdfCommand Condition="'$(VysaraMsdfCommand)' == '' And '$(VysaraMsdfExe)' != ''">"$(VysaraMsdfExe)"</VysaraMsdfCommand>
     <VysaraMsdfCommand Condition="'$(VysaraMsdfCommand)' == ''">dotnet run --project "$(VysaraMsdfToolProject)" -c Release --</VysaraMsdfCommand>
   </PropertyGroup>

@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-    NativeAOT-publishes Vysara.RoseTap.Sample and checks that diagnostics stay off in it.
+    NativeAOT-publishes BinaryVibrance.Vysara.RoseTap.Sample and checks that diagnostics stay off in it.
 
 .DESCRIPTION
-    The sample turns Vysara.Diagnostics.Enabled on in its runtime config and starts the diagnostics
+    The sample turns BinaryVibrance.Vysara.Diagnostics.Enabled on in its runtime config and starts the diagnostics
     endpoint, so it is the case that matters: under NativeAOT, Diagnostics.Enabled has to fold to false
     whatever the switch says, which removes the endpoint and every assembly load it guards. If it does
     not fold (as when [FeatureSwitchDefinition] sits on Enabled itself, so ILC replaces the whole getter
     with the switch's value), ILC keeps that code and warns about the endpoint's call into the loader.
-    The JIT tests (Vysara.Tests.DiagnosticsOff among them) cannot see that, nor what the published game
+    The JIT tests (BinaryVibrance.Vysara.Tests.DiagnosticsOff among them) cannot see that, nor what the published game
     reads Enabled as, which the check runs it to find out.
 
     The check fails when:
@@ -48,7 +48,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repo = (Split-Path $PSScriptRoot -Parent).Replace('\', '/')
-$project = "$repo/Vysara.RoseTap.Sample/Vysara.RoseTap.Sample.csproj"
+$project = "$repo/BinaryVibrance.Vysara.RoseTap.Sample/BinaryVibrance.Vysara.RoseTap.Sample.csproj"
 $out = "$repo/artifacts/aot-sample/$Runtime"
 
 if ($IsWindows -and -not (Get-Command vswhere.exe -ErrorAction SilentlyContinue))
@@ -68,7 +68,7 @@ foreach ($folder in Get-ChildItem $repo -Directory -Filter 'Vysara*')
 }
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 
-Write-Host "  publishing Vysara.RoseTap.Sample with NativeAOT ($Runtime, $Configuration) -> $out"
+Write-Host "  publishing BinaryVibrance.Vysara.RoseTap.Sample with NativeAOT ($Runtime, $Configuration) -> $out"
 # Warnings are reported rather than made errors, so every one can be read and sorted by where it comes from.
 # The static-graph restore keeps PublishAot from reaching the XAML source generator, a netstandard2.0 analyzer.
 $log = & dotnet publish $project -c $Configuration -r $Runtime -o $out `
@@ -100,8 +100,8 @@ if ($Runtime -ne [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIde
 }
 
 # The sample ticks until it is killed, so its output is read only until it says whether diagnostics are on.
-$exe = Get-ChildItem $out -File | Where-Object { $_.BaseName -eq 'Vysara.RoseTap.Sample' -and $_.Extension -in '', '.exe' } | Select-Object -First 1
-if (-not $exe) { throw "the publish produced no Vysara.RoseTap.Sample executable in $out" }
+$exe = Get-ChildItem $out -File | Where-Object { $_.BaseName -eq 'BinaryVibrance.Vysara.RoseTap.Sample' -and $_.Extension -in '', '.exe' } | Select-Object -First 1
+if (-not $exe) { throw "the publish produced no BinaryVibrance.Vysara.RoseTap.Sample executable in $out" }
 
 $start = [System.Diagnostics.ProcessStartInfo]::new($exe.FullName)
 $start.RedirectStandardOutput = $true
@@ -131,4 +131,4 @@ finally
 if (-not $said) { throw "the published sample did not say within ${TimeoutSeconds}s whether diagnostics are on" }
 if ($said -notmatch '^Diagnostics are off') { throw "the published sample has diagnostics on under NativeAOT: $said" }
 
-Write-Host "NativeAOT keeps diagnostics off in Vysara.RoseTap.Sample, with no IL2026 or IL3050 from Vysara"
+Write-Host "NativeAOT keeps diagnostics off in BinaryVibrance.Vysara.RoseTap.Sample, with no IL2026 or IL3050 from Vysara"

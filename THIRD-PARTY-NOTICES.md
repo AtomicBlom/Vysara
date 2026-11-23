@@ -4,7 +4,7 @@ Vysara is MIT-licensed (see `LICENSE`). Parts of it are derived from the followi
 
 ## libtess2 — the sweep-line tessellator
 
-`Vysara/Drawing/SweepTessellator*.cs` is a C# port of the GLU polygon tessellator by Eric Veach (Silicon Graphics,
+`BinaryVibrance.Vysara/Drawing/SweepTessellator*.cs` is a C# port of the GLU polygon tessellator by Eric Veach (Silicon Graphics,
 1994), as maintained by Mikko Mononen in [libtess2](https://github.com/memononen/libtess2).
 
 ```
@@ -37,7 +37,7 @@ this Software without prior written authorization from Silicon Graphics, Inc.
 
 ## earcut — ear clipping
 
-`Vysara/Drawing/EarClipper.cs` follows the algorithm of [mapbox/earcut](https://github.com/mapbox/earcut).
+`BinaryVibrance.Vysara/Drawing/EarClipper.cs` follows the algorithm of [mapbox/earcut](https://github.com/mapbox/earcut).
 
 ```
 ISC License
@@ -58,8 +58,8 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ## RoseMcp.Tap — the RoseMCP tap contract
 
-`Vysara.Diagnostics.Endpoint` compiles the protocol and the endpoint, and `Vysara.RoseTap` the protocol, from
-[RoseMcp.Tap](https://github.com/AtomicBlom/RoseMcp.Tap), the `external/RoseMcp.Tap` submodule. The core `Vysara`
+`BinaryVibrance.Vysara.Diagnostics.Endpoint` compiles the protocol and the endpoint, and `BinaryVibrance.Vysara.RoseTap` the protocol, from
+[RoseMcp.Tap](https://github.com/AtomicBlom/RoseMcp.Tap), the `external/RoseMcp.Tap` submodule. The core `BinaryVibrance.Vysara`
 compiles none of it.
 
 ```

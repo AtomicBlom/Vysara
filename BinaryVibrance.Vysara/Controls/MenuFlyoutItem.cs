@@ -1,0 +1,61 @@
+using BinaryVibrance.Vysara.Animation;
+using BinaryVibrance.Vysara.Media;
+
+namespace BinaryVibrance.Vysara.Controls;
+
+/// <summary>A single command row in a <see cref="MenuFlyout"/>: a <see cref="ButtonBase"/> with
+/// a <see cref="Text"/> label and a flat full-width template that highlights on hover. As in WinUI's default template,
+/// the row paints the item's <see cref="Control.Background"/>, <see cref="Control.BorderBrush"/> and
+/// <see cref="Control.BorderThickness"/>, and the label its <see cref="Control.Foreground"/>. Click invocation and
+/// <see cref="ButtonBase.Command"/> come from the base; the flyout closes itself on invoke.</summary>
+public sealed class MenuFlyoutItem : ButtonBase
+{
+	// The built-in look's brushes, shared by every menu item and never changed.
+	private static readonly SolidColorBrush NormalBackground = Brush.Sealed(HdrColor.Transparent);
+	private static readonly SolidColorBrush OverBackground = Brush.Sealed(HdrColor.FromRgb(70, 70, 85));
+	private static readonly SolidColorBrush PressedBackground = Brush.Sealed(HdrColor.FromRgb(55, 55, 70));
+
+	public MenuFlyoutItem()
+	{
+		SetBuiltInValue(HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
+		SetBuiltInValue(TemplateProperty, DefaultTemplate);
+		InheritedText.GiveBuiltInLook(this);
+	}
+
+	/// <summary>The menu row label (maps to <see cref="ContentControl.Content"/>).</summary>
+	public string Text
+	{
+		get => Content as string ?? string.Empty;
+		set => Content = value;
+	}
+
+	private static readonly ControlTemplate DefaultTemplate = new()
+	{
+		Factory = static control =>
+		{
+			var host = (ContentControl)control;
+			var border = new Border
+			{
+				CornerRadius = new CornerRadius(2f),
+				Padding = new Thickness(12f, 6f),
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				BackgroundTransition = TemplateStates.Fade(90),
+			};
+			var presenter = new ContentPresenter();
+			border.Child = presenter;
+			host.RegisterTemplateBinding(BackgroundProperty, border, Border.BackgroundProperty, static value => value ?? NormalBackground);
+			host.RegisterTemplateBinding(BorderBrushProperty, border, Border.BorderBrushProperty);
+			host.RegisterTemplateBinding(BorderThicknessProperty, border, Border.BorderThicknessProperty);
+			host.RegisterTemplateBinding(ForegroundProperty, presenter, ContentPresenter.ForegroundProperty);
+			host.RegisterContentTemplateBinding(content => presenter.Content = content);
+
+			var common = new VisualStateGroup { Name = "CommonStates" };
+			common.States.Add(new VisualState { Name = "Normal" });
+			common.States.Add(new VisualState { Name = "PointerOver", Storyboard = TemplateStates.Background(border, OverBackground) });
+			common.States.Add(new VisualState { Name = "Pressed", Storyboard = TemplateStates.Background(border, PressedBackground) });
+			common.States.Add(new VisualState { Name = "Disabled", Storyboard = TemplateStates.Disabled(border, TemplateStates.DisabledSubtleBackground, presenter) });
+			VisualStateManager.SetVisualStateGroups(border, [common]);
+			return border;
+		},
+	};
+}

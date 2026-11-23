@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Image sources bound from code, as WinUI binds them (WinUI markup cannot make a WriteableBitmap either): a decoded
+	bitmap in an Image, a WriteableBitmap in an Image and as an ImageBrush filling an ellipse (the Vector prim), and a
+	host image (BinaryVibrance.Vysara.Extensions.HostImageSource) filling a rectangle. ImageSourceTests checks what each draws, that a
+	rewritten bitmap reaches every user, and that a hot-reload rebuild releases the bitmap the old tree drew.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            x:Class="BinaryVibrance.Vysara.Tests.Sample.ImageSourcesView">
+	<Image x:Name="Still" Source="{x:Bind StillSource}" Width="8" Height="8" Stretch="Fill" />
+	<Image x:Name="Live" Source="{x:Bind LiveBitmap}" Width="8" Height="8" Stretch="Fill" />
+	<Ellipse x:Name="Dot" Width="16" Height="16">
+		<Ellipse.Fill>
+			<ImageBrush ImageSource="{x:Bind LiveBitmap}" />
+		</Ellipse.Fill>
+	</Ellipse>
+	<Rectangle x:Name="Minimap" Width="32" Height="16">
+		<Rectangle.Fill>
+			<ImageBrush ImageSource="{x:Bind MinimapSource}" Stretch="Uniform" />
+		</Rectangle.Fill>
+	</Rectangle>
+</StackPanel>

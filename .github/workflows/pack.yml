@@ -37,7 +37,7 @@ jobs:
           if [ "$RELEASE" = "true" ]; then
             version="${GITHUB_REF_NAME#v}"
           else
-            version="$(dotnet msbuild Vysara/Vysara.csproj -getProperty:Version).ci.${{ github.run_number }}"
+            version="$(dotnet msbuild BinaryVibrance.Vysara/BinaryVibrance.Vysara.csproj -getProperty:Version).ci.${{ github.run_number }}"
           fi
           echo "Packing $version"
           echo "VERSION=$version" >> "$GITHUB_ENV"
@@ -45,7 +45,7 @@ jobs:
       - name: Pack
         shell: bash
         run: |
-          for project in Vysara/Vysara.csproj Vysara.Diagnostics.Endpoint/Vysara.Diagnostics.Endpoint.csproj Vysara.Text.Tool/Vysara.Text.Tool.csproj; do
+          for project in BinaryVibrance.Vysara/BinaryVibrance.Vysara.csproj BinaryVibrance.Vysara.Diagnostics.Endpoint/BinaryVibrance.Vysara.Diagnostics.Endpoint.csproj BinaryVibrance.Vysara.Text.Tool/BinaryVibrance.Vysara.Text.Tool.csproj; do
             dotnet pack "$project" -c Release -o artifacts/packages "-p:Version=$VERSION"
           done
       - uses: actions/upload-artifact@v4
