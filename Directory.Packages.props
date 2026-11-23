@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    Central Package Management for the Loom solution. Package versions live here as <PackageVersion>; the
+    Central Package Management for the Kaldra solution. Package versions live here as <PackageVersion>; the
     individual projects carry version-less <PackageReference> items. MSBuild imports the nearest
     Directory.Packages.props walking up from each project — the vendored submodule under external/ opts out via
     its own external/Directory.Packages.props (it pins its own Silk.NET versions and must not be governed here).

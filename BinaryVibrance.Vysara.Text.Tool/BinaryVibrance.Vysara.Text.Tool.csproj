@@ -13,7 +13,7 @@
     <ToolCommandName>vysara-msdf</ToolCommandName>
     <PackageId>BinaryVibrance.Vysara.Msdf</PackageId>
     <Version>0.1.0</Version>
-    <Description>Native cross-platform MTSDF font-atlas generator for Vysara / Loom (no external binary).</Description>
+    <Description>Native cross-platform MTSDF font-atlas generator for Vysara / Kaldra (no external binary).</Description>
   </PropertyGroup>
 
   <ItemGroup>

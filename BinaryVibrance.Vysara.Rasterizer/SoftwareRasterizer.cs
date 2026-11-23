@@ -8,7 +8,7 @@ namespace BinaryVibrance.Vysara.Rasterizer;
 
 /// <summary>
 /// A CPU reference rasterizer for the neutral <see cref="DrawListData"/> — the software twin of the engine's
-/// <c>ui.slang</c> fragment shader (Loom.Shaders/Shaders/ui.slang). It walks the draw commands, rasterizes each
+/// <c>ui.slang</c> fragment shader (BinaryVibrance.Kaldra.Shaders/Shaders/ui.slang). It walks the draw commands, rasterizes each
 /// triangle, and shades per pixel with the same analytic math the GPU ran: rounded-box SDFs for rect/border, MTSDF
 /// coverage for glyphs, and signed edge distances for vector geometry, each antialiased as its distance over its
 /// screen-space gradient's length. Compositing is premultiplied alpha-over in <b>linear</b> space (the GPU rendered to a

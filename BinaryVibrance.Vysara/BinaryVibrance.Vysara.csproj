@@ -32,8 +32,8 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
 
-  <!-- Vysara is standalone — no Loom.Core or Loom.Assets reference. The only external dependency is
-       StbImageSharp for decoding the embedded MTSDF font atlas PNG. Engine glue lives in Loom.UI.Vysara. -->
+  <!-- Vysara is standalone — no BinaryVibrance.Kaldra.Core or BinaryVibrance.Kaldra.Assets reference. The only external dependency is
+       StbImageSharp for decoding the embedded MTSDF font atlas PNG. Engine glue lives in BinaryVibrance.Kaldra.UI.Vysara. -->
   <ItemGroup>
     <PackageReference Include="StbImageSharp" />
   </ItemGroup>

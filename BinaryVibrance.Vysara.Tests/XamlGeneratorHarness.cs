@@ -36,7 +36,7 @@ internal static class XamlGeneratorHarness
 	}
 
 	/// <summary>The name of the assembly the views are compiled into, which a library's InternalsVisibleTo names.</summary>
-	public const string AssemblyName = "LoomXamlGenTest";
+	public const string AssemblyName = "KaldraXamlGenTest";
 
 	/// <summary>Compile <paramref name="source"/> into an assembly named <paramref name="name"/> against the Vysara runtime,
 	/// for a view's compilation to reference as metadata, as it would a NuGet package or another project.</summary>

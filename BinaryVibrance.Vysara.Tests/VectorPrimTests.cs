@@ -226,7 +226,7 @@ public sealed class VectorPrimTests
 	[Test]
 	public void Pixels_on_the_spokes_of_a_round_cap_are_drawn()
 	{
-		// Loom's GPU run found these two pixels inside a round start cap, on a spoke of its fan, left empty by the oracle:
+		// Kaldra's GPU run found these two pixels inside a round start cap, on a spoke of its fan, left empty by the oracle:
 		// the wedges either side of the spoke each computed its rim point, and the copies rounded a hairline apart.
 		var path = new CompositionPath();
 		path.MoveTo(new Vector2(480, 190));

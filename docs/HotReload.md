@@ -26,7 +26,7 @@ all inert and trimmable in a shipped game.
 
 ## Running
 
-    dotnet watch run --project Loom.Sandbox
+    dotnet watch run --project BinaryVibrance.Kaldra.Sandbox
 
 Edit a `.xaml` and save; the view refreshes on the next frame.
 

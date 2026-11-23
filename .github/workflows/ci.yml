@@ -51,7 +51,7 @@ jobs:
           Write-Host "Runner runtime: $rid"
           "rid=$rid" >> $env:GITHUB_OUTPUT
 
-      # Warnings are errors, as in Loom. The IsAotCompatible projects (Vysara, BinaryVibrance.Vysara.Text, BinaryVibrance.Vysara.Rasterizer, the
+      # Warnings are errors, as in Kaldra. The IsAotCompatible projects (Vysara, BinaryVibrance.Vysara.Text, BinaryVibrance.Vysara.Rasterizer, the
       # diagnostics endpoint) turn on the trim/AOT/single-file analyzers, so an AOT-unsafe pattern fails here.
       - name: Build (warnings as errors)
         run: dotnet build BinaryVibrance.Vysara.slnx -c Release -p:TreatWarningsAsErrors=true

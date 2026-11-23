@@ -4,7 +4,7 @@ using BinaryVibrance.Vysara.Drawing;
 namespace BinaryVibrance.Vysara.Composition;
 
 /// <summary>
-/// Loom's default <see cref="IUICompositor"/>: walks a surface's composition tree, folds transform/clip/opacity
+/// Kaldra's default <see cref="IUICompositor"/>: walks a surface's composition tree, folds transform/clip/opacity
 /// into a pre-transformed vertex/command stream, and exposes it as a neutral <see cref="DrawListData"/>. Emits the
 /// rectangle family (fills + borders), MSDF glyph runs and vector shapes (<see cref="ShapeContent"/>, through the
 /// <see cref="UIPrimKind.Vector"/> prim), painted by colour, linear-gradient or image brushes; a gradient is drawn exactly

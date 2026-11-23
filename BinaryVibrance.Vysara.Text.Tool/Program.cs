@@ -117,7 +117,7 @@ static void PrintUsage()
 {
 	Console.WriteLine(
 		$"""
-		vysara-msdf — native MTSDF font-atlas generator (Vysara / Loom)
+		vysara-msdf — native MTSDF font-atlas generator (Vysara / Kaldra)
 
 		Usage:
 		  vysara-msdf <fontset.json> [-o <dir>] [--preview "<text>"] [--preview-size <px>]

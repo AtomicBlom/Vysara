@@ -40,9 +40,9 @@ page and the shell and compares them with their golden images in `BinaryVibrance
 on purpose, write its golden again with `VYSARA_GOLDEN_UPDATE=1 dotnet run --project BinaryVibrance.Vysara.Tests -c Release` and look at
 the new image before committing it.
 
-## Integration with Loom
+## Integration with Kaldra
 
-Use `Loom.UI.Vysara` (from the [Loom](https://github.com/AtomicBlom/Loom) package) to render Vysara draw lists through the Loom render graph.
+Use `BinaryVibrance.Kaldra.UI.Vysara` (from the [Kaldra](https://github.com/AtomicBlom/Kaldra) package) to render Vysara draw lists through the Kaldra render graph.
 
 ## Links
 
