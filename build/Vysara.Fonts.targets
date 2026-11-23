@@ -1,0 +1,90 @@
+<Project>
+
+  <!--
+    Native MTSDF font baking for Vysara (the vysara-msdf tool / Vysara.Text library). Opt-in and self-contained:
+    nothing imports this automatically, so it cannot affect a project that doesn't ask for it. A consuming project
+    imports this file, lists its *.fontset.json inputs, and picks an output mode:
+
+      <Import Project="..\build\Vysara.Fonts.targets" />
+      <PropertyGroup><VysaraFontOutputMode>Embed</VysaraFontOutputMode></PropertyGroup>
+      <ItemGroup>
+        <VysaraFontset Include="Assets\Fonts\ui-default.fontset.json" />
+        <VysaraFontFile Include="Assets\Fonts\*.ttf" />   <!-- so a font edit re-bakes -->
+      </ItemGroup>
+
+    Modes (mirroring the engine's shader registration):
+      Embed   -> the page PNG + metrics JSON become EmbeddedResource with their bare names (<name>.0.png /
+                 <name>.font.json), which is exactly what FontAtlas.LoadEmbeddedDefault resolves — the engine
+                 default font.
+      Content -> loose files copied to the output under fonts\ (an app's own fonts).
+
+    The bake itself runs the vysara-msdf tool. By default it `dotnet run`s the in-repo tool project; set
+    $(VysaraMsdfExe) to a published/installed `vysara-msdf` to skip the nested build (the build-machine path).
+  -->
+
+  <PropertyGroup>
+    <VysaraFontOutputMode Condition="'$(VysaraFontOutputMode)' == ''">None</VysaraFontOutputMode>
+    <VysaraFontOutDir Condition="'$(VysaraFontOutDir)' == ''">$(IntermediateOutputPath)fonts\</VysaraFontOutDir>
+    <VysaraMsdfToolProject Condition="'$(VysaraMsdfToolProject)' == ''">$(MSBuildThisFileDirectory)..\Vysara.Text.Tool\Vysara.Text.Tool.csproj</VysaraMsdfToolProject>
+    <VysaraMsdfCommand Condition="'$(VysaraMsdfCommand)' == '' And '$(VysaraMsdfExe)' != ''">"$(VysaraMsdfExe)"</VysaraMsdfCommand>
+    <VysaraMsdfCommand Condition="'$(VysaraMsdfCommand)' == ''">dotnet run --project "$(VysaraMsdfToolProject)" -c Release --</VysaraMsdfCommand>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(VysaraFontOutputMode)' != 'None'">
+    <!-- Keep the IDE up-to-date check honest so a fontset or font edit re-bakes (and never serves a stale atlas). -->
+    <UpToDateCheckInput Include="@(VysaraFontset);@(VysaraFontFile)" />
+  </ItemGroup>
+
+  <!-- Incremental: re-bake when any fontset or font file is newer than the stamp. The per-fontset output names
+       come from the fontset's "name" field (unknown to MSBuild), so registration globs the output dir rather
+       than naming outputs here; the stamp drives the up-to-date decision. -->
+  <Target Name="VysaraBakeFonts"
+          Condition="'$(VysaraFontOutputMode)' != 'None'"
+          Inputs="@(VysaraFontset);@(VysaraFontFile)"
+          Outputs="$(VysaraFontOutDir)fonts.stamp">
+    <Error Condition="'@(VysaraFontset)' == ''"
+           Text="VysaraFontOutputMode='$(VysaraFontOutputMode)' but no &lt;VysaraFontset&gt; items were given." />
+    <MakeDir Directories="$(VysaraFontOutDir)" />
+    <Message Importance="high" Text="vysara-msdf bake: %(VysaraFontset.Filename)%(VysaraFontset.Extension)" />
+    <Exec Command="$(VysaraMsdfCommand) &quot;%(VysaraFontset.FullPath)&quot; -o &quot;$(VysaraFontOutDir)&quot;" />
+    <Touch Files="$(VysaraFontOutDir)fonts.stamp" AlwaysCreate="true" />
+  </Target>
+
+  <!-- Register the baked outputs. No Inputs/Outputs => always runs, so the files are registered on every build
+       even when the bake itself was up to date (otherwise an incremental build drops them). Anchored before
+       AssignTargetPaths so EmbeddedResource items still reach CreateManifestResourceNames / Csc. The outputs are
+       enumerated fresh from disk (a property-function GetFiles, not a cached wildcard) after the bake. -->
+  <Target Name="VysaraRegisterFonts"
+          Condition="'$(VysaraFontOutputMode)' != 'None'"
+          DependsOnTargets="VysaraBakeFonts"
+          BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <_VysaraFontPng Include="$([System.IO.Directory]::GetFiles('$(VysaraFontOutDir)', '*.png'))" />
+      <_VysaraFontJson Include="$([System.IO.Directory]::GetFiles('$(VysaraFontOutDir)', '*.font.json'))" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(VysaraFontOutputMode)' == 'Embed'">
+      <!-- Bare LogicalName so FontAtlas resolves them by file name (e.g. ui-default.0.png / ui-default.font.json).
+           WithCulture=false: the ".0" / ".font" suffix would otherwise be mistaken for a satellite culture code. -->
+      <EmbeddedResource Include="@(_VysaraFontPng)">
+        <LogicalName>%(Filename)%(Extension)</LogicalName>
+        <WithCulture>false</WithCulture>
+        <Visible>false</Visible>
+      </EmbeddedResource>
+      <EmbeddedResource Include="@(_VysaraFontJson)">
+        <LogicalName>%(Filename)%(Extension)</LogicalName>
+        <WithCulture>false</WithCulture>
+        <Visible>false</Visible>
+      </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(VysaraFontOutputMode)' == 'Content'">
+      <Content Include="@(_VysaraFontPng);@(_VysaraFontJson)">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <Link>fonts\%(Filename)%(Extension)</Link>
+        <Visible>false</Visible>
+      </Content>
+    </ItemGroup>
+  </Target>
+
+</Project>

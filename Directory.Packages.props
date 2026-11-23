@@ -16,13 +16,13 @@
   </ItemGroup>
 
   <ItemGroup Label="Source generation">
-    <!-- Roslyn for the SUIsei.SourceGen XAML incremental generator (build-time analyzer, PrivateAssets=all). -->
+    <!-- Roslyn for the Vysara.SourceGen XAML incremental generator (build-time analyzer, PrivateAssets=all). -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <!-- Win32 P/Invoke generator for the software-rendered Win32 gallery host (build-time analyzer, PrivateAssets=all). -->
     <PackageVersion Include="Microsoft.Windows.CsWin32" Version="0.3.298" />
   </ItemGroup>
 
-  <ItemGroup Label="Text shaping (HarfBuzz — the optional SUIsei.HarfBuzz adapter; native assets are per-RID)">
+  <ItemGroup Label="Text shaping (HarfBuzz — the optional Vysara.HarfBuzz adapter; native assets are per-RID)">
     <PackageVersion Include="HarfBuzzSharp" Version="14.2.0" />
     <PackageVersion Include="HarfBuzzSharp.NativeAssets.Win32" Version="14.2.0" />
   </ItemGroup>

@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    Vysara NuGet consumer build targets.
+
+    Auto-imported by MSBuild when a project references the Vysara NuGet package. The generator DLL itself is in
+    analyzers/dotnet/cs/ in this package, and NuGet wires it as an analyzer automatically; this file registers the
+    .xaml it reads, as the source build's build/Vysara.targets does. Every *.xaml under the project (or under
+    $(VysaraXamlSourceDir)), except the build output and whatever the project keeps out of its default item globs
+    (DefaultItemExcludes, and the hidden folders of DefaultExcludesInProjectFolder), becomes:
+      - <AdditionalFiles>, so the bundled Vysara.SourceGen generator produces the typed control tree and compiled
+        x:Bind glue;
+      - <UpToDateCheckInput>, so the IDE's fast up-to-date check never serves a stale tree after an edit;
+      - <Watch>, so a `dotnet watch` loop re-runs the generator on edit, feeding XAML Hot Reload.
+    VysaraXamlEnable=false opts a build out of the registration.
+  -->
+
+  <PropertyGroup>
+    <VysaraXamlEnable Condition="'$(VysaraXamlEnable)' == ''">true</VysaraXamlEnable>
+    <VysaraXamlSourceDir Condition="'$(VysaraXamlSourceDir)' == ''">$(MSBuildProjectDirectory)</VysaraXamlSourceDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(VysaraXamlEnable)' == 'true'">
+    <VysaraXaml Include="$(VysaraXamlSourceDir)\**\*.xaml"
+               Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);$(MSBuildProjectDirectory)\obj\**\*.xaml;$(MSBuildProjectDirectory)\bin\**\*.xaml" />
+    <AdditionalFiles Include="@(VysaraXaml)" />
+    <UpToDateCheckInput Include="@(VysaraXaml)" />
+    <Watch Include="@(VysaraXaml)" />
+  </ItemGroup>
+
+</Project>

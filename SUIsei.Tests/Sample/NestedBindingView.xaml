@@ -1,6 +1,0 @@
-<StackPanel xmlns="https://github.com/AtomicBlom/SUIsei/ui"
-            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            x:Class="SUIsei.Tests.Sample.NestedBindingView">
-	<TextBlock x:Name="Deep" Text="{x:Bind ViewModel.Demo.Bloom.Intensity, Mode=OneWay}" />
-	<TextBlock x:Name="Mid" Text="{x:Bind ViewModel.Demo.Title, Mode=OneWay}" />
-</StackPanel>

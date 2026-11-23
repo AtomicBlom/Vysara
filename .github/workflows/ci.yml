@@ -1,7 +1,7 @@
 name: CI
 
-# Build SUIsei warning-free, run its tests, and check that it stays NativeAOT-clean. Everything here is CPU-only: the
-# gallery goldens are drawn by the CPU reference rasterizer (SUIsei.Rasterizer), so no GPU is needed.
+# Build Vysara warning-free, run its tests, and check that it stays NativeAOT-clean. Everything here is CPU-only: the
+# gallery goldens are drawn by the CPU reference rasterizer (Vysara.Rasterizer), so no GPU is needed.
 
 on:
   push:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    # A Windows runner: SUIsei.Gallery targets net11.0-windows (CsWin32), the HarfBuzz tests need its Windows-only
+    # A Windows runner: Vysara.Gallery targets net11.0-windows (CsWin32), the HarfBuzz tests need its Windows-only
     # native library, and the NativeAOT link needs MSVC. Its architecture is detected below rather than assumed.
     #
     # A pull request from a fork runs on a GitHub-hosted runner. Everything else (pushes to main, dispatches, and pull
@@ -32,7 +32,7 @@ jobs:
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'windows-latest' || fromJSON('["self-hosted", "windows"]') }}
 
     steps:
-      # external/RoseMcp.Tap (the RoseMCP tap contract SUIsei.RoseTap builds against) is a public submodule, so the
+      # external/RoseMcp.Tap (the RoseMCP tap contract Vysara.RoseTap builds against) is a public submodule, so the
       # default token fetches it.
       - uses: actions/checkout@v7
         with:
@@ -51,21 +51,21 @@ jobs:
           Write-Host "Runner runtime: $rid"
           "rid=$rid" >> $env:GITHUB_OUTPUT
 
-      # Warnings are errors, as in Loom. The IsAotCompatible projects (SUIsei, SUIsei.Text, SUIsei.Rasterizer, the
+      # Warnings are errors, as in Loom. The IsAotCompatible projects (Vysara, Vysara.Text, Vysara.Rasterizer, the
       # diagnostics endpoint) turn on the trim/AOT/single-file analyzers, so an AOT-unsafe pattern fails here.
       - name: Build (warnings as errors)
-        run: dotnet build SUIsei.slnx -c Release -p:TreatWarningsAsErrors=true
+        run: dotnet build Vysara.slnx -c Release -p:TreatWarningsAsErrors=true
 
-      # TUnit test apps on Microsoft.Testing.Platform, run directly (SUIsei has no global.json opting `dotnet test` into
-      # MTP mode). SUIsei.Tests includes the CPU-rasterized gallery goldens.
-      - name: Test (SUIsei.Tests)
-        run: dotnet run --project SUIsei.Tests -c Release --no-build
+      # TUnit test apps on Microsoft.Testing.Platform, run directly (Vysara has no global.json opting `dotnet test` into
+      # MTP mode). Vysara.Tests includes the CPU-rasterized gallery goldens.
+      - name: Test (Vysara.Tests)
+        run: dotnet run --project Vysara.Tests -c Release --no-build
 
-      # The configuration a game ships with: SUIsei.Diagnostics never turned on, in a process of its own.
-      - name: Test (SUIsei.Tests.DiagnosticsOff)
-        run: dotnet run --project SUIsei.Tests.DiagnosticsOff -c Release --no-build
+      # The configuration a game ships with: Vysara.Diagnostics never turned on, in a process of its own.
+      - name: Test (Vysara.Tests.DiagnosticsOff)
+        run: dotnet run --project Vysara.Tests.DiagnosticsOff -c Release --no-build
 
-      # NativeAOT-publishes SUIsei.RoseTap.Sample, fails on any IL2026/IL3050 from SUIsei's own code, and runs it to
+      # NativeAOT-publishes Vysara.RoseTap.Sample, fails on any IL2026/IL3050 from Vysara's own code, and runs it to
       # check Diagnostics.Enabled folds to false under AOT. See the script's header.
       - name: NativeAOT gate (RoseTap sample)
         shell: pwsh
@@ -76,9 +76,9 @@ jobs:
       # than made errors so they can be sorted by where they come from: one from a file in this repository fails the
       # step, while third-party ones (Shouldly's IL2104/IL3053) are listed only.
       #
-      # SUIsei.Tests itself is not published here: its XAML-generator tests read reference assemblies through
+      # Vysara.Tests itself is not published here: its XAML-generator tests read reference assemblies through
       # Assembly.Location, which is empty under NativeAOT, and its diagnostics tests need the switch NativeAOT forces off.
-      - name: NativeAOT publish + run (SUIsei.Tests.DiagnosticsOff)
+      - name: NativeAOT publish + run (Vysara.Tests.DiagnosticsOff)
         shell: pwsh
         run: |
           if (-not (Get-Command vswhere.exe -ErrorAction SilentlyContinue))
@@ -88,7 +88,7 @@ jobs:
           }
           $rid = '${{ steps.rid.outputs.rid }}'
           $out = "artifacts/aot-tests-off/$rid"
-          $log = dotnet publish SUIsei.Tests.DiagnosticsOff -c Release -r $rid -o $out `
+          $log = dotnet publish Vysara.Tests.DiagnosticsOff -c Release -r $rid -o $out `
               -p:PublishAot=true -p:RestoreUseStaticGraphEvaluation=true -p:TreatWarningsAsErrors=false 2>&1 |
               ForEach-Object { "$_" }
           if ($LASTEXITCODE -ne 0) { $log; throw "the NativeAOT publish failed (dotnet exited $LASTEXITCODE)" }
@@ -106,7 +106,7 @@ jobs:
           Push-Location $out
           try
           {
-              & "./SUIsei.Tests.DiagnosticsOff.exe"
+              & "./Vysara.Tests.DiagnosticsOff.exe"
               if ($LASTEXITCODE -ne 0) { throw "the NativeAOT test run failed (exit $LASTEXITCODE)" }
           }
           finally { Pop-Location }

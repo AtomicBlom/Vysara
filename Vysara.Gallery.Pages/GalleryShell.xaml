@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	The gallery's shell: a menu bar across the top, the pages listed down the left (a ListView whose SelectionChanged
+	shows the page picked), and the page on the right in a ScrollViewer. The View menu is filled from the same list, in
+	code-behind. Edit this file or a page under `dotnet watch run` to see XAML Hot Reload.
+-->
+<Border xmlns="https://github.com/AtomicBlom/Vysara/ui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Vysara.Gallery"
+        x:Class="Vysara.Gallery.GalleryShell"
+        Background="#181A20">
+	<Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto" />
+			<RowDefinition Height="*" />
+		</Grid.RowDefinitions>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="200" />
+			<ColumnDefinition Width="*" />
+		</Grid.ColumnDefinitions>
+
+		<MenuBar Grid.Row="0" Grid.ColumnSpan="2">
+			<MenuBarItem Title="File">
+				<MenuFlyoutItem Text="Quit" Click="OnQuit" />
+			</MenuBarItem>
+			<MenuBarItem x:Name="ViewMenu" Title="View" />
+		</MenuBar>
+
+		<Border Grid.Row="1" Grid.Column="0" Background="#14161B" Padding="12,20,12,12">
+			<StackPanel Orientation="Vertical">
+				<TextBlock Text="Vysara" FontSize="22" Foreground="#ECEFF6" Margin="8,0,0,2" />
+				<TextBlock Text="Control gallery" Style="{x:Static local:GalleryTheme.Note}" Margin="8,0,0,18" />
+				<ListView x:Name="Sections" SelectionChanged="OnSectionChanged">
+					<ListView.ItemTemplate>
+						<DataTemplate x:DataType="local:GalleryPage">
+							<TextBlock Text="{x:Bind Title}" FontSize="15" Foreground="#ECEFF6" Margin="0,2,0,2" />
+						</DataTemplate>
+					</ListView.ItemTemplate>
+				</ListView>
+				<TextBlock Text="Drawn with no GPU." Style="{x:Static local:GalleryTheme.Note}" Margin="8,18,0,0" />
+			</StackPanel>
+		</Border>
+
+		<ScrollViewer x:Name="PageHost" Grid.Row="1" Grid.Column="1" />
+	</Grid>
+</Border>

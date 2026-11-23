@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	The view RoseTapTests serves through Vysara.RoseTap, as RoseMCP's host would read it: named and unnamed elements,
+	same-type siblings at two depths, a styled TextBlock, an attached property, a control template with a
+	{TemplateBinding} onto a part, and a Button built by its own C# template. The tests assert rows by line and column,
+	so moving an element here moves what they expect.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			x:Class="Vysara.Tests.Sample.TapView">
+	<StackPanel.Resources>
+		<Style x:Key="Caption" TargetType="TextBlock">
+			<Setter Property="FontSize" Value="18" />
+		</Style>
+	</StackPanel.Resources>
+	<TextBlock x:Name="Title" Text="Hello" Style="{StaticResource Caption}" />
+	<Border>
+		<TextBlock Text="first" />
+	</Border>
+	<Border>
+		<StackPanel>
+			<TextBlock Text="a" Grid.Row="2" />
+			<TextBlock Text="b" />
+		</StackPanel>
+	</Border>
+	<ContentControl x:Name="Card" Opacity="0.5">
+		<ContentControl.Template>
+			<ControlTemplate TargetType="ContentControl">
+				<Border x:Name="Chrome" Opacity="{TemplateBinding Opacity}" />
+			</ControlTemplate>
+		</ContentControl.Template>
+	</ContentControl>
+	<Button x:Name="Go" Content="Go" />
+</StackPanel>

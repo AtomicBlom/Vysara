@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds SUIsei's RoseMCP tap and drops it into a RoseMCP install's taps folder.
+    Builds Vysara's RoseMCP tap and drops it into a RoseMCP install's taps folder.
 
 .DESCRIPTION
     RoseMCP looks for dropped-in taps in the taps folder beside its settings.json, which is
@@ -9,12 +9,12 @@
     $env:ROSEMCP_TAPS names. The first tap found for a framework is the one that serves it.
 
     The tap is built into a fresh stage under artifacts/, so a failed build leaves the deployed tap in
-    place. Only SUIsei.RoseTap.dll and its pdb are copied. The game's diagnostics endpoint hands the tap
-    the game's own SUIsei, so a SUIsei.dll in the taps folder would never be used, and a stale one would
+    place. Only Vysara.RoseTap.dll and its pdb are copied. The game's diagnostics endpoint hands the tap
+    the game's own Vysara, so a Vysara.dll in the taps folder would never be used, and a stale one would
     only confuse whoever reads the folder.
 
-    A game opens that endpoint only when its runtime config turns SUIsei.Diagnostics.Enabled on (see
-    SUIsei.RoseTap/README.md), and by default loads a tap only from this taps folder and the folders
+    A game opens that endpoint only when its runtime config turns Vysara.Diagnostics.Enabled on (see
+    Vysara.RoseTap/README.md), and by default loads a tap only from this taps folder and the folders
     $env:ROSEMCP_TAPS names. RoseMCP keeps its taps folder beside its settings wherever it is installed, so
     $env:ROSEMCP_DEPLOY_ROOT doesn't move it. A game that has loaded the tap holds the file open, so close it
     before deploying again.
@@ -55,12 +55,12 @@ $taps = $Destination.Replace('\', '/')
 $stage = "$repo/artifacts/tap"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 
-Write-Host "  building SUIsei.RoseTap ($Configuration) -> $stage"
-& dotnet build "$repo/SUIsei.RoseTap/SUIsei.RoseTap.csproj" -c $Configuration -o $stage | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "SUIsei.RoseTap failed to build (dotnet exited $LASTEXITCODE)" }
+Write-Host "  building Vysara.RoseTap ($Configuration) -> $stage"
+& dotnet build "$repo/Vysara.RoseTap/Vysara.RoseTap.csproj" -c $Configuration -o $stage | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Vysara.RoseTap failed to build (dotnet exited $LASTEXITCODE)" }
 
 New-Item -ItemType Directory -Force -Path $taps | Out-Null
-foreach ($file in 'SUIsei.RoseTap.dll', 'SUIsei.RoseTap.pdb')
+foreach ($file in 'Vysara.RoseTap.dll', 'Vysara.RoseTap.pdb')
 {
     try
     {
@@ -73,4 +73,4 @@ foreach ($file in 'SUIsei.RoseTap.dll', 'SUIsei.RoseTap.pdb')
     }
 }
 
-Write-Host "deployed SUIsei.RoseTap to $taps; it serves games RoseMCP attaches to or launches from now on"
+Write-Host "deployed Vysara.RoseTap to $taps; it serves games RoseMCP attaches to or launches from now on"
