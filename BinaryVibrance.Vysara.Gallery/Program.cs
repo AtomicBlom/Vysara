@@ -27,7 +27,7 @@ if (page is not null)
 }
 
 // Headless capture: render the gallery offscreen with the same renderer the window uses and write a PNG (or a BMP),
-// then exit. Lets the gallery be verified without opening a window (mirrors Loom.Sandbox's --capture convention).
+// then exit. Lets the gallery be verified without opening a window (mirrors BinaryVibrance.Kaldra.Sandbox's --capture convention).
 // --size is the DIP size and --scale the DPI scale, so --scale 2 reproduces a 200%-display render (the same LayoutScale
 // path DPI awareness drives) at twice the pixels.
 //   BinaryVibrance.Vysara.Gallery --capture out.png [--page <key>] [--size 960x720] [--scale 1] [--frames 1]

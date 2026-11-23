@@ -8,7 +8,7 @@ namespace BinaryVibrance.Vysara.Tests;
 /// Each gallery page drawn on its own, as <c>BinaryVibrance.Vysara.Gallery --capture-pages</c> draws it, and the whole gallery in its
 /// default window, against their golden images in <c>Goldens/Gallery/</c>. The CPU rasterizer draws the same pixels every
 /// run, but not to the bit on every machine (the C runtime's transcendental functions differ in their last bits between
-/// platforms), so an image matches when at most 0.5% of its pixels differ by more than 4/255 in any channel, the bar Loom
+/// platforms), so an image matches when at most 0.5% of its pixels differ by more than 4/255 in any channel, the bar Kaldra
 /// holds its two backends to, and at most 24 by more than 32/255, so a small but real change (a missing tick, a changed
 /// word) fails too. Set <c>VYSARA_GOLDEN_UPDATE=1</c> to write the goldens instead. An image that fails leaves
 /// what was drawn in the temp directory, named in the failure.

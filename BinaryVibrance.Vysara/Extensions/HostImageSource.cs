@@ -8,7 +8,7 @@ namespace BinaryVibrance.Vysara.Extensions;
 /// An image whose texels the host supplies, named by <see cref="Tag"/>: a render target, a video frame, anything the
 /// host draws itself. Vysara-only (WinUI has no such source) and code-only. It has a size, so it lays out and is placed by
 /// a brush's stretch like any image, but no texels: <see cref="TextureSource.Pixels"/> is empty, and a host binds its own
-/// texture for the tag to the source's slot (Loom: <c>UIPainter.SetExternalTexture</c>), reading it as
+/// texture for the tag to the source's slot (Kaldra: <c>UIPainter.SetExternalTexture</c>), reading it as
 /// <see cref="TextureSource.AlphaMode"/> and <see cref="TextureSource.ColorSpace"/> declare. A host that has nothing
 /// for the tag fails loud. The CPU rasterizer skips what samples it and counts the commands it skipped.
 /// <para>

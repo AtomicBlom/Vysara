@@ -269,7 +269,7 @@ public sealed class TessellatorTests
 	public void Neighbouring_wedges_of_a_round_fan_share_their_spoke_exactly()
 	{
 		// Each wedge's last rim point is the next wedge's first. Computed once per wedge, the two copies rounded apart and
-		// left a hairline gap along the spoke: Loom's GPU, snapping vertices to 1/256 pixel, drew over it; the oracle did not.
+		// left a hairline gap along the spoke: Kaldra's GPU, snapping vertices to 1/256 pixel, drew over it; the oracle did not.
 		var path = Stroke("M 480,190 L 560,70", s => { s.Thickness = 18; s.StartCap = CompositionStrokeCap.Round; });
 		var v = path.Vertices.ToArray();
 		var wedges = Enumerable.Range(0, v.Length / 3).Where(t => v[3 * t].Position == new Vector2(480, 190)).ToArray();
@@ -315,7 +315,7 @@ public sealed class TessellatorTests
 	/// A stroke's pieces overlap where they meet, so a GPU cannot crack them apart. A join or a round or triangle cap
 	/// holds only half of the cross-section where it meets a segment's body (its spokes start at the centreline), so the
 	/// two meet at a T-junction; abutting there, a GPU's vertex snapping can open a hairline that a pixel centre falls
-	/// through, as Loom's GPU run of a curved trail showed. So every point of every body's ends inside the stroke must lie
+	/// through, as Kaldra's GPU run of a curved trail showed. So every point of every body's ends inside the stroke must lie
 	/// inside some triangle by half of <see cref="StrokePrimitives.SeamOverlap"/>, several times what snapping moves a
 	/// vertex. A polyline turning both ways and a curve (whose flattened points are joined too) cover every join and cap.
 	/// </summary>

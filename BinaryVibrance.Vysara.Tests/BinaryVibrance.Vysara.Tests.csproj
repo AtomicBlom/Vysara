@@ -30,7 +30,7 @@
     <RuntimeHostConfigurationOption Include="BinaryVibrance.Vysara.Diagnostics.Enabled" Value="true" Trim="true" />
   </ItemGroup>
 
-  <!-- Vysara is standalone — only the runtime project is needed (no Loom.Core / Loom.Assets). -->
+  <!-- Vysara is standalone — only the runtime project is needed (no BinaryVibrance.Kaldra.Core / BinaryVibrance.Kaldra.Assets). -->
   <!-- ReferenceOutputAssembly=true on SourceGen so XamlSourceGenerator is referenceable by CSharpGeneratorDriver tests.
        UndefineProperties keeps an AOT publish of this app from AOT-compiling the netstandard2.0 generator (NETSDK1207)
        or building it for the app's RID, as the analyzer reference in build/Vysara.targets does. -->

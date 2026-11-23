@@ -5,7 +5,7 @@
 # one repo restyle another's sources — and undo it again on the next run from the other side. Change this file in
 # all of them as one change. Kaldra's CLAUDE.md carries the human-readable summary.
 #
-# Vendored code Loom does not own is excluded separately, by external/.editorconfig.
+# Vendored code Kaldra does not own is excluded separately, by external/.editorconfig.
 root = true
 
 [*]

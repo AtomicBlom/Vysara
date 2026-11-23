@@ -9,7 +9,7 @@ namespace BinaryVibrance.Vysara.Media.Imaging;
 /// <see cref="Invalidate"/> moves the image's <see cref="TextureSource.Version"/>, so every surface drawing it moves its
 /// <see cref="DrawListData.TextureRevision"/> on its next frame, with no layout and no recomposite, and a host brings its
 /// texture up to date. A host that can update a texture in place writes the new texels into the one it has, ordered after
-/// the frames still sampling it (Loom's painter does, through <c>IEngine.UpdateTexture</c>); one that cannot uploads them as
+/// the frames still sampling it (Kaldra's painter does, through <c>IEngine.UpdateTexture</c>); one that cannot uploads them as
 /// a new texture and releases the old one once the frames in flight are done with it. Nothing on Vysara's side allocates,
 /// so a bitmap can be rewritten every frame; whether the host's side does is the host's.
 /// </para>
