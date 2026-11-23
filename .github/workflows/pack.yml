@@ -23,7 +23,10 @@ jobs:
       RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
       TEST_BUILD: ${{ github.ref == 'refs/heads/main' }}
     steps:
+      # external/RoseMcp.Tap (the tap contract the diagnostics endpoint compiles) is a public submodule
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '11.0.x'
