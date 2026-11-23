@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	vysara:TextEffects on text: an outlined heading and a time with a soft drop shadow, both sized in EM so they scale
+	with the text. Vysara.SourceGen turns it into a partial Vysara.Tests.Sample.TextEffectsView at build time;
+	TextEffectsTests lays it out and checks the pixels.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:vysara="https://github.com/AtomicBlom/Vysara/extensions"
+            x:Class="Vysara.Tests.Sample.TextEffectsView">
+	<TextBlock x:Name="Outlined" Text="LAP 3" FontSize="40" Foreground="White"
+	           vysara:TextEffects.OutlineThickness="0.1" vysara:TextEffects.OutlineBrush="Black" />
+	<TextBlock x:Name="Shadowed" Text="1:23.456" FontSize="40" Foreground="White"
+	           vysara:TextEffects.ShadowOffset="0.05,0.08" vysara:TextEffects.ShadowSoftness="0.2"
+	           vysara:TextEffects.ShadowBrush="#80000000" />
+</StackPanel>

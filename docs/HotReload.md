@@ -1,13 +1,13 @@
 # XAML Hot Reload
 
-SUIsei views can be edited live: change a `.xaml` while the app runs and the affected view rebuilds in place,
+Vysara views can be edited live: change a `.xaml` while the app runs and the affected view rebuilds in place,
 no restart. It rides .NET's metadata-update (Hot Reload) mechanism — the same one that applies `.cs` edits — so
 there is no XAML-specific tooling to install.
 
 ## How it works
 
-1. The build registers each `.xaml` as an `AdditionalFiles` input to the `SUIsei.SourceGen` incremental
-   generator, and (via `build/SUIsei.targets`) as a `Watch` item so `dotnet watch` re-runs the generator on edit.
+1. The build registers each `.xaml` as an `AdditionalFiles` input to the `Vysara.SourceGen` incremental
+   generator, and (via `build/Vysara.targets`) as a `Watch` item so `dotnet watch` re-runs the generator on edit.
 2. Editing a `.xaml` re-runs the generator, producing a new `InitializeComponent()` body that ships in the
    metadata delta.
 3. Each generated view registers itself with the `HotReload` registry (a no-capture, weak reference) in
@@ -125,7 +125,7 @@ A composition view can only be put in its place by code: its class is not a `UIE
 nest a view in XAML, give it an unsealed root (a `ContentControl`) and name that base in the code-behind too
 (`partial class StatsPanel : ContentControl`). The generator reading the outer view's XAML sees only the hand-written
 half of the inner view, so without the base an attribute on `<local:StatsPanel>` (a `Margin`, a `Grid.Row`) is
-SUISEI004.
+VYSARA004.
 
 Transient per-view UI state (a pressed button, an in-flight animation) is reset by a rebuild — expected for a
 dev-loop refresh.

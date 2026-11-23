@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Shapes end-to-end fixture: one of each WinUI shape, with the stroke set, Stretch, path markup, point and number
+	lists and a render transform, written as WinUI writes them. Vysara.SourceGen turns it into a partial
+	Vysara.Tests.Sample.ShapesView at build time, so its compilation proves the emitted code is valid C#; ShapeViewTests
+	then checks what each shape draws.
+-->
+<Canvas xmlns="https://github.com/AtomicBlom/Vysara/ui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Vysara.Tests.Sample.ShapesView"
+        Width="200" Height="120">
+	<Rectangle x:Name="Card" Width="60" Height="40" RadiusX="6" RadiusY="6" Fill="#3366CC" Stroke="White" StrokeThickness="2" />
+	<Ellipse x:Name="Dot" Canvas.Left="70" Width="40" Height="30" Stretch="Uniform" Fill="Gold" />
+	<Line x:Name="Rule" Canvas.Top="50" X1="0" Y1="1" X2="100" Y2="1" Stroke="Gray" StrokeThickness="2"
+	      StrokeDashArray="4 2" StrokeDashCap="Round" />
+	<Polyline x:Name="Trend" Canvas.Top="60" Points="0,20 20,5 40,15 60,0" Stroke="Lime" StrokeThickness="2"
+	          StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Triangle" />
+	<Polygon x:Name="Badge" Canvas.Left="110" Points="0,0 20,10 0,20" Fill="Red" FillRule="Nonzero" />
+	<Path x:Name="Arrow" Canvas.Left="140" Width="50" Height="50" Stretch="Uniform" Fill="White" Stroke="Black"
+	      StrokeMiterLimit="4" StrokeDashOffset="0.5" Data="M 0,10 L 20,10 20,0 30,15 20,30 20,20 0,20 Z">
+		<Path.RenderTransform>
+			<RotateTransform x:Name="ArrowSpin" Angle="0" />
+		</Path.RenderTransform>
+	</Path>
+</Canvas>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Hot-reload fixture for a composition view (a sealed StackPanel root) that nests another view, CounterPanel, in its XAML.
+	Its rebuild makes a new Root and a new CounterPanel; a {x:Bind} shows when OnComponentRebuilt runs.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			xmlns:local="using:Vysara.Tests.Sample"
+			x:Class="Vysara.Tests.Sample.NestingView">
+	<TextBlock x:Name="Before" Text="{x:Bind ViewModel.Caption, Mode=OneWay}" />
+	<local:CounterPanel x:Name="Inner" />
+	<TextBlock x:Name="After" Text="after" />
+</StackPanel>

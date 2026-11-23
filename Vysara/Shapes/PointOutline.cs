@@ -1,0 +1,48 @@
+using Vysara.Composition;
+using Vysara.Media;
+
+namespace Vysara.Shapes;
+
+/// <summary>
+/// The outline of a <see cref="Polyline"/> or a <see cref="Polygon"/>: one figure through its points, closed for a
+/// polygon, rebuilt in place on the first read after the points or the fill rule change, so moving the points allocates
+/// nothing. It is keyed by the collection's own version, so a change made while the shape was not listening (before it
+/// joined a live tree) is still seen.
+/// </summary>
+internal sealed class PointOutline(bool closed)
+{
+	private readonly CompositionPath _path = new();
+	private (PointCollection? Points, uint Version, FillRule FillRule) _built = (null, 0, FillRule.EvenOdd);
+
+	/// <summary>The outline through <paramref name="points"/>, filled by <paramref name="fillRule"/>.</summary>
+	public CompositionPath Build(PointCollection? points, FillRule fillRule)
+	{
+		var source = (points, points?.Version ?? 0, fillRule);
+		if (_built == source)
+			return _path;
+		_built = source;
+		_path.Clear();
+		_path.FillRule = fillRule.ToComposition();
+		var span = points is null ? default : points.AsSpan();
+		if (span.Length > 0)
+		{
+			_path.MoveTo(span[0].ToVector2());
+			for (var i = 1; i < span.Length; i++)
+				_path.LineTo(span[i].ToVector2());
+			if (closed)
+				_path.Close();
+		}
+		return _path;
+	}
+
+	/// <summary>Start or stop <paramref name="listener"/> hearing changes to <paramref name="points"/>.</summary>
+	public static void Listen(ISubPropertyListener listener, PointCollection? points, bool listen)
+	{
+		if (points is null)
+			return;
+		if (listen)
+			points.AddListener(listener);
+		else
+			points.RemoveListener(listener);
+	}
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="Vysara.Gallery" />
+
+  <!-- Per-monitor-v2 DPI awareness: Windows hands the process physical pixels and real per-monitor DPI instead of
+       bitmap-stretching a 96-DPI surface, so the software-rasterized UI stays pixel-crisp at any display scale.
+       dpiAwareness (PerMonitorV2) is honoured on Windows 10 1703+; dpiAware (true/pm) is the down-level fallback. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>

@@ -1,0 +1,76 @@
+name: Pack
+
+# Every push and PR packs Vysara's packages: BinaryVibrance.Vysara (the runtime, with its XAML generator),
+# BinaryVibrance.Vysara.Diagnostics.Endpoint and BinaryVibrance.Vysara.Msdf (the vysara-msdf tool). A push to main also
+# publishes a test build to GitHub Packages (the projects' version, then .ci.<run>). A v* tag publishes the release to
+# nuget.org, versioned by the tag (v0.1.0-preview.2 packs 0.1.0-preview.2).
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write   # test builds, to GitHub Packages
+  id-token: write   # releases: nuget.org's trusted publishing, a short-lived key from GitHub's OIDC token
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      TEST_BUILD: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      # external/RoseMcp.Tap (the tap contract the diagnostics endpoint compiles) is a public submodule
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+
+      - name: Choose the version
+        shell: bash
+        run: |
+          if [ "$RELEASE" = "true" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(dotnet msbuild Vysara/Vysara.csproj -getProperty:Version).ci.${{ github.run_number }}"
+          fi
+          echo "Packing $version"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Pack
+        shell: bash
+        run: |
+          for project in Vysara/Vysara.csproj Vysara.Diagnostics.Endpoint/Vysara.Diagnostics.Endpoint.csproj Vysara.Text.Tool/Vysara.Text.Tool.csproj; do
+            dotnet pack "$project" -c Release -o artifacts/packages "-p:Version=$VERSION"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages/*.nupkg
+
+      - name: Publish the test build to GitHub Packages
+        if: env.TEST_BUILD == 'true'
+        run: >
+          dotnet nuget push "artifacts/packages/*.nupkg"
+          --source "https://nuget.pkg.github.com/AtomicBlom/index.json"
+          --api-key ${{ secrets.GITHUB_TOKEN }}
+          --skip-duplicate
+
+      - name: Log in to nuget.org
+        if: env.RELEASE == 'true'
+        id: nuget
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+      - name: Publish the release to nuget.org
+        if: env.RELEASE == 'true'
+        run: >
+          dotnet nuget push "artifacts/packages/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key ${{ steps.nuget.outputs.NUGET_API_KEY }}
+          --skip-duplicate

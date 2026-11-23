@@ -1,0 +1,18 @@
+<Solution>
+  <Project Path="Vysara\Vysara.csproj" />
+  <Folder Name="/Build/">
+    <File Path="build/Vysara.props" />
+    <File Path="build/Vysara.targets" />
+  </Folder>
+  <Project Path="Vysara.RoseTap.Sample\Vysara.RoseTap.Sample.csproj" />
+  <Project Path="Vysara.RoseTap\Vysara.RoseTap.csproj" />
+  <Project Path="Vysara.SourceGen\Vysara.SourceGen.csproj" />
+  <Project Path="Vysara.Tests.DiagnosticsOff\Vysara.Tests.DiagnosticsOff.csproj" />
+  <Project Path="Vysara.Tests\Vysara.Tests.csproj" />
+  <Project Path="Vysara.Diagnostics.Endpoint\Vysara.Diagnostics.Endpoint.csproj" />
+  <Project Path="Vysara.Gallery\Vysara.Gallery.csproj" />
+  <Project Path="Vysara.Gallery.Pages\Vysara.Gallery.Pages.csproj" />
+  <Project Path="Vysara.Text\Vysara.Text.csproj" />
+  <Project Path="Vysara.Text.Tool\Vysara.Text.Tool.csproj" />
+  <Project Path="Vysara.HarfBuzz\Vysara.HarfBuzz.csproj" />
+</Solution>

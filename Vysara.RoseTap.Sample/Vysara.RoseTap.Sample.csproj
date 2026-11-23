@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- XAML -> typed control-tree generator wiring (registers *.xaml as AdditionalFiles + the analyzer ref). -->
+  <Import Project="..\build\Vysara.props" />
+
+  <!-- A game with no window and no GPU, for driving Vysara.RoseTap from RoseMCP's real host: it hosts one small XAML
+       view on a headless UIHost, ticks it until killed, and opts into Vysara.Diagnostics, so the diagnostics endpoint
+       comes up on vysara-diag-{pid} for a host to attach to and load the tap through. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- How a game opts into diagnostics: the feature switch, set in its runtime config, and the endpoint, which
+       Program.cs starts. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Vysara.Diagnostics.Enabled" Value="true" Trim="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Vysara\Vysara.csproj" />
+    <ProjectReference Include="..\Vysara.Diagnostics.Endpoint\Vysara.Diagnostics.Endpoint.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\build\Vysara.targets" />
+
+</Project>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Image brushes on shapes the rect prims cannot texture: a round avatar (an ImageBrush background on a Border whose
+	corner radius is half its size) and an ImageBrush border. Both draw through the Vector prim; BrushTests gives the
+	brushes an image and checks what is drawn.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            x:Class="Vysara.Tests.Sample.ImageCornersView">
+	<Border x:Name="Avatar" Width="32" Height="32" CornerRadius="16">
+		<Border.Background>
+			<ImageBrush Stretch="UniformToFill" />
+		</Border.Background>
+	</Border>
+	<Border x:Name="Framed" Width="40" Height="24" CornerRadius="6" BorderThickness="3">
+		<Border.BorderBrush>
+			<ImageBrush />
+		</Border.BorderBrush>
+	</Border>
+</StackPanel>

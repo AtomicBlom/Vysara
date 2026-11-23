@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-    NativeAOT-publishes SUIsei.RoseTap.Sample and checks that diagnostics stay off in it.
+    NativeAOT-publishes Vysara.RoseTap.Sample and checks that diagnostics stay off in it.
 
 .DESCRIPTION
-    The sample turns SUIsei.Diagnostics.Enabled on in its runtime config and starts the diagnostics
+    The sample turns Vysara.Diagnostics.Enabled on in its runtime config and starts the diagnostics
     endpoint, so it is the case that matters: under NativeAOT, Diagnostics.Enabled has to fold to false
     whatever the switch says, which removes the endpoint and every assembly load it guards. If it does
     not fold (as when [FeatureSwitchDefinition] sits on Enabled itself, so ILC replaces the whole getter
     with the switch's value), ILC keeps that code and warns about the endpoint's call into the loader.
-    The JIT tests (SUIsei.Tests.DiagnosticsOff among them) cannot see that, nor what the published game
+    The JIT tests (Vysara.Tests.DiagnosticsOff among them) cannot see that, nor what the published game
     reads Enabled as, which the check runs it to find out.
 
     The check fails when:
       - the publish fails;
-      - the publish reports IL2026 or IL3050 from SUIsei's own code (a line naming SUIsei). Warnings from
+      - the publish reports IL2026 or IL3050 from Vysara's own code (a line naming Vysara). Warnings from
         other assemblies are listed but do not fail it;
       - the published sample does not print its "Diagnostics are off" line within the timeout.
 
@@ -48,7 +48,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repo = (Split-Path $PSScriptRoot -Parent).Replace('\', '/')
-$project = "$repo/SUIsei.RoseTap.Sample/SUIsei.RoseTap.Sample.csproj"
+$project = "$repo/Vysara.RoseTap.Sample/Vysara.RoseTap.Sample.csproj"
 $out = "$repo/artifacts/aot-sample/$Runtime"
 
 if ($IsWindows -and -not (Get-Command vswhere.exe -ErrorAction SilentlyContinue))
@@ -58,7 +58,7 @@ if ($IsWindows -and -not (Get-Command vswhere.exe -ErrorAction SilentlyContinue)
 }
 
 # The runtime's folders in every project, and the last publish, so nothing is skipped as up to date.
-foreach ($folder in Get-ChildItem $repo -Directory -Filter 'SUIsei*')
+foreach ($folder in Get-ChildItem $repo -Directory -Filter 'Vysara*')
 {
     foreach ($kind in 'obj', 'bin')
     {
@@ -68,7 +68,7 @@ foreach ($folder in Get-ChildItem $repo -Directory -Filter 'SUIsei*')
 }
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 
-Write-Host "  publishing SUIsei.RoseTap.Sample with NativeAOT ($Runtime, $Configuration) -> $out"
+Write-Host "  publishing Vysara.RoseTap.Sample with NativeAOT ($Runtime, $Configuration) -> $out"
 # Warnings are reported rather than made errors, so every one can be read and sorted by where it comes from.
 # The static-graph restore keeps PublishAot from reaching the XAML source generator, a netstandard2.0 analyzer.
 $log = & dotnet publish $project -c $Configuration -r $Runtime -o $out `
@@ -76,8 +76,8 @@ $log = & dotnet publish $project -c $Configuration -r $Runtime -o $out `
 $published = $LASTEXITCODE -eq 0
 
 $warnings = @($log | ForEach-Object { "$_" } | Where-Object { $_ -match '\b(IL2026|IL3050)\b' } | Sort-Object -Unique)
-$ours = @($warnings | Where-Object { $_ -match 'SUIsei' })
-$theirs = @($warnings | Where-Object { $_ -notmatch 'SUIsei' })
+$ours = @($warnings | Where-Object { $_ -match 'Vysara' })
+$theirs = @($warnings | Where-Object { $_ -notmatch 'Vysara' })
 
 if (-not $published)
 {
@@ -85,13 +85,13 @@ if (-not $published)
     throw "the NativeAOT publish failed (dotnet exited $LASTEXITCODE)"
 }
 
-foreach ($line in $theirs) { Write-Host "  (not SUIsei's) $line" }
+foreach ($line in $theirs) { Write-Host "  (not Vysara's) $line" }
 if ($ours.Count -gt 0)
 {
     foreach ($line in $ours) { Write-Host "  $line" -ForegroundColor Red }
-    throw "the NativeAOT publish reports $($ours.Count) IL2026/IL3050 warning(s) from SUIsei: Diagnostics.Enabled no longer removes the code it guards"
+    throw "the NativeAOT publish reports $($ours.Count) IL2026/IL3050 warning(s) from Vysara: Diagnostics.Enabled no longer removes the code it guards"
 }
-Write-Host "  no IL2026 or IL3050 from SUIsei"
+Write-Host "  no IL2026 or IL3050 from Vysara"
 
 if ($Runtime -ne [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier)
 {
@@ -100,8 +100,8 @@ if ($Runtime -ne [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIde
 }
 
 # The sample ticks until it is killed, so its output is read only until it says whether diagnostics are on.
-$exe = Get-ChildItem $out -File | Where-Object { $_.BaseName -eq 'SUIsei.RoseTap.Sample' -and $_.Extension -in '', '.exe' } | Select-Object -First 1
-if (-not $exe) { throw "the publish produced no SUIsei.RoseTap.Sample executable in $out" }
+$exe = Get-ChildItem $out -File | Where-Object { $_.BaseName -eq 'Vysara.RoseTap.Sample' -and $_.Extension -in '', '.exe' } | Select-Object -First 1
+if (-not $exe) { throw "the publish produced no Vysara.RoseTap.Sample executable in $out" }
 
 $start = [System.Diagnostics.ProcessStartInfo]::new($exe.FullName)
 $start.RedirectStandardOutput = $true
@@ -131,4 +131,4 @@ finally
 if (-not $said) { throw "the published sample did not say within ${TimeoutSeconds}s whether diagnostics are on" }
 if ($said -notmatch '^Diagnostics are off') { throw "the published sample has diagnostics on under NativeAOT: $said" }
 
-Write-Host "NativeAOT keeps diagnostics off in SUIsei.RoseTap.Sample, with no IL2026 or IL3050 from SUIsei"
+Write-Host "NativeAOT keeps diagnostics off in Vysara.RoseTap.Sample, with no IL2026 or IL3050 from Vysara"
