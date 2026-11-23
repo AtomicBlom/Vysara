@@ -1,8 +1,9 @@
-# Shared C# coding conventions, kept byte-identical between Loom and Vysara.
+# Shared C# coding conventions, kept byte-identical across the engine's repositories: Kaldra, Vysara, Sirrow,
+# SirrowStudio and Kaldra.Gallery.
 #
-# The two are developed together and Vysara is vendored into Loom as a submodule, so a divergence here would have a
-# `dotnet format` run in either repo restyle the other's sources — and undo it again on the next run from the other
-# side. Change this file in both repositories as one change. Loom's CLAUDE.md carries the human-readable summary.
+# They are developed together and build beside one another, so a divergence here would have a `dotnet format` run in
+# one repo restyle another's sources — and undo it again on the next run from the other side. Change this file in
+# all of them as one change. Kaldra's CLAUDE.md carries the human-readable summary.
 #
 # Vendored code Loom does not own is excluded separately, by external/.editorconfig.
 root = true
