@@ -19,16 +19,17 @@ concurrency:
 
 jobs:
   build-and-test:
-    # The same private self-hosted Windows runner Loom's CI uses. SUIsei.Gallery targets net11.0-windows (CsWin32),
-    # the HarfBuzz tests need its Windows-only native library, and the NativeAOT link needs MSVC, so the runner must be
-    # Windows; its architecture is detected below rather than assumed.
+    # A Windows runner: SUIsei.Gallery targets net11.0-windows (CsWin32), the HarfBuzz tests need its Windows-only
+    # native library, and the NativeAOT link needs MSVC. Its architecture is detected below rather than assumed.
     #
-    # SECURITY: a self-hosted runner runs whatever code a workflow checks out, on the owner's machine. This is safe only
-    # while this repository is PRIVATE. The `if:` below also refuses pull requests whose head is in another
-    # repository (a fork), so a fork's PR never reaches the runner even if the repository is made public; before making
-    # it public, still remove the self-hosted runner and switch to `runs-on: windows-latest`.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, windows]
+    # A pull request from a fork runs on a GitHub-hosted runner. Everything else (pushes to main, dispatches, and pull
+    # requests from this repository's own branches, which only someone with write access can push) runs on the
+    # self-hosted one the engine's CI uses.
+    # SECURITY: a fork's pull request runs the workflow files on its own branch, so it could change this line. What
+    # keeps it off the self-hosted runner is the repository's setting that a fork's workflows wait for approval
+    # (Settings > Actions > General, "Require approval for all external contributors"): read a fork's workflow changes
+    # before approving its run.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'windows-latest' || fromJSON('["self-hosted", "windows"]') }}
 
     steps:
       # external/RoseMcp.Tap (the RoseMCP tap contract SUIsei.RoseTap builds against) is a public submodule, so the
