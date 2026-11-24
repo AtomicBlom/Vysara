@@ -64,6 +64,7 @@ public static partial class Diagnostics
 			// A brush from a colour, as the generator converts one: a SolidColorBrush of it, made for this use alone.
 			_ when target == typeof(Brush) || target == typeof(SolidColorBrush) =>
 				XamlValueSyntax.TryParseColor(s, out var a, out var r, out var g, out var b) ? new SolidColorBrush(HdrColor.FromRgb(r, g, b, a)) : null,
+			_ when target == typeof(FontFamily) => string.IsNullOrWhiteSpace(s) ? null : new FontFamily(s),
 			_ when target == typeof(Thickness) => XamlValueSyntax.ParseNumbers(s) switch
 			{
 				[var u] => new Thickness(u),

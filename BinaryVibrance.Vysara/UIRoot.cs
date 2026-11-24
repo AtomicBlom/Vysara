@@ -110,8 +110,9 @@ public sealed class UIRoot
 	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
 	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
 	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
-	/// everything under the root. It is the whole surface's font until elements choose their own. A text effect the new
-	/// font's distance field cannot hold is drawn clamped to it (<see cref="Extensions.TextEffects"/>).
+	/// everything under the root. It is the font of all text that names no family, or one the host's
+	/// <see cref="UIHost.Fonts"/> doesn't hold (<see cref="FontFor"/>). A text effect the new font's distance field cannot
+	/// hold is drawn clamped to it (<see cref="Extensions.TextEffects"/>).
 	/// </summary>
 	public FontAtlas Font
 	{
@@ -122,10 +123,25 @@ public sealed class UIRoot
 			if (ReferenceEquals(field, value))
 				return;
 			field = value;
-			Content?.InvalidateMeasureTree();
-			foreach (var (element, _, _) in _overlays)
-				element.InvalidateMeasureTree();
+			InvalidateText();
 		}
+	}
+
+	/// <summary>The fonts families name, set by <see cref="UIHost"/>; null for a root used standalone, whose text all
+	/// draws in <see cref="Font"/>.</summary>
+	internal FontCollection? Fonts { get; set; }
+
+	/// <summary>The font text in <paramref name="family"/> measures and draws with: the one the host's fonts hold under
+	/// its name, or <see cref="Font"/> for no family or one they don't hold.</summary>
+	internal FontAtlas FontFor(Media.FontFamily? family) =>
+		family is not null && Fonts is { } fonts && fonts.TryGet(family.Source, out var font) ? font : Font;
+
+	// The fonts text is drawn in changed: everything under the root measures again, overlays included
+	internal void InvalidateText()
+	{
+		Content?.InvalidateMeasureTree();
+		foreach (var (element, _, _) in _overlays)
+			element.InvalidateMeasureTree();
 	}
 
 	/// <summary>Add an overlay element composited above <see cref="Content"/> (a popup/flyout, or its full-surface

@@ -38,6 +38,7 @@ partial class XamlSourceGenerator
 		["BinaryVibrance.Vysara.GridLength"] = (ConvertGridLength, "Auto, *, N* or a number"),
 		["System.TimeSpan"] = (ConvertTimeSpan, XamlValueSyntax.DurationSyntax),
 		["BinaryVibrance.Vysara.Animation.RepeatBehavior"] = (ConvertRepeatBehavior, "Forever, or a count such as 3x"),
+		["BinaryVibrance.Vysara.Media.FontFamily"] = (ConvertFontFamily, "a font family's name"),
 	};
 
 	// Convert attribute text for a value of `type`. `expected` names the accepted syntax for a diagnostic.
@@ -224,6 +225,14 @@ partial class XamlSourceGenerator
 	private static bool ConvertGeometry(string raw, out string code)
 	{
 		code = PathMarkup.TryParse(raw, null, out _) ? $"global::BinaryVibrance.Vysara.Media.Geometry.Parse({SyntaxFactory.Literal(raw)})" : "";
+		return code.Length > 0;
+	}
+
+	// A font family by its name, as WinUI's: the host's fonts look it up when the text is laid out.
+	private static bool ConvertFontFamily(string raw, out string code)
+	{
+		var name = raw.Trim();
+		code = name.Length > 0 ? $"new global::BinaryVibrance.Vysara.Media.FontFamily({SyntaxFactory.Literal(name)})" : "";
 		return code.Length > 0;
 	}
 

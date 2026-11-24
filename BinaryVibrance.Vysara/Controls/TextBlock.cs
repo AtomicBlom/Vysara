@@ -74,6 +74,17 @@ public sealed class TextBlock : FrameworkElement
 	/// <summary>Font size in DIPs: 14 unless set here or inherited from above.</summary>
 	public float FontSize { get => GetValue(FontSizeProperty); set => SetValue(FontSizeProperty, value); }
 
+	/// <summary>The family of the text's font, by name in the host's <see cref="UIHost.Fonts"/>, inherited from above
+	/// unless set here; null, or a name the host doesn't hold, draws in the root's <see cref="UIRoot.Font"/>.</summary>
+	public static readonly DependencyProperty<TextBlock, FontFamily?> FontFamilyProperty =
+		DependencyProperty.Register(nameof(FontFamily),
+			new PropertyMetadata<TextBlock, FontFamily?> { Invalidates = InvalidationFlags.Measure, Inherits = InheritedText.FontFamily });
+
+	/// <summary>The family of the text's font (<see cref="FontFamilyProperty"/>).</summary>
+	public FontFamily? FontFamily { get => GetValue(FontFamilyProperty); set => SetValue(FontFamilyProperty, value); }
+
+	private protected override FontFamily? TextFamily => FontFamily;
+
 	/// <summary>The brush the glyphs are painted with; null paints white. A change repaints with no relayout.</summary>
 	public Brush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
 

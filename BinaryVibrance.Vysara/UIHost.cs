@@ -45,6 +45,12 @@ public sealed class UIHost
 			Focus.FocusFromPointer(el);
 		};
 		Input.OnWheel = ToolTips.Dismiss;
+		// A family given another font, or none: every root's text measures again
+		Fonts.Changed += () =>
+		{
+			foreach (var view in _views)
+				view.Root.InvalidateText();
+		};
 		HotReload.TrackHost(this);
 		Diagnostics.ViewsChanged();
 	}
@@ -60,6 +66,12 @@ public sealed class UIHost
 
 	/// <summary>The animation clock advancing this host's storyboards, stepped each <see cref="Tick"/>.</summary>
 	public AnimationClock Clock { get; } = new();
+
+	/// <summary>
+	/// The fonts text in any of this host's roots may name by its <c>FontFamily</c> (<see cref="Media.FontFamily"/>).
+	/// Text that names none of them, or no family, draws in its root's <see cref="UIRoot.Font"/>.
+	/// </summary>
+	public FontCollection Fonts { get; } = new();
 
 	/// <summary>
 	/// True when this host would consume pointer input — a pointer is over drawn (opaque) UI content or a pointer
@@ -127,7 +139,8 @@ public sealed class UIHost
 			LayoutScale = layer.LayoutScale,
 			InputManager = Input,
 			FocusManager = Focus,
-			Clock = Clock
+			Clock = Clock,
+			Fonts = Fonts,
 		};
 		var view = new UIView(root, layer, interactive);
 		_views.Add(view);

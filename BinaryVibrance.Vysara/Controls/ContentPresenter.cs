@@ -77,6 +77,14 @@ public class ContentPresenter : FrameworkElement
 	/// <summary>The size of the text the presenter shows, in DIPs: 14 unless set here or inherited from above.</summary>
 	public float FontSize { get => GetValue(FontSizeProperty); set => SetValue(FontSizeProperty, value); }
 
+	/// <summary>The family of the text the presenter shows, inherited as <see cref="Foreground"/> is.</summary>
+	public static readonly DependencyProperty<ContentPresenter, FontFamily?> FontFamilyProperty =
+		DependencyProperty.Register(nameof(FontFamily),
+			new PropertyMetadata<ContentPresenter, FontFamily?> { Inherits = InheritedText.FontFamily });
+
+	/// <summary>The family of the text the presenter shows (<see cref="FontFamilyProperty"/>).</summary>
+	public FontFamily? FontFamily { get => GetValue(FontFamilyProperty); set => SetValue(FontFamilyProperty, value); }
+
 	/// <summary>How a change of <see cref="Background"/> animates; null shows it at once.</summary>
 	public BrushTransition? BackgroundTransition { get; set; }
 
