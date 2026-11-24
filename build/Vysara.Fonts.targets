@@ -9,7 +9,7 @@
       <PropertyGroup><VysaraFontOutputMode>Embed</VysaraFontOutputMode></PropertyGroup>
       <ItemGroup>
         <VysaraFontset Include="Assets\Fonts\ui-default.fontset.json" />
-        <VysaraFontFile Include="Assets\Fonts\*.ttf" />   <!-- so a font edit re-bakes -->
+        <VysaraFontFile Include="Assets\Fonts\*.ttf" />   (so a font edit re-bakes)
       </ItemGroup>
 
     Modes (mirroring the engine's shader registration):
@@ -24,7 +24,6 @@
 
   <PropertyGroup>
     <VysaraFontOutputMode Condition="'$(VysaraFontOutputMode)' == ''">None</VysaraFontOutputMode>
-    <VysaraFontOutDir Condition="'$(VysaraFontOutDir)' == ''">$(IntermediateOutputPath)fonts\</VysaraFontOutDir>
     <VysaraMsdfToolProject Condition="'$(VysaraMsdfToolProject)' == ''">$(MSBuildThisFileDirectory)..\BinaryVibrance.Vysara.Text.Tool\BinaryVibrance.Vysara.Text.Tool.csproj</VysaraMsdfToolProject>
     <VysaraMsdfCommand Condition="'$(VysaraMsdfCommand)' == '' And '$(VysaraMsdfExe)' != ''">"$(VysaraMsdfExe)"</VysaraMsdfCommand>
     <VysaraMsdfCommand Condition="'$(VysaraMsdfCommand)' == ''">dotnet run --project "$(VysaraMsdfToolProject)" -c Release --</VysaraMsdfCommand>
@@ -38,15 +37,24 @@
   <!-- Incremental: re-bake when any fontset or font file is newer than the stamp. The per-fontset output names
        come from the fontset's "name" field (unknown to MSBuild), so registration globs the output dir rather
        than naming outputs here; the stamp drives the up-to-date decision. -->
+  <!-- Where the bake goes: $(VysaraFontOutDir), or the project's intermediate folder's fonts\. Set when the bake runs, not
+       as the file is read, since a project may import this before the SDK's targets define $(IntermediateOutputPath). -->
+  <Target Name="_VysaraFontOutDir" Condition="'$(VysaraFontOutputMode)' != 'None'">
+    <PropertyGroup>
+      <VysaraFontOutDir Condition="'$(VysaraFontOutDir)' == ''">$(IntermediateOutputPath)fonts\</VysaraFontOutDir>
+    </PropertyGroup>
+  </Target>
+
   <Target Name="VysaraBakeFonts"
           Condition="'$(VysaraFontOutputMode)' != 'None'"
+          DependsOnTargets="_VysaraFontOutDir"
           Inputs="@(VysaraFontset);@(VysaraFontFile)"
           Outputs="$(VysaraFontOutDir)fonts.stamp">
     <Error Condition="'@(VysaraFontset)' == ''"
            Text="VysaraFontOutputMode='$(VysaraFontOutputMode)' but no &lt;VysaraFontset&gt; items were given." />
     <MakeDir Directories="$(VysaraFontOutDir)" />
     <Message Importance="high" Text="vysara-msdf bake: %(VysaraFontset.Filename)%(VysaraFontset.Extension)" />
-    <Exec Command="$(VysaraMsdfCommand) &quot;%(VysaraFontset.FullPath)&quot; -o &quot;$(VysaraFontOutDir)&quot;" />
+    <Exec Command="$(VysaraMsdfCommand) &quot;%(VysaraFontset.FullPath)&quot; -o &quot;$(VysaraFontOutDir).&quot;" />
     <Touch Files="$(VysaraFontOutDir)fonts.stamp" AlwaysCreate="true" />
   </Target>
 
