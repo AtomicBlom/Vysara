@@ -195,8 +195,23 @@ public abstract class FrameworkElement : UIElement
 		var (y, h) = ArrangeAxis((int)VerticalAlignment, slotY, slotH,
 			MathF.Max(0f, DesiredSize.Height - m.Vertical), Height, MinHeight, MaxHeight);
 
+		// On whole pixels where the root asks (UIRoot.UseLayoutRounding): both edges rounded, so neighbours still meet
+		if (AttachedRoot is { UseLayoutRounding: true, LayoutScale: > 0f and var scale })
+		{
+			(x, w) = RoundEdges(x, w, scale);
+			(y, h) = RoundEdges(y, h, scale);
+		}
+
 		LayoutRect = new Rect(x, y, w, h);
 		ArrangeOverride(new Size(w, h));
+	}
+
+	// A span from `start`, `size` long, with both its edges moved to the nearest whole pixel at `scale` pixels per DIP
+	private static (float Start, float Size) RoundEdges(float start, float size, float scale)
+	{
+		var from = MathF.Round(start * scale) / scale;
+		var to = MathF.Round((start + size) * scale) / scale;
+		return (from, MathF.Max(0f, to - from));
 	}
 
 	// Resolve one axis: pick the content extent (Stretch fills the slot; else explicit-or-desired, clamped) and

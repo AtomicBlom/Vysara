@@ -78,7 +78,47 @@ public sealed class UIRoot
 
 	/// <summary>DIP→pixel scale: window DPI/96 for an overlay, author-chosen texel density for an in-world quad
 	/// Layout runs in DIPs; the render walk scales positions by this.</summary>
-	public float LayoutScale { get; set; } = 1f;
+	public float LayoutScale
+	{
+		get;
+		set
+		{
+			if (field == value)
+				return;
+			field = value;
+			// Rounded layout is rounded to this scale's pixels: lay it out again for the new ones
+			if (UseLayoutRounding)
+				InvalidateLayout();
+		}
+	} = 1f;
+
+	/// <summary>
+	/// Whether layout places every element's edges on whole pixels of this root's surface, as WinUI's
+	/// <c>UseLayoutRounding</c> does: each element rounds its edges in its parent, which has already rounded its own, so
+	/// every element lands on the pixel grid. A thin line then covers whole pixels wherever it moves, instead of
+	/// spreading across two at fractional positions; anything that depends on how many pixels a line covers (crisp hairlines,
+	/// a glow made from what is brighter than white) holds steady as it moves. Off by default, unlike WinUI, so a
+	/// surface's layout is the same as it always was unless it asks; a render transform still places content anywhere.
+	/// </summary>
+	public bool UseLayoutRounding
+	{
+		get;
+		set
+		{
+			if (field == value)
+				return;
+			field = value;
+			InvalidateLayout();
+		}
+	}
+
+	// Lay everything under the root out again, overlays included
+	private void InvalidateLayout()
+	{
+		Content?.InvalidateMeasureTree();
+		foreach (var (element, _, _) in _overlays)
+			element.InvalidateMeasureTree();
+	}
 
 	/// <summary>
 	/// How much of the bottom of the surface an on-screen keyboard covers, in surface pixels: zero (the default) while no
