@@ -524,7 +524,14 @@ partial class XamlSourceGenerator
 	private static void EmitResourceEntry(Gen gen, Scope scope, string ownerVar, string dictionaryExpr, XElement resEl)
 	{
 		var key = resEl.Attribute(X + "Key")?.Value;
-		if (key is null) { gen.Report(BadPropertyElement, resEl, $"{resEl.Name.LocalName} (resource needs an x:Key)"); return; }
+		// A style with a TargetType and no key is that type's implicit style, as in WinUI
+		if (key is null && resEl.Name.LocalName == "Style")
+		{
+			if (EmitStyle(gen, scope, ownerVar, resEl) is { } implicitStyle)
+				scope.Emit($"{dictionaryExpr}.Add({implicitStyle});");
+			return;
+		}
+		if (key is null) { gen.Report(BadPropertyElement, resEl, $"{resEl.Name.LocalName} (resource needs an x:Key; only a Style may go without one)"); return; }
 		if (resEl.Name.LocalName is "DataTemplate" or "ItemsPanelTemplate") { gen.Report(BadPropertyElement, resEl, resEl.Name.LocalName); return; }
 		var valueVar = resEl.Name.LocalName switch
 		{
@@ -558,7 +565,7 @@ partial class XamlSourceGenerator
 			else
 				gen.Report(UnsupportedMarkup, basedOn, $"BasedOn=\"{basedOn.Value.Trim()}\" (a base style is named with {{StaticResource Key}})");
 		}
-		scope.Emit($"var {styleVar} = new global::BinaryVibrance.Vysara.Style {{{basedOnInit} }};");
+		scope.Emit($"var {styleVar} = new global::BinaryVibrance.Vysara.Style {{ TargetType = typeof({Fq(targetType)}),{basedOnInit} }};");
 		var setterCount = 0;
 
 		foreach (var setterEl in ObjectChildren(styleEl))

@@ -85,6 +85,17 @@ public sealed class TextBlock : FrameworkElement
 
 	private protected override FontFamily? TextFamily => FontFamily;
 
+	/// <summary>How heavy the text is (<see cref="Vysara.FontWeights"/>), inherited from above unless set here: it chooses
+	/// among its family's fonts in the host's <see cref="UIHost.Fonts"/>, the nearest weight they have.</summary>
+	public static readonly DependencyProperty<TextBlock, FontWeight> FontWeightProperty =
+		DependencyProperty.Register(nameof(FontWeight),
+			new PropertyMetadata<TextBlock, FontWeight> { DefaultValue = FontWeights.Normal, Invalidates = InvalidationFlags.Measure, Inherits = InheritedText.FontWeight });
+
+	/// <summary>How heavy the text is (<see cref="FontWeightProperty"/>).</summary>
+	public FontWeight FontWeight { get => GetValue(FontWeightProperty); set => SetValue(FontWeightProperty, value); }
+
+	private protected override FontWeight TextWeight => FontWeight;
+
 	/// <summary>The brush the glyphs are painted with; null paints white. A change repaints with no relayout.</summary>
 	public Brush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
 

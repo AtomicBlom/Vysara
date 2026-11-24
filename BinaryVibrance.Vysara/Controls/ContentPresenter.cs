@@ -85,6 +85,14 @@ public class ContentPresenter : FrameworkElement
 	/// <summary>The family of the text the presenter shows (<see cref="FontFamilyProperty"/>).</summary>
 	public FontFamily? FontFamily { get => GetValue(FontFamilyProperty); set => SetValue(FontFamilyProperty, value); }
 
+	/// <summary>How heavy the text the presenter shows is, inherited as <see cref="Foreground"/> is.</summary>
+	public static readonly DependencyProperty<ContentPresenter, FontWeight> FontWeightProperty =
+		DependencyProperty.Register(nameof(FontWeight),
+			new PropertyMetadata<ContentPresenter, FontWeight> { DefaultValue = FontWeights.Normal, Inherits = InheritedText.FontWeight });
+
+	/// <summary>How heavy the text the presenter shows is (<see cref="FontWeightProperty"/>).</summary>
+	public FontWeight FontWeight { get => GetValue(FontWeightProperty); set => SetValue(FontWeightProperty, value); }
+
 	/// <summary>How a change of <see cref="Background"/> animates; null shows it at once.</summary>
 	public BrushTransition? BackgroundTransition { get; set; }
 

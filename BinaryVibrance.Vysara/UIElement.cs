@@ -427,10 +427,13 @@ public abstract partial class UIElement : DependencyObject, ISubPropertyListener
 
 	/// <summary>The font this element's text measures and draws with: the one its root gives its
 	/// <see cref="TextFamily"/> (<see cref="UIRoot.FontFor"/>), or <see cref="FontAtlas.Default"/> while it is in no root.</summary>
-	private protected FontAtlas TextFont => AttachedRoot?.FontFor(TextFamily) ?? FontAtlas.Default;
+	private protected FontAtlas TextFont => AttachedRoot?.FontFor(TextFamily, TextWeight) ?? FontAtlas.Default;
 
 	/// <summary>The family this element's text is in: its <c>FontFamily</c>, set or inherited, where it has one.</summary>
 	private protected virtual Media.FontFamily? TextFamily => null;
+
+	/// <summary>How heavy this element's text is: its <c>FontWeight</c>, set or inherited, where it has one.</summary>
+	private protected virtual FontWeight TextWeight => FontWeights.Normal;
 
 	/// <summary>A render-only change (opacity, brush): refresh the composition node's render state and mark it dirty
 	/// for the next composite — no relayout. Layout-driven sync happens in <see cref="SyncVisual"/> after arrange.</summary>

@@ -65,6 +65,7 @@ public static partial class Diagnostics
 			_ when target == typeof(Brush) || target == typeof(SolidColorBrush) =>
 				XamlValueSyntax.TryParseColor(s, out var a, out var r, out var g, out var b) ? new SolidColorBrush(HdrColor.FromRgb(r, g, b, a)) : null,
 			_ when target == typeof(FontFamily) => string.IsNullOrWhiteSpace(s) ? null : new FontFamily(s),
+			_ when target == typeof(FontWeight) => FontWeights.TryParse(s, out var weight) ? weight : null,
 			_ when target == typeof(Thickness) => XamlValueSyntax.ParseNumbers(s) switch
 			{
 				[var u] => new Thickness(u),

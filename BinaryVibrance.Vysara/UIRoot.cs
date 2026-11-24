@@ -171,10 +171,11 @@ public sealed class UIRoot
 	/// draws in <see cref="Font"/>.</summary>
 	internal FontCollection? Fonts { get; set; }
 
-	/// <summary>The font text in <paramref name="family"/> measures and draws with: the one the host's fonts hold under
-	/// its name, or <see cref="Font"/> for no family or one they don't hold.</summary>
-	internal FontAtlas FontFor(Media.FontFamily? family) =>
-		family is not null && Fonts is { } fonts && fonts.TryGet(family.Source, out var font) ? font : Font;
+	/// <summary>The font text in <paramref name="family"/> at <paramref name="weight"/> measures and draws with: the one the
+	/// host's fonts hold under its name for that weight, or the nearest weight they hold; <see cref="Font"/> for no family
+	/// or one they don't hold.</summary>
+	internal FontAtlas FontFor(Media.FontFamily? family, FontWeight weight) =>
+		family is not null && Fonts is { } fonts && fonts.TryGet(family.Source, weight, out var font) ? font : Font;
 
 	// The fonts text is drawn in changed: everything under the root measures again, overlays included
 	internal void InvalidateText()

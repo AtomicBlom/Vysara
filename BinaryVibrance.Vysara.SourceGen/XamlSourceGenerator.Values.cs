@@ -39,6 +39,7 @@ partial class XamlSourceGenerator
 		["System.TimeSpan"] = (ConvertTimeSpan, XamlValueSyntax.DurationSyntax),
 		["BinaryVibrance.Vysara.Animation.RepeatBehavior"] = (ConvertRepeatBehavior, "Forever, or a count such as 3x"),
 		["BinaryVibrance.Vysara.Media.FontFamily"] = (ConvertFontFamily, "a font family's name"),
+		["BinaryVibrance.Vysara.FontWeight"] = (ConvertFontWeight, "a weight's name (Normal, SemiBold, Bold and the rest) or a number from 1 to 999"),
 	};
 
 	// Convert attribute text for a value of `type`. `expected` names the accepted syntax for a diagnostic.
@@ -233,6 +234,25 @@ partial class XamlSourceGenerator
 	{
 		var name = raw.Trim();
 		code = name.Length > 0 ? $"new global::BinaryVibrance.Vysara.Media.FontFamily({SyntaxFactory.Literal(name)})" : "";
+		return code.Length > 0;
+	}
+
+	// A weight by WinUI's name for it (FontWeights), or a number from 1 to 999
+	private static readonly string[] WeightNames =
+		["Thin", "ExtraLight", "Light", "SemiLight", "Normal", "Medium", "SemiBold", "Bold", "ExtraBold", "Black", "ExtraBlack"];
+
+	private static bool ConvertFontWeight(string raw, out string code)
+	{
+		code = "";
+		var value = raw.Trim();
+		foreach (var name in WeightNames)
+			if (string.Equals(name, value, StringComparison.OrdinalIgnoreCase))
+			{
+				code = $"global::BinaryVibrance.Vysara.FontWeights.{name}";
+				return true;
+			}
+		if (ushort.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number is >= 1 and <= 999)
+			code = $"new global::BinaryVibrance.Vysara.FontWeight({number})";
 		return code.Length > 0;
 	}
 

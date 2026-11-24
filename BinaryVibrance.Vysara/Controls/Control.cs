@@ -175,6 +175,17 @@ public abstract class Control : FrameworkElement
 
 	private protected override FontFamily? TextFamily => FontFamily;
 
+	/// <summary>How heavy the control's text is: passed down as <see cref="FontSize"/> is. A built-in look sets none, so the
+	/// weight from above, or a style's, reaches its text.</summary>
+	public static readonly DependencyProperty<Control, FontWeight> FontWeightProperty =
+		DependencyProperty.Register(nameof(FontWeight),
+			new PropertyMetadata<Control, FontWeight> { DefaultValue = FontWeights.Normal, Invalidates = InvalidationFlags.Measure, Inherits = InheritedText.FontWeight });
+
+	/// <summary>How heavy the control's text is (<see cref="FontWeightProperty"/>).</summary>
+	public FontWeight FontWeight { get => GetValue(FontWeightProperty); set => SetValue(FontWeightProperty, value); }
+
+	private protected override FontWeight TextWeight => FontWeight;
+
 	/// <summary>The background changed; a control that paints it itself repaints. The default repaints in place.</summary>
 	private protected virtual void OnBackgroundChanged(Brush? old, Brush? @new) => OnBrushChanged(old, @new);
 
