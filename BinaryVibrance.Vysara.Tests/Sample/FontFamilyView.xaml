@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Font families by name, as the host's fonts know them. A panel's ContentControl passes "Label" through a StackPanel to
+	the TextBlocks in its element content; one TextBlock names "Readout" of its own, and a style gives another "Readout"
+	too. A tab's template sets its presenter's family, which the text it makes for string content takes.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			x:Class="BinaryVibrance.Vysara.Tests.Sample.FontFamilyView">
+	<StackPanel.Resources>
+		<Style x:Key="Numbers" TargetType="TextBlock">
+			<Setter Property="FontFamily" Value="Readout" />
+		</Style>
+		<ControlTemplate x:Key="TabTemplate" TargetType="ContentControl">
+			<ContentPresenter x:Name="Label" Content="{TemplateBinding Content}" FontFamily="Readout" />
+		</ControlTemplate>
+	</StackPanel.Resources>
+	<ContentControl x:Name="Panel" FontFamily="Label">
+		<StackPanel>
+			<TextBlock x:Name="Title" Text="Inherits" />
+			<TextBlock x:Name="Own" Text="0:42.180" FontFamily="Readout" />
+			<TextBlock x:Name="Styled" Text="135 bpm" Style="{StaticResource Numbers}" />
+		</StackPanel>
+	</ContentControl>
+	<ContentControl x:Name="Tab" Content="Arrange" Template="{StaticResource TabTemplate}" />
+	<TextBlock x:Name="Plain" Text="No family" />
+</StackPanel>

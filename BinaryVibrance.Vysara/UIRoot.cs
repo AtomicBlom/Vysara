@@ -78,7 +78,47 @@ public sealed class UIRoot
 
 	/// <summary>DIP→pixel scale: window DPI/96 for an overlay, author-chosen texel density for an in-world quad
 	/// Layout runs in DIPs; the render walk scales positions by this.</summary>
-	public float LayoutScale { get; set; } = 1f;
+	public float LayoutScale
+	{
+		get;
+		set
+		{
+			if (field == value)
+				return;
+			field = value;
+			// Rounded layout is rounded to this scale's pixels: lay it out again for the new ones
+			if (UseLayoutRounding)
+				InvalidateLayout();
+		}
+	} = 1f;
+
+	/// <summary>
+	/// Whether layout places every element's edges on whole pixels of this root's surface, as WinUI's
+	/// <c>UseLayoutRounding</c> does: each element rounds its edges in its parent, which has already rounded its own, so
+	/// every element lands on the pixel grid. A thin line then covers whole pixels wherever it moves, instead of
+	/// spreading across two at fractional positions; anything that depends on how many pixels a line covers (crisp hairlines,
+	/// a glow made from what is brighter than white) holds steady as it moves. Off by default, unlike WinUI, so a
+	/// surface's layout is the same as it always was unless it asks; a render transform still places content anywhere.
+	/// </summary>
+	public bool UseLayoutRounding
+	{
+		get;
+		set
+		{
+			if (field == value)
+				return;
+			field = value;
+			InvalidateLayout();
+		}
+	}
+
+	// Lay everything under the root out again, overlays included
+	private void InvalidateLayout()
+	{
+		Content?.InvalidateMeasureTree();
+		foreach (var (element, _, _) in _overlays)
+			element.InvalidateMeasureTree();
+	}
 
 	/// <summary>
 	/// How much of the bottom of the surface an on-screen keyboard covers, in surface pixels: zero (the default) while no
@@ -110,8 +150,9 @@ public sealed class UIRoot
 	/// The font this root's text measures and draws with: <see cref="FontAtlas.Default"/> unless set. A text element lays
 	/// its run out against it, shaper included, and hands the same atlas to its content, so a run draws in the space
 	/// layout gave it and a host binds the page the glyphs were laid out against. Setting a different font re-measures
-	/// everything under the root. It is the whole surface's font until elements choose their own. A text effect the new
-	/// font's distance field cannot hold is drawn clamped to it (<see cref="Extensions.TextEffects"/>).
+	/// everything under the root. It is the font of all text that names no family, or one the host's
+	/// <see cref="UIHost.Fonts"/> doesn't hold (<see cref="FontFor"/>). A text effect the new font's distance field cannot
+	/// hold is drawn clamped to it (<see cref="Extensions.TextEffects"/>).
 	/// </summary>
 	public FontAtlas Font
 	{
@@ -122,10 +163,26 @@ public sealed class UIRoot
 			if (ReferenceEquals(field, value))
 				return;
 			field = value;
-			Content?.InvalidateMeasureTree();
-			foreach (var (element, _, _) in _overlays)
-				element.InvalidateMeasureTree();
+			InvalidateText();
 		}
+	}
+
+	/// <summary>The fonts families name, set by <see cref="UIHost"/>; null for a root used standalone, whose text all
+	/// draws in <see cref="Font"/>.</summary>
+	internal FontCollection? Fonts { get; set; }
+
+	/// <summary>The font text in <paramref name="family"/> at <paramref name="weight"/> measures and draws with: the one the
+	/// host's fonts hold under its name for that weight, or the nearest weight they hold; <see cref="Font"/> for no family
+	/// or one they don't hold.</summary>
+	internal FontAtlas FontFor(Media.FontFamily? family, FontWeight weight) =>
+		family is not null && Fonts is { } fonts && fonts.TryGet(family.Source, weight, out var font) ? font : Font;
+
+	// The fonts text is drawn in changed: everything under the root measures again, overlays included
+	internal void InvalidateText()
+	{
+		Content?.InvalidateMeasureTree();
+		foreach (var (element, _, _) in _overlays)
+			element.InvalidateMeasureTree();
 	}
 
 	/// <summary>Add an overlay element composited above <see cref="Content"/> (a popup/flyout, or its full-surface

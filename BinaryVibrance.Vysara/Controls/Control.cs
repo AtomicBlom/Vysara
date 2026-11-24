@@ -163,6 +163,29 @@ public abstract class Control : FrameworkElement
 	/// <summary>The size of the control's text in DIPs: 14 unless set here or inherited from above.</summary>
 	public float FontSize { get => GetValue(FontSizeProperty); set => SetValue(FontSizeProperty, value); }
 
+	/// <summary>The family of the control's text, by name in the host's <see cref="UIHost.Fonts"/>: passed down as
+	/// <see cref="FontSize"/> is, to the control's own text (a text box's) and to its template's and content's. A built-in
+	/// look sets none, so the family from above reaches its text.</summary>
+	public static readonly DependencyProperty<Control, FontFamily?> FontFamilyProperty =
+		DependencyProperty.Register(nameof(FontFamily),
+			new PropertyMetadata<Control, FontFamily?> { Invalidates = InvalidationFlags.Measure, Inherits = InheritedText.FontFamily });
+
+	/// <summary>The family of the control's text (<see cref="FontFamilyProperty"/>).</summary>
+	public FontFamily? FontFamily { get => GetValue(FontFamilyProperty); set => SetValue(FontFamilyProperty, value); }
+
+	private protected override FontFamily? TextFamily => FontFamily;
+
+	/// <summary>How heavy the control's text is: passed down as <see cref="FontSize"/> is. A built-in look sets none, so the
+	/// weight from above, or a style's, reaches its text.</summary>
+	public static readonly DependencyProperty<Control, FontWeight> FontWeightProperty =
+		DependencyProperty.Register(nameof(FontWeight),
+			new PropertyMetadata<Control, FontWeight> { DefaultValue = FontWeights.Normal, Invalidates = InvalidationFlags.Measure, Inherits = InheritedText.FontWeight });
+
+	/// <summary>How heavy the control's text is (<see cref="FontWeightProperty"/>).</summary>
+	public FontWeight FontWeight { get => GetValue(FontWeightProperty); set => SetValue(FontWeightProperty, value); }
+
+	private protected override FontWeight TextWeight => FontWeight;
+
 	/// <summary>The background changed; a control that paints it itself repaints. The default repaints in place.</summary>
 	private protected virtual void OnBackgroundChanged(Brush? old, Brush? @new) => OnBrushChanged(old, @new);
 

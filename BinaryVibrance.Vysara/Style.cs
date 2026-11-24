@@ -8,6 +8,13 @@ namespace BinaryVibrance.Vysara;
 /// </summary>
 public sealed class Style
 {
+	/// <summary>
+	/// The type of element the style is for, as WinUI's <c>TargetType</c>. A style kept in a
+	/// <see cref="ResourceDictionary"/> with no key (<see cref="ResourceDictionary.Add(Style)"/>) is that type's implicit
+	/// style: every element of exactly that type under the dictionary's owner, with no <c>Style</c> of its own, takes it.
+	/// </summary>
+	public Type? TargetType { get; init; }
+
 	/// <summary>The style this one inherits from. Base setters apply before <see cref="Setters"/>.</summary>
 	public Style? BasedOn { get; init; }
 

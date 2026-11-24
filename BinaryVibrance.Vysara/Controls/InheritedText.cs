@@ -3,7 +3,7 @@ using BinaryVibrance.Vysara.Media;
 namespace BinaryVibrance.Vysara.Controls;
 
 /// <summary>
-/// The text properties WinUI passes down the tree, <c>FontSize</c> and <c>Foreground</c>, and the dependency property each
+/// The text properties WinUI passes down the tree, <c>FontSize</c>, <c>FontFamily</c>, <c>FontWeight</c> and <c>Foreground</c>, and the dependency property each
 /// element holds them as: a <see cref="TextBlock"/>'s own, a <see cref="ContentPresenter"/>'s or a <see cref="Control"/>'s.
 /// So text in a control's template, or made for its string content, is sized and painted by the presenter or control
 /// above it unless it sets its own. A built-in control's look sets its own (<see cref="GiveBuiltInLook"/>), as WinUI's
@@ -16,6 +16,22 @@ internal static class InheritedText
 		TextBlock => TextBlock.FontSizeProperty,
 		ContentPresenter => ContentPresenter.FontSizeProperty,
 		Control => Control.FontSizeProperty,
+		_ => null,
+	});
+
+	public static readonly InheritedProperty<FontFamily?> FontFamily = new(static element => element switch
+	{
+		TextBlock => TextBlock.FontFamilyProperty,
+		ContentPresenter => ContentPresenter.FontFamilyProperty,
+		Control => Control.FontFamilyProperty,
+		_ => null,
+	});
+
+	public static readonly InheritedProperty<FontWeight> FontWeight = new(static element => element switch
+	{
+		TextBlock => TextBlock.FontWeightProperty,
+		ContentPresenter => ContentPresenter.FontWeightProperty,
+		Control => Control.FontWeightProperty,
 		_ => null,
 	});
 
@@ -60,6 +76,8 @@ internal static class InheritedText
 	public static void Adopt(UIElement parent, UIElement child)
 	{
 		FontSize.Adopt(parent, child);
+		FontFamily.Adopt(parent, child);
+		FontWeight.Adopt(parent, child);
 		Foreground.Adopt(parent, child);
 	}
 
@@ -67,6 +85,8 @@ internal static class InheritedText
 	public static void Drop(UIElement child)
 	{
 		FontSize.Drop(child);
+		FontFamily.Drop(child);
+		FontWeight.Drop(child);
 		Foreground.Drop(child);
 	}
 }

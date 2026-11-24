@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Implicit styles, as WinUI's: a Style with a TargetType and no x:Key styles every element of exactly that type under the
+	resources it is in. The page's TextBlocks take its TextBlock style; a panel's own resources give its TextBlocks
+	another; a TextBlock with a style of its own keeps that. Toggle buttons are bold, in the Label family; a TextBlock
+	asks for a weight its family has no font for.
+-->
+<StackPanel xmlns="https://github.com/AtomicBlom/Vysara/ui"
+			xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			x:Class="BinaryVibrance.Vysara.Tests.Sample.ImplicitStyleView">
+	<StackPanel.Resources>
+		<Style TargetType="TextBlock">
+			<Setter Property="FontSize" Value="18" />
+		</Style>
+		<Style TargetType="ToggleButton">
+			<Setter Property="FontFamily" Value="Label" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style x:Key="Small" TargetType="TextBlock">
+			<Setter Property="FontSize" Value="9" />
+		</Style>
+	</StackPanel.Resources>
+	<TextBlock x:Name="Page" Text="Page" />
+	<TextBlock x:Name="Own" Text="Own" Style="{StaticResource Small}" />
+	<StackPanel x:Name="Inner">
+		<StackPanel.Resources>
+			<Style TargetType="TextBlock">
+				<Setter Property="FontSize" Value="24" />
+			</Style>
+		</StackPanel.Resources>
+		<TextBlock x:Name="Nested" Text="Nested" />
+	</StackPanel>
+	<ToggleButton x:Name="Lit" Content="Loop section" />
+	<TextBlock x:Name="Heavy" Text="135 bpm" FontFamily="Label" FontWeight="900" />
+</StackPanel>

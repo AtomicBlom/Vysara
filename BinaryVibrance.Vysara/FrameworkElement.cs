@@ -131,11 +131,24 @@ public abstract class FrameworkElement : UIElement
 			{
 				// Every setter is checked before the style is stored, so one the element refuses leaves it with its old style.
 				Validate = static (o, style) => style?.Validate(o),
-				PropertyChanged = static (o, old, @new) => { old?.Clear(o); @new?.Apply(o); }
+				PropertyChanged = static (o, old, @new) =>
+				{
+					old?.Clear(o);
+					if (@new is null)
+					{
+						o.ApplyImplicitStyle();
+						return;
+					}
+					// A style of its own replaces the implicit one
+					o._implicitStyle?.Clear(o);
+					o._implicitStyle = null;
+					@new.Apply(o);
+				}
 			});
 
 	/// <summary>The style applied to this element. Writing clears the previous style's setters before applying the
-	/// new one (Style rung; below Local, above Default).</summary>
+	/// new one (Style rung; below Local, above Default). With none, the element takes the implicit style for its type
+	/// from the resources above it, if any (<see cref="ResourceDictionary.Add(Style)"/>).</summary>
 	public Style? Style { get => GetValue(StyleProperty); set => SetValue(StyleProperty, value); }
 
 	/// <summary>Per-element resource dictionary (the lookup root for <c>{StaticResource}</c> at runtime).</summary>
@@ -195,8 +208,23 @@ public abstract class FrameworkElement : UIElement
 		var (y, h) = ArrangeAxis((int)VerticalAlignment, slotY, slotH,
 			MathF.Max(0f, DesiredSize.Height - m.Vertical), Height, MinHeight, MaxHeight);
 
+		// On whole pixels where the root asks (UIRoot.UseLayoutRounding): both edges rounded, so neighbours still meet
+		if (AttachedRoot is { UseLayoutRounding: true, LayoutScale: > 0f and var scale })
+		{
+			(x, w) = RoundEdges(x, w, scale);
+			(y, h) = RoundEdges(y, h, scale);
+		}
+
 		LayoutRect = new Rect(x, y, w, h);
 		ArrangeOverride(new Size(w, h));
+	}
+
+	// A span from `start`, `size` long, with both its edges moved to the nearest whole pixel at `scale` pixels per DIP
+	private static (float Start, float Size) RoundEdges(float start, float size, float scale)
+	{
+		var from = MathF.Round(start * scale) / scale;
+		var to = MathF.Round((start + size) * scale) / scale;
+		return (from, MathF.Max(0f, to - from));
 	}
 
 	// Resolve one axis: pick the content extent (Stretch fills the slot; else explicit-or-desired, clamped) and
@@ -233,8 +261,41 @@ public abstract class FrameworkElement : UIElement
 			bindings.Attach();
 	}
 
+	// The implicit style this element took, at the Style rung, while it has no Style of its own
+	private Style? _implicitStyle;
+
+	/// <summary>
+	/// Take the implicit style for exactly this element's type from the nearest resources up its tree that hold one, as
+	/// WinUI does, unless it has a <see cref="Style"/> of its own: its setters at the Style rung, replacing the implicit
+	/// style it had. Done as it joins a tree, parents first, so the resources above it are in place; an implicit style
+	/// added to resources later reaches elements as they next join one.
+	/// </summary>
+	private void ApplyImplicitStyle()
+	{
+		if (_implicitStyle is null && !ResourceDictionary.AnyImplicitStyles)
+			return;
+		Style? found = null;
+		if (Style is null)
+		{
+			var type = GetType();
+			for (UIElement? el = this; el is not null && found is null; el = el.Parent ?? (el as FrameworkElement)?.ResourceOwner)
+			{
+				if (el is FrameworkElement { Resources: { } resources } && resources.TryFindImplicitStyle(type, out var style))
+					found = style;
+			}
+		}
+		if (ReferenceEquals(found, _implicitStyle))
+			return;
+		found?.Validate(this);
+		_implicitStyle?.Clear(this);
+		_implicitStyle = found;
+		found?.Apply(this);
+	}
+
 	private protected override void OnLiveTreeChanged(bool attached)
 	{
+		if (attached)
+			ApplyImplicitStyle();
 		base.OnLiveTreeChanged(attached);
 		if (_templateBindings is null)
 			return;
