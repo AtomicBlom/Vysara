@@ -225,7 +225,7 @@ public sealed class ScrollViewer : FrameworkElement
 
 	private void SetVerticalOffset(float offset)
 	{
-		var clamped = Math.Clamp(offset, 0f, ScrollableHeight);
+		var clamped = Snap(offset, ScrollableHeight);
 		if (clamped == VerticalOffset)
 			return;
 		VerticalOffset = clamped;
@@ -235,12 +235,25 @@ public sealed class ScrollViewer : FrameworkElement
 
 	private void SetHorizontalOffset(float offset)
 	{
-		var clamped = Math.Clamp(offset, 0f, ScrollableWidth);
+		var clamped = Snap(offset, ScrollableWidth);
 		if (clamped == HorizontalOffset)
 			return;
 		HorizontalOffset = clamped;
 		InvalidateArrange();
 		RaiseViewChanged();
+	}
+
+	// An offset in its range, and on a whole pixel where the root rounds its layout (UIRoot.UseLayoutRounding): the content
+	// is arranged at minus the offset, which rounding puts on a whole pixel, so an offset between pixels would leave what
+	// follows it (a header held still by a transform of the offset) up to half a pixel from the content, blended with what
+	// is behind it and wavering as it scrolls. The far end is the last whole pixel short of it.
+	private float Snap(float offset, float most)
+	{
+		var clamped = Math.Clamp(offset, 0f, most);
+		if (AttachedRoot is not { UseLayoutRounding: true, LayoutScale: > 0f and var scale })
+			return clamped;
+		var snapped = MathF.Round(clamped * scale) / scale;
+		return snapped > most ? MathF.Floor(most * scale) / scale : snapped;
 	}
 
 	// Set while one input moves both offsets (a diagonal wheel or pan), so ViewChanged is raised once for the move
@@ -330,8 +343,8 @@ public sealed class ScrollViewer : FrameworkElement
 		var shrank = viewportHeight < ViewportHeight;
 		ViewportWidth = viewportWidth;
 		ViewportHeight = viewportHeight;
-		VerticalOffset = Math.Clamp(VerticalOffset, 0f, ScrollableHeight);
-		HorizontalOffset = Math.Clamp(HorizontalOffset, 0f, ScrollableWidth);
+		VerticalOffset = Snap(VerticalOffset, ScrollableHeight);
+		HorizontalOffset = Snap(HorizontalOffset, ScrollableWidth);
 
 		if (Content is { } content)
 		{
@@ -352,8 +365,8 @@ public sealed class ScrollViewer : FrameworkElement
 				_bringFocusedIntoView = false;
 				if (OffsetsShowing(_focused) is { } offsets && (offsets.X != HorizontalOffset || offsets.Y != VerticalOffset))
 				{
-					HorizontalOffset = offsets.X;
-					VerticalOffset = offsets.Y;
+					HorizontalOffset = Snap(offsets.X, ScrollableWidth);
+					VerticalOffset = Snap(offsets.Y, ScrollableHeight);
 					content.Arrange(new Rect(-HorizontalOffset, -VerticalOffset, contentWidth, contentHeight));
 				}
 			}
@@ -521,20 +534,37 @@ public sealed class ScrollViewer : FrameworkElement
 			return;
 		var amount = Scrolling.GetWheelScrollAmount(this);
 		var (horizontal, vertical) = (HorizontalOffset, VerticalOffset);
+		var across = -pointer.Wheel.X * amount;
+		var down = 0f;
+		// Wheel up (positive delta) scrolls toward the top (offset decreases).
+		if (ScrollableHeight > 0f)
+			down = -pointer.Wheel.Y * amount;
+		else
+			across -= pointer.Wheel.Y * amount;
 		BeginViewChange();
-		if (pointer.Wheel.X != 0f)
-			SetHorizontalOffset(HorizontalOffset - pointer.Wheel.X * amount);
-		if (pointer.Wheel.Y != 0f)
-		{
-			// Wheel up (positive delta) scrolls toward the top (offset decreases).
-			if (ScrollableHeight > 0f)
-				SetVerticalOffset(VerticalOffset - pointer.Wheel.Y * amount);
-			else
-				SetHorizontalOffset(HorizontalOffset - pointer.Wheel.Y * amount);
-		}
+		var kept = false;
+		if (across != 0f)
+			kept |= WheelBy(ref _wheelCarry.X, across, HorizontalOffset, ScrollableWidth, SetHorizontalOffset, () => HorizontalOffset);
+		if (down != 0f)
+			kept |= WheelBy(ref _wheelCarry.Y, down, VerticalOffset, ScrollableHeight, SetVerticalOffset, () => VerticalOffset);
 		EndViewChange();
-		if (HorizontalOffset != horizontal || VerticalOffset != vertical)
+		if (kept || HorizontalOffset != horizontal || VerticalOffset != vertical)
 			e.Handled = true;
+	}
+
+	// What a wheel moved that a whole pixel did not take yet (a trackpad's small deltas, with the offsets on whole pixels),
+	// carried to its next turn so that many small ones still scroll
+	private System.Numerics.Vector2 _wheelCarry;
+
+	// Scroll one axis by `by` and what was carried: what the pixel the offset landed on did not take is carried on, while the
+	// wheel turns inside the range; at an end nothing is. It is under half a pixel either way (the offset rounds up or down),
+	// so a wheel turned back keeps it too. Whether some was carried, so that the wheel was this viewer's.
+	private static bool WheelBy(ref float carry, float by, float offset, float most, Action<float> set, Func<float> now)
+	{
+		var want = offset + by + carry;
+		set(want);
+		carry = want > 0f && want < most ? want - now() : 0f;
+		return carry != 0f;
 	}
 
 	private void OnKeyDown(object sender, RoutedEventArgs e)

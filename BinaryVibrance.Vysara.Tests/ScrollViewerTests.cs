@@ -78,6 +78,79 @@ public sealed class ScrollViewerTests
 		viewer.VerticalOffset.ShouldBeGreaterThan(0f);
 	}
 
+	// A part held still over the content by a transform set as the view changes is drawn where the content is, in the frame
+	// the wheel turned: the content is arranged at the new offset before the frame is drawn, not a frame behind.
+	[Test]
+	public void A_wheel_is_arranged_in_the_frame_it_turned()
+	{
+		var stay = new TranslateTransform();
+		var head = new Border { Width = 80f, Height = 10f, RenderTransform = stay };
+		var child = new StackPanel { Width = 80f };
+		child.Children.Add(head);
+		child.Children.Add(new Border { Width = 80f, Height = 490f });
+		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
+		viewer.ViewChanged += (_, _) => stay.Y = viewer.VerticalOffset;
+		var host = new UIHost();
+		host.CreateRoot(UILayer.Default).Root.Content = viewer;
+		host.Tick(0.016, 0f, new Vector2(80f, 100f));
+
+		host.QueuePointer(PointerInput.Scroll(new Vector2(40f, 50f), new Vector2(0f, -1f)));
+		host.Tick(0.016, 0f, new Vector2(80f, 100f));
+
+		viewer.VerticalOffset.ShouldBeGreaterThan(0f);
+		child.LayoutRect.Y.ShouldBe(-viewer.VerticalOffset);
+		UiDriver.Bounds(head).Y.ShouldBe(0f);
+	}
+
+	// A root that rounds its layout at 1.5 pixels a DIP, a 100-DIP viewer over 500 DIPs, ticked once
+	private static (ScrollViewer Viewer, UIHost Host) Rounded()
+	{
+		var child = new Border { Width = 80f, Height = 500f, Background = new SolidColorBrush(HdrColor.FromRgb(50, 50, 50)) };
+		var viewer = new ScrollViewer { Content = child, Width = 80f, Height = 100f };
+		var host = new UIHost();
+		var root = host.CreateRoot(UILayer.Default).Root;
+		root.UseLayoutRounding = true;
+		root.LayoutScale = 1.5f;
+		root.Content = viewer;
+		host.Tick(0.016, 0f, new Vector2(120f, 150f));
+		return (viewer, host);
+	}
+
+	// Rounded, the offsets keep to whole pixels, so the content sits exactly at minus the offset and what follows the offset
+	// with a transform lines up with it, not half a pixel off
+	[Test]
+	public void Rounded_the_offsets_keep_to_whole_pixels()
+	{
+		var (viewer, host) = Rounded();
+
+		viewer.ScrollToVerticalOffset(10.2f);
+		host.Tick(0.016, 0f, new Vector2(120f, 150f));
+		(viewer.VerticalOffset * 1.5f).ShouldBe(MathF.Round(viewer.VerticalOffset * 1.5f), 1e-4f);
+		viewer.Content!.LayoutRect.Y.ShouldBe(-viewer.VerticalOffset, 1e-4f);
+
+		host.QueuePointer(PointerInput.Scroll(new Vector2(40f, 50f), new Vector2(0f, -0.137f)));
+		host.Tick(0.016, 0f, new Vector2(120f, 150f));
+		(viewer.VerticalOffset * 1.5f).ShouldBe(MathF.Round(viewer.VerticalOffset * 1.5f), 1e-4f);
+		viewer.Content!.LayoutRect.Y.ShouldBe(-viewer.VerticalOffset, 1e-4f);
+	}
+
+	// A trackpad's deltas, each too small to reach the next pixel, still scroll between them: what a pixel didn't take is
+	// carried to the next
+	[Test]
+	public void Rounded_small_wheel_deltas_add_up()
+	{
+		var (viewer, host) = Rounded();
+		var amount = Scrolling.GetWheelScrollAmount(viewer);
+
+		for (var i = 0; i < 40; i++)
+		{
+			host.QueuePointer(PointerInput.Scroll(new Vector2(40f, 50f), new Vector2(0f, -0.1f / amount)));
+			host.Tick(0.016, 0f, new Vector2(120f, 150f));
+		}
+
+		viewer.VerticalOffset.ShouldBe(4f, 1f / 1.5f);
+	}
+
 	private static readonly Vector2 Square = new(100f, 100f);
 
 	// A 100 × 100 viewer over a `width` × `height` block, its horizontal scroll bar as given, on a host ticked once.
