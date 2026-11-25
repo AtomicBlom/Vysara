@@ -201,6 +201,13 @@ public sealed class UIHost
 		ToolTips.Update(deltaSeconds);
 		RaiseReleased();
 
+		// What input moved lays out before this frame draws: a transform an input handler sets goes to the visual at once,
+		// so a scroll's arrange left for next frame would draw the content a frame behind what follows it (a header held
+		// still over scrolled content). With nothing invalid it arranges nothing.
+		foreach (var view in _views)
+			view.Root.LayoutPass(_framebufferSize);
+		RaiseReleased();
+
 		// Resolve the coarse capture report after routing/focus settle, so it is O(1) reads of this frame's state.
 		WantsPointer = Input.WantsPointer || PointerHeld;
 		WantsKeyboard = Focus.WantsKeyboard;
