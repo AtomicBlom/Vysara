@@ -209,7 +209,7 @@ public sealed class ChoiceControlTests
 		host.QueuePointer(PointerInput.Release(start - new Vector2(0f, 50f)));
 		host.Tick(0.016, 0f, Surface);
 
-		grid.RowDefinitions[0].Value.ShouldBe(144f, 0.5f);
+		grid.RowDefinitions[0].ShouldBe(GridLength.Star); // still takes up the rest: 144 of the 300
 		grid.RowDefinitions[2].Value.ShouldBe(150f, 0.5f);
 	}
 

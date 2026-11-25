@@ -9,9 +9,11 @@ namespace BinaryVibrance.Vysara.Extensions;
 /// A bar in a <see cref="Grid"/> that resizes the tracks either side of it as it is dragged, as the Windows Community
 /// Toolkit's <c>GridSplitter</c> (WinUI has none, so it is <c>&lt;vysara:GridSplitter&gt;</c>). Placed in a row of its
 /// own (a thin Auto or pixel row) it resizes the rows above and below; in a column, the columns left and right.
-/// <see cref="ResizeDirection"/> says which where its shape doesn't. As a primary drag starts both tracks become pixel
-/// tracks of the sizes they had, and they keep the sizes the drag leaves them, each no smaller than
-/// <see cref="MinimumTrackSize"/>; <see cref="Resized"/> says so as it ends, and a drag whose capture is lost ends there.
+/// <see cref="ResizeDirection"/> says which where its shape doesn't. A primary drag moves the line between the two
+/// tracks, each kept no smaller than <see cref="MinimumTrackSize"/>: a pixel or Auto track becomes a pixel track of the
+/// size the drag leaves it, while a star track stays a star (beside a fixed track it is left as it is and takes up the
+/// rest; two stars are reweighted), so the grid still fits the space it is given. <see cref="Resized"/> says so as it
+/// ends, and a drag whose capture is lost ends there.
 /// The bar paints the control's <see cref="Control.Background"/> (a faint line unless set), with a grip while the pointer
 /// is over it or dragging it.
 /// </summary>
@@ -97,9 +99,27 @@ public sealed class GridSplitter : Control
 		var total = drag.SizeBefore + drag.SizeAfter;
 		var least = MinimumTrackSize;
 		var before = Math.Clamp(drag.SizeBefore + (drag.Rows ? point.Y : point.X) - drag.Start, least, Math.Max(least, total - least));
+		var after = total - before;
 		var tracks = drag.Rows ? grid.RowDefinitions : grid.ColumnDefinitions;
-		tracks[drag.Before] = GridLength.Pixels(before);
-		tracks[drag.After] = GridLength.Pixels(total - before);
+		// A star track stays a star, so the grid still flows as it is resized: beside a fixed track only the fixed one is
+		// set, and it takes the star's place's change; two stars are weighted to the sizes the drag leaves them, their
+		// weights summing as they did
+		var (wasBefore, wasAfter) = (tracks[drag.Before], tracks[drag.After]);
+		if (wasBefore.IsStar && wasAfter.IsStar)
+		{
+			var weight = wasBefore.Value + wasAfter.Value;
+			tracks[drag.Before] = GridLength.Stars(weight * before / total);
+			tracks[drag.After] = GridLength.Stars(weight * after / total);
+		}
+		else if (wasBefore.IsStar)
+			tracks[drag.After] = GridLength.Pixels(after);
+		else if (wasAfter.IsStar)
+			tracks[drag.Before] = GridLength.Pixels(before);
+		else
+		{
+			tracks[drag.Before] = GridLength.Pixels(before);
+			tracks[drag.After] = GridLength.Pixels(after);
+		}
 		grid.InvalidateMeasure();
 		e.Handled = true;
 	}
