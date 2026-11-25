@@ -423,8 +423,50 @@ public sealed class ChoiceControlDetailTests
 
 		ui.Click(start, start - new Vector2(120f, 0f));
 		grid.ColumnDefinitions[0].Value.ShouldBe(100f, 0.5f); // held at its least
-		grid.ColumnDefinitions[2].Value.ShouldBe(392f - 100f, 0.5f);
+		grid.ColumnDefinitions[2].ShouldBe(GridLength.Star); // the star still takes up the rest
 		resized.ShouldBe(1);
+	}
+
+	[Test]
+	public void A_grid_splitter_leaves_a_star_row_a_star_so_the_grid_still_fits_when_it_shrinks()
+	{
+		var grid = new Grid { Width = 100f, Height = 400f };
+		grid.RowDefinitions.Add(GridLength.Star);
+		grid.RowDefinitions.Add(GridLength.Pixels(8f));
+		grid.RowDefinitions.Add(GridLength.Pixels(100f));
+		var splitter = new GridSplitter { MinimumTrackSize = 24f };
+		Grid.SetRow(splitter, 1);
+		grid.Children.Add(splitter);
+		var ui = new UiDriver(UiDriver.Top(grid));
+		var start = UiDriver.Middle(splitter);
+
+		ui.Click(start, start - new Vector2(0f, 50f));
+		grid.RowDefinitions[0].ShouldBe(GridLength.Star);
+		grid.RowDefinitions[2].Value.ShouldBe(150f, 0.5f);
+
+		grid.Height = 300f;
+		ui.Tick();
+		splitter.LayoutRect.Bottom.ShouldBeLessThanOrEqualTo(300f - 150f + 0.5f); // the star gave up the room, not the grid's foot
+	}
+
+	[Test]
+	public void A_grid_splitter_between_two_stars_reweights_them()
+	{
+		var grid = new Grid { Width = 408f, Height = 100f };
+		grid.ColumnDefinitions.Add(GridLength.Star);
+		grid.ColumnDefinitions.Add(GridLength.Pixels(8f));
+		grid.ColumnDefinitions.Add(GridLength.Star);
+		var splitter = new GridSplitter();
+		Grid.SetColumn(splitter, 1);
+		grid.Children.Add(splitter);
+		var ui = new UiDriver(UiDriver.Top(grid));
+		var start = UiDriver.Middle(splitter);
+
+		ui.Click(start, start + new Vector2(100f, 0f));
+		grid.ColumnDefinitions[0].IsStar.ShouldBeTrue();
+		grid.ColumnDefinitions[2].IsStar.ShouldBeTrue();
+		grid.ColumnDefinitions[0].Value.ShouldBe(1.5f, 0.01f); // 300 of 400
+		grid.ColumnDefinitions[2].Value.ShouldBe(0.5f, 0.01f);
 	}
 
 	[Test]
